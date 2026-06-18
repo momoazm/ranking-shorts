@@ -1,0 +1,12 @@
+# Secrets — NEVER commit. Reconstructed at runtime from GitHub Actions Secrets.
+API.env
+.env
+credentials.json
+token.json
+*token*.json
+
+# Scratch / intermediates
+.tmp/
+__pycache__/
+*.pyc
+.venv/

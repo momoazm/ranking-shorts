@@ -1,0 +1,24 @@
+# Minimal deps for the autonomous poster (Edge engine only — no Fish, no search/image APIs).
+
+# Env loading
+python-dotenv>=1.0
+
+# Script generation — Groq is the only LLM wired into the cloud loop (one secret).
+# (_llm's other providers import their SDKs lazily and are never reached when Groq succeeds.)
+groq>=0.11
+
+# Voiceover: Edge-TTS (free, keyless) — the loop forces --engine edge, so Fish is never called.
+edge-tts>=6.1
+
+# Caption alignment (local, CPU, free; downloads a small Whisper model on first run, then cached)
+faster-whisper>=1.0
+
+# ffmpeg fallback for local runs. On the cloud runner we install apt ffmpeg (libass) and
+# _media.get_ffmpeg() prefers that PATH binary; this is just a safety net.
+imageio-ffmpeg>=0.5
+
+# YouTube resumable upload with an existing OAuth token (no interactive auth in the cloud).
+google-api-python-client>=2.140
+google-auth>=2.30
+google-auth-httplib2>=0.2
+requests>=2.31
