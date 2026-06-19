@@ -1,5 +1,5 @@
-"""Autonomous orchestrator: build ONE Peter-vs-Stewie dialogue Short end-to-end and
-(optionally) publish it to the connected YouTube channel.
+"""Autonomous orchestrator: build ONE Italian-brainrot (Tung vs Tralalero) dialogue Short
+end-to-end and (optionally) publish it to the connected YouTube channel.
 
 This is the cloud entry point run on a schedule (GitHub Actions, every 4h). It owns NO new
 pipeline logic — it just subprocess-calls the existing WAT tools in the right order, with the
@@ -87,9 +87,9 @@ def main():
     parser.add_argument("--no-upload", action="store_true",
                         help="Build the video but do NOT publish (local testing).")
     parser.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
-    parser.add_argument("--characters", default="peter,stewie")
-    parser.add_argument("--seconds", type=int, default=55, help="Target script length")
-    parser.add_argument("--model", default="tiny", help="faster-whisper model (tiny is fast on CPU)")
+    parser.add_argument("--characters", default="tung,tralalero")
+    parser.add_argument("--seconds", type=int, default=40, help="Target script length")
+    parser.add_argument("--model", default="base", help="faster-whisper model (base = better caption accuracy on CPU)")
     parser.add_argument("--engine", default="edge", choices=["edge", "auto", "fish"],
                         help="TTS engine. Forced edge in the cloud loop (free, no Fish credits).")
     parser.add_argument("--background", default=BACKGROUND)

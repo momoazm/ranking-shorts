@@ -169,7 +169,7 @@ def main():
     parser.add_argument("--topic", help="Optional seed topic; if omitted, the model picks a strong one")
     parser.add_argument("--genre", help="narration genres: nosleep, aita, revenge, motivational, mystery")
     parser.add_argument("--playbook", default=".tmp/playbook.json")
-    parser.add_argument("--seconds", type=int, default=50)
+    parser.add_argument("--seconds", type=int, default=40)
     parser.add_argument("--out", default=".tmp/story.json")
     args = parser.parse_args()
 

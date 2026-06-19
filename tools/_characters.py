@@ -50,6 +50,34 @@ CHARACTERS = {
         "caption_color": _CYAN,
         "image": "assets/characters/stewie.png",
     },
+    # --- Italian-brainrot meme duo (copyright-cleaner than the Family Guy cast; rides the
+    # live Italian-brainrot trend). Edge-TTS Italian voices, separated further by pitch. ---
+    "tung": {
+        "name": "Tung",
+        "voice": "it-IT-DiegoNeural",     # Italian male; deep/ominous after the pitch drop
+        "pitch": "-12Hz",
+        "fish_voice_id": None,             # no Fish model — Edge engine is used automatically
+        "persona": (
+            "Tung Tung Tung Sahur energy: a menacing, deadpan wooden baseball-bat creature who "
+            "speaks in slow, ominous threats and keeps intoning 'tung tung tung'. Blunt, literal, "
+            "intimidating, and utterly convinced he is the original and scariest brainrot."
+        ),
+        "caption_color": "#D9A441",        # wood amber
+        "image": "assets/characters/tung.png",
+    },
+    "tralalero": {
+        "name": "Tralalero",
+        "voice": "it-IT-GiuseppeNeural",   # different Italian male voice for clear separation
+        "pitch": "+2Hz",
+        "fish_voice_id": None,
+        "persona": (
+            "Tralalero Tralala energy: a cocky, fast-talking blue shark in fresh sneakers who "
+            "brags nonstop, throws playful insults, and insists HE is the real king of Italian "
+            "brainrot. Slick, irreverent, hype, dismissive of everyone else."
+        ),
+        "caption_color": "#29B6F6",        # shark blue
+        "image": "assets/characters/tralalero.png",
+    },
     # Spare voice so the duo is easy to re-cast without editing this file's structure.
     "brian": {
         "name": "Brian",

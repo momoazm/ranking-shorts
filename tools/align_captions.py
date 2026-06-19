@@ -89,7 +89,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Caption,Arial,96,{base_default},{hi},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,6,2,5,80,80,0,1
+Style: Caption,Arial,110,{base_default},{hi},&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,8,2,5,80,80,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -127,7 +127,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--audio", required=True)
     parser.add_argument("--model", default="base", help="faster-whisper model size (tiny/base/small/medium)")
-    parser.add_argument("--words-per-cue", type=int, default=3)
+    parser.add_argument("--words-per-cue", type=int, default=2)
     parser.add_argument("--segments", default=".tmp/segments.json",
                         help="Optional dialogue timeline for per-speaker caption colors")
     parser.add_argument("--playbook", default=".tmp/playbook.json", help="Optional; reads caption_style.words_per_cue")
@@ -156,7 +156,10 @@ def main():
 
     try:
         model = WhisperModel(args.model, device="cpu", compute_type="int8")
-        segments, _info = model.transcribe(args.audio, word_timestamps=True)
+        # Force English: the script is always English text (even when voiced by a non-English
+        # TTS voice, e.g. the Italian brainrot cast). Auto-detect otherwise mis-IDs the accent
+        # as Russian/etc. and emits garbled Cyrillic captions, especially on the tiny model.
+        segments, _info = model.transcribe(args.audio, word_timestamps=True, language="en")
         words = []
         for seg in segments:
             for w in (seg.words or []):
