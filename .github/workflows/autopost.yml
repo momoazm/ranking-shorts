@@ -59,13 +59,16 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
-          echo "WORKFLOW_VERSION: hardened-v2"
+          echo "WORKFLOW_VERSION: hardened-v3"
           echo "GROQ_API_KEY length: ${#GROQ_API_KEY}"
           case "$GROQ_API_KEY" in
             gsk_*) echo "GROQ_API_KEY format: starts with gsk_ (looks correct)";;
             "")    echo "GROQ_API_KEY format: EMPTY (secret missing or blank)";;
             *)     echo "GROQ_API_KEY format: does NOT start with gsk_ (wrong value pasted)";;
           esac
+          echo "token.json bytes: $(wc -c < token.json)"
+          python -c "import json; d=json.load(open('token.json')); print('token.json: valid JSON; has refresh_token:', 'refresh_token' in d, '| has client_id:', 'client_id' in d)" \
+            || echo "token.json: NOT valid JSON -> YOUTUBE_TOKEN_JSON secret is empty/partial/wrong"
 
       - name: Build + publish one Short
         env:
