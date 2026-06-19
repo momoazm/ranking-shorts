@@ -44,10 +44,20 @@ jobs:
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
         run: |
+          if [ -z "$GROQ_API_KEY" ]; then
+            echo "::error::GROQ_API_KEY secret is empty or missing. Add it under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+          if [ -z "$YOUTUBE_TOKEN_JSON" ]; then
+            echo "::error::YOUTUBE_TOKEN_JSON secret is empty or missing. Paste the full contents of clipping/token.json."
+            exit 1
+          fi
           printf '%s' "$YOUTUBE_TOKEN_JSON" > token.json
           printf 'GROQ_API_KEY=%s\n' "$GROQ_API_KEY" > API.env
 
       - name: Build + publish one Short
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}   # also injected directly, so the LLM never depends on the file
         run: python tools/autopost.py --privacy public
 
       - name: Upload final.mp4 artifact (for inspection)
