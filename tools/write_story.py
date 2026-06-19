@@ -110,15 +110,20 @@ def write_narration(args, playbook, target_words, seconds):
 def write_dialogue(args, playbook, target_words, seconds, cast):
     roster = "\n".join(f"- {c['name']}: {c['persona']}" for c in cast)
     names = " and ".join(c["name"] for c in cast)
+    # Models tend to stop early with terse fragments, so enforce a hard floor on line count
+    # and a per-line word range — this is what actually fills the target runtime.
+    min_turns = max(12, target_words // 8)
     prompt = (
         f"{build_pb_context(playbook)}"
         f"FORMAT: a two-character argument/banter short, in the viral 'cartoon characters arguing' style.\n"
         f"CHARACTERS (write each strictly in-character):\n{roster}\n\n"
         f"TOPIC they argue about: {args.topic or '(you choose a funny, relatable, debatable topic)'}\n"
-        f"TARGET LENGTH: about {target_words} words total across all lines (~{seconds}s). "
-        f"That's roughly {max(6, target_words // 9)}-{max(8, target_words // 6)} short alternating lines.\n\n"
-        f"Write {names} arguing. Strictly alternate speakers. Open with a punchy hook line, escalate "
-        f"the disagreement with quick jabs, and end on a funny or surprising payoff.\n\n"
+        f"TARGET LENGTH: about {target_words} words total across all lines (~{seconds}s of speech).\n"
+        f"LENGTH IS MANDATORY: write AT LEAST {min_turns} alternating lines. Do NOT end early — keep the "
+        f"argument escalating with new angles until you have at least that many lines. Each line must be a "
+        f"complete spoken sentence of roughly 8-16 words (NOT 2-4 word fragments).\n\n"
+        f"Write {names} arguing. Strictly alternate speakers. Open with a punchy hook line, escalate the "
+        f"disagreement with quick jabs and rising stakes, and end on a funny or surprising payoff.\n\n"
         f"{DIALOGUE_SCHEMA}"
     )
     out = llm_complete(

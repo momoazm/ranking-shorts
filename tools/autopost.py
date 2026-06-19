@@ -88,7 +88,7 @@ def main():
                         help="Build the video but do NOT publish (local testing).")
     parser.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
     parser.add_argument("--characters", default="peter,stewie")
-    parser.add_argument("--seconds", type=int, default=45, help="Target script length")
+    parser.add_argument("--seconds", type=int, default=55, help="Target script length")
     parser.add_argument("--model", default="tiny", help="faster-whisper model (tiny is fast on CPU)")
     parser.add_argument("--engine", default="edge", choices=["edge", "auto", "fish"],
                         help="TTS engine. Forced edge in the cloud loop (free, no Fish credits).")
