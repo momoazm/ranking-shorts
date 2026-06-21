@@ -1,44 +1,33 @@
 name: ranking-shorts
 
 # Builds & posts a #5->#1 RANKING Short (funny clips pulled from Reddit video posts, WITH their
-# own audio) autonomously in GitHub's cloud — works even when your laptop is off. Reddit's RSS +
-# v.redd.it CDN serve to servers without cookies (the .json API 403s for bots, but .rss + the CDN
-# do not). Cron is UTC and may be delayed a few minutes under load; "every 4h" is approximate.
+# own audio) on a SELF-HOSTED runner (your PC). Reddit's v.redd.it CDN 403-blocks GitHub's cloud
+# datacenter IPs, so the download must happen from a residential IP -- same reason clipping-auto is
+# self-hosted. Steps use PowerShell (Windows PowerShell 5.1), not bash.
 on:
   schedule:
     - cron: "0 */4 * * *"      # every 4 hours -> 6 uploads/day (under YouTube's 10k/day quota)
   workflow_dispatch: {}         # manual "Run workflow" button for testing
 
-# NOTE: no `concurrency` group on purpose. Cron fires at absolute times (00/04/08/12/16/20 UTC),
-# so the schedule never waits for the previous video to finish. A concurrency group would QUEUE a
-# new scheduled run behind a still-running one (and GitHub cancels older queued runs = a skipped
-# post), which is exactly what we want to avoid. Each ~few-minute run is far shorter than the 4h
-# gap, so they don't actually overlap; if one ever overran, letting both run is harmless (still one
-# video per slot, 6/day). This keeps every slot on schedule.
+# NOTE: no `concurrency` group on purpose -- each slot should run independently (see git history).
 
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: powershell
+
 jobs:
   post:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: self-hosted
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install ffmpeg (with libass for burned overlays)
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Install Python deps
-        run: pip install -r requirements.txt
+          clean: false   # keep .venv / state between runs for speed + no-repeat memory
 
       # Persist the used-clip history across runs so the same Reddit clips aren't repeated.
-      # Unique key per run saves a fresh entry; restore-keys pulls the most recent previous one.
       - name: Restore used-clip history
         uses: actions/cache@v4
         with:
@@ -47,69 +36,84 @@ jobs:
           restore-keys: |
             used-clips-
 
-      - name: Reconstruct secrets (ephemeral runner; never committed)
+      - name: Python venv + deps
+        run: |
+          if (-not (Test-Path ".venv")) { python -m venv .venv }
+          $py = Join-Path (Get-Location) ".venv\Scripts\python.exe"
+          & $py -m pip install --upgrade pip
+          & $py -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) {
+            # faster-whisper (ctranslate2) has no wheels on some Python versions (e.g. 3.14).
+            # The RANKING pipeline never needs it, so fall back to the ranking-critical subset.
+            Write-Host "::warning::full requirements failed; installing the ranking-critical subset (no faster-whisper)"
+            & $py -m pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+
+      - name: Ensure full ffmpeg on PATH
+        # Need a real ffmpeg (libass for the burned leaderboard overlay). Prefer a PATH binary,
+        # else the winget Gyan build, else fail loudly.
+        run: |
+          $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
+          if (-not $ff) {
+            $c = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($c) { $ff = $c.FullName }
+          }
+          if (-not $ff) { Write-Host "::error::ffmpeg not found. Install it: winget install Gyan.FFmpeg"; exit 1 }
+          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path $ff)
+          Write-Host "Using ffmpeg: $ff"
+
+      - name: Reconstruct secrets (never committed)
         env:
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          # Nano Banana visuals (without it, aigen auto-downgrades to gameplay mode).
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # Optional research providers (playbook degrades to model priors if absent).
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
-          # Optional extra platforms (skipped cleanly until their apps are approved).
           TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
           TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
-          # Gmail delivery of the finished video (semi-manual posting).
           GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
           GMAIL_SENDER_EMAIL: ${{ secrets.GMAIL_SENDER_EMAIL }}
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
-          # YouTube cookies (Netscape format) — REQUIRED for the ranking pipeline in the cloud:
-          # datacenter IPs get "confirm you're not a bot" without them.
-          YT_COOKIES: ${{ secrets.YT_COOKIES }}
         run: |
-          if [ -z "$GROQ_API_KEY" ]; then
-            echo "::error::GROQ_API_KEY secret is empty or missing. Add it under Settings -> Secrets and variables -> Actions."
-            exit 1
-          fi
-          if [ -z "$YOUTUBE_TOKEN_JSON" ]; then
-            echo "::error::YOUTUBE_TOKEN_JSON secret is empty or missing. Paste the full contents of clipping/token.json."
-            exit 1
-          fi
-          # YT_COOKIES is unused: clips come from Reddit (RSS + v.redd.it CDN, no cookies needed).
-          if [ -z "$YT_COOKIES" ]; then
-            echo "::notice::YT_COOKIES not set -- fine, clips come from Reddit which needs no cookies."
-          fi
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "::warning::GEMINI_API_KEY empty (only needed if you switch back to the Nano Banana brainrot movie via autopost.py)."
-          fi
-          printf '%s' "$YOUTUBE_TOKEN_JSON" > token.json
-          # Gmail token (separate from the YouTube token) for emailing the finished video.
-          if [ -n "$GMAIL_TOKEN_JSON" ]; then printf '%s' "$GMAIL_TOKEN_JSON" > gmail_token.json; fi
-          # YouTube cookies for yt-dlp (ranking pipeline downloads) on cloud IPs.
-          if [ -n "$YT_COOKIES" ]; then printf '%s' "$YT_COOKIES" > cookies.txt; fi
-          # Build API.env from whichever secrets are present (only GROQ + YouTube + GEMINI required).
-          : > API.env
-          printf 'GMAIL_TOKEN_PATH=gmail_token.json\n' >> API.env
-          for kv in GROQ_API_KEY GEMINI_API_KEY TAVILY_API_KEY EXA_API_KEY \
-                    TIKTOK_ACCESS_TOKEN TIKTOK_REFRESH_TOKEN TIKTOK_CLIENT_KEY TIKTOK_CLIENT_SECRET \
-                    IG_USER_ID IG_ACCESS_TOKEN GMAIL_SENDER_EMAIL GMAIL_TO; do
-            val="${!kv}"
-            if [ -n "$val" ]; then printf '%s=%s\n' "$kv" "$val" >> API.env; fi
-          done
+          $root = Get-Location
+          if (-not $env:GROQ_API_KEY)        { Write-Host "::error::GROQ_API_KEY secret is empty"; exit 1 }
+          if (-not $env:YOUTUBE_TOKEN_JSON)  { Write-Host "::error::YOUTUBE_TOKEN_JSON secret is empty"; exit 1 }
+          [System.IO.File]::WriteAllText("$root\token.json", $env:YOUTUBE_TOKEN_JSON)
+          if ($env:GMAIL_TOKEN_JSON) { [System.IO.File]::WriteAllText("$root\gmail_token.json", $env:GMAIL_TOKEN_JSON) }
+          # No cookies.txt on this residential runner -- Reddit (and YouTube) serve it without auth,
+          # and a stale cookies.txt would push yt-dlp onto a gated client. Remove any leftover.
+          if (Test-Path "$root\cookies.txt") { Remove-Item "$root\cookies.txt" -Force }
+          # Build API.env from whichever secrets are present.
+          $lines = @("GMAIL_TOKEN_PATH=gmail_token.json")
+          foreach ($k in @("GROQ_API_KEY","GEMINI_API_KEY","TAVILY_API_KEY","EXA_API_KEY",
+                           "TIKTOK_ACCESS_TOKEN","TIKTOK_REFRESH_TOKEN","TIKTOK_CLIENT_KEY","TIKTOK_CLIENT_SECRET",
+                           "IG_USER_ID","IG_ACCESS_TOKEN","GMAIL_SENDER_EMAIL","GMAIL_TO")) {
+            $v = [Environment]::GetEnvironmentVariable($k)
+            if ($v) { $lines += "$k=$v" }
+          }
+          [System.IO.File]::WriteAllText("$root\API.env", ($lines -join "`n") + "`n")
 
       - name: Build + publish one Ranking Short
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}   # also injected directly, so the LLM never depends on the file
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}    # injected directly too, so the LLM never depends on the file
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # THE automation: a #5->#1 ranking Short from funny Reddit clips (with their own audio) --
-        # single trending genre, leaderboard overlay, ducked music bed, NO SFX. Auto-posts to
-        # YouTube + emails a copy. No cookies needed (Reddit RSS + v.redd.it CDN serve servers fine).
-        # (The old AI brainrot movie still lives in tools/autopost.py but is no longer scheduled.)
-        run: python tools/rank_autopost.py --privacy public --platforms youtube,email
+        # A #5->#1 ranking Short from funny Reddit clips (with their own audio) -- single trending
+        # genre, leaderboard overlay, ducked music bed, NO SFX. Auto-posts to YouTube + emails a copy.
+        run: |
+          $py = Join-Path (Get-Location) ".venv\Scripts\python.exe"
+          # Keep the laptop awake for the whole run (an idle sleep mid-run cancels the job).
+          $awake = Start-Process $py -ArgumentList "-c","import ctypes,time; ctypes.windll.kernel32.SetThreadExecutionState(0x80000001); time.sleep(86400)" -PassThru -WindowStyle Hidden
+          try {
+            & $py tools/rank_autopost.py --privacy public --platforms youtube,email
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } finally {
+            Stop-Process -Id $awake.Id -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Upload final.mp4 artifact (for inspection)
         if: always()
