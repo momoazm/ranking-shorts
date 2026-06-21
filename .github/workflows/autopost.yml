@@ -1,7 +1,7 @@
 name: ranking-shorts
 
-# Builds & posts a #5->#1 RANKING Short (funny clips from curated YouTube channels) autonomously in
-# GitHub's cloud — works even when your laptop is off.
+# Builds & posts a #5->#1 RANKING Short (funny clips pulled from Reddit) autonomously in
+# GitHub's cloud — works even when your laptop is off. Reddit needs no cookies on cloud IPs.
 # Cron is UTC and may be delayed a few minutes under load; "every 4h" is approximate.
 on:
   schedule:
@@ -36,6 +36,16 @@ jobs:
       - name: Install Python deps
         run: pip install -r requirements.txt
 
+      # Persist the used-clip history across runs so the same Reddit clips aren't repeated.
+      # Unique key per run saves a fresh entry; restore-keys pulls the most recent previous one.
+      - name: Restore used-clip history
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: used-clips-${{ github.run_id }}
+          restore-keys: |
+            used-clips-
+
       - name: Reconstruct secrets (ephemeral runner; never committed)
         env:
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
@@ -68,9 +78,10 @@ jobs:
             echo "::error::YOUTUBE_TOKEN_JSON secret is empty or missing. Paste the full contents of clipping/token.json."
             exit 1
           fi
+          # YT_COOKIES is OPTIONAL now: clips come from Reddit (no bot-check on cloud IPs). It is
+          # only used if you point the pipeline back at YouTube via --subreddits/--genre overrides.
           if [ -z "$YT_COOKIES" ]; then
-            echo "::error::YT_COOKIES secret is empty. YouTube bot-checks downloads from GitHub's IPs, so the ranking pipeline cannot fetch clips without it. Export a Netscape cookies.txt while logged into YouTube (e.g. the 'Get cookies.txt LOCALLY' browser extension) and paste its full contents as the YT_COOKIES secret."
-            exit 1
+            echo "::notice::YT_COOKIES not set -- fine, the ranking pipeline pulls clips from Reddit which needs no cookies."
           fi
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::warning::GEMINI_API_KEY empty (only needed if you switch back to the Nano Banana brainrot movie via autopost.py)."
@@ -94,10 +105,10 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}   # also injected directly, so the LLM never depends on the file
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # THE automation: a #5->#1 ranking Short from funny clips on curated YouTube channels --
-        # single trending genre, leaderboard overlay, layered SFX. Auto-posts to YouTube + emails a
-        # copy. Needs the YT_COOKIES secret for cloud downloads. (The old AI brainrot movie still
-        # lives in tools/autopost.py if ever needed, but it is no longer scheduled.)
+        # THE automation: a #5->#1 ranking Short from funny Reddit clips -- single trending genre,
+        # leaderboard overlay, layered SFX. Auto-posts to YouTube + emails a copy. No cookies needed
+        # (Reddit downloads fine from cloud IPs). (The old AI brainrot movie still lives in
+        # tools/autopost.py if ever needed, but it is no longer scheduled.)
         run: python tools/rank_autopost.py --privacy public --platforms youtube,email
 
       - name: Upload final.mp4 artifact (for inspection)

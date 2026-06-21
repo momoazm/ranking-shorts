@@ -72,6 +72,22 @@ def load_json(path):
         return None
 
 
+HISTORY = "state/used_clips.json"
+
+
+def record_used(ranked_path):
+    """Remember the Reddit post ids that went into this video so future runs don't repeat them."""
+    ranked = load_json(ranked_path)
+    ids = [e.get("id") for e in (ranked or {}).get("entries", []) if e.get("id")]
+    if not ids:
+        return
+    prev = (load_json(HISTORY) or {}).get("used", [])
+    merged = list(dict.fromkeys(prev + ids))[-1000:]   # keep the most recent 1000, de-duped
+    (ROOT / "state").mkdir(exist_ok=True)
+    with open(ROOT / HISTORY, "w", encoding="utf-8") as f:
+        json.dump({"used": merged}, f)
+
+
 def daily_used():
     d = load_json(DAILY_COUNT) or {}
     return d.get("count", 0) if d.get("date") == date.today().isoformat() else 0
@@ -86,7 +102,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
-    ap.add_argument("--channels", default=None, help="Override curated Shorts channels (comma-sep)")
+    ap.add_argument("--subreddits", default=None, help="Override the funny subreddits (comma-sep)")
     ap.add_argument("--platforms", default="youtube,email")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
     ap.add_argument("--music", default=None, help="Optional music bed path (default: none -- keep clip audio)")
@@ -113,8 +129,8 @@ def main():
     # 1) topic (most-trending genre + title) -> 2) pull short clips from that genre's channels -> 3) rank 5
     topic = run_tool("rank_topic.py", ["--niche", args.niche, "--out", TOPIC])
     find_args = ["--out", CANDS]
-    if args.channels:
-        find_args += ["--channels", args.channels]
+    if args.subreddits:
+        find_args += ["--subreddits", args.subreddits]
     elif topic.get("genre"):
         find_args += ["--genre", topic["genre"]]
     run_tool("find_ranking_clips.py", find_args)
@@ -132,6 +148,7 @@ def main():
     if music_path:
         build_args += ["--music", music_path]
     build = run_tool("build_ranking_video.py", build_args)
+    record_used(RANKED)   # mark these clips used so they aren't repeated next run
 
     # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
     title = topic["title"]

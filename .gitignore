@@ -12,3 +12,6 @@ exports/
 __pycache__/
 *.pyc
 .venv/
+
+# Persistent run state (used-clip history) — kept across runs via Actions cache, not committed
+state/

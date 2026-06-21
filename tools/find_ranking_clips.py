@@ -1,118 +1,145 @@
-"""Find candidate SHORT YouTube clips for a ranking video from curated funny-Shorts channels.
+"""Find candidate funny clips for a ranking video from Reddit (CI-friendly, no cookies/bot-check).
 
-YouTube's open search (what yt-dlp can reach) returns almost only long compilations, and cutting a
-moment out of a 12-50 min compilation streams the whole video (>150s each) -- too slow for cloud
-automation. Real Shorts download whole in ~5s. So instead of searching, we pull recent clips from a
-curated list of funny-Shorts channels' /shorts tabs (each is guaranteed a short, standalone clip).
-The LLM (rank_clips.py) then picks and orders the funniest 5.
+Why Reddit instead of YouTube: YouTube bot-checks downloads from datacenter IPs (GitHub Actions),
+so it needs fragile, expiring cookies. Reddit's video posts download fine from cloud IPs with no
+auth, and funny subreddits (r/Whatcouldgowrong, r/IdiotsInCars, r/cats ...) are full of short clips.
+
+Listing uses Reddit's RSS feed (the .json endpoint 403s for bots; .rss works). RSS rate-limits one
+IP hard, so we make ONE feed request per run -- a single subreddit's top feed returns ~25 posts,
+far more than the 5 we need -- with backoff retry on 429. yt-dlp then downloads each post.
 
 Usage:
-    python tools/find_ranking_clips.py [--channels "@FailArmy,@AFV"] [--per-channel 8]
-        [--max 14] [--out .tmp/rank_candidates.json]
+    python tools/find_ranking_clips.py [--genre fails] [--subreddits a,b] [--period month]
+        [--max 20] [--out .tmp/rank_candidates.json]
 
-Prints JSON: {"count","candidates":[{"id","title","duration","url","channel"}, ...]}
+Prints JSON: {"count","subreddit","candidates":[{"id","title","duration","url"}, ...]}
 """
 import argparse
+import html
 import json
 import os
 import random
+import re
+import time
+import urllib.request
 
-from _common import load_env, emit, fail, REPO_ROOT
+from _common import load_env, emit, fail
 
-# Curated Shorts channels per genre (each verified to expose a /shorts tab). These license or own
-# their footage, the most defensible source for reused clips. Pick a genre with --genre, or override
-# the channel list directly with --channels.
-GENRES = {
-    "fails":  ["@FailArmy", "@AFV", "@viralhog", "@JukinMedia"],
-    "cats":   ["@TheDodo", "@PetCollective", "@TheCatReviewer"],
-    "babies": ["@AFV", "@CuteBabyClub"],
-    "dogs":   ["@TheDodo", "@FunnyDogs"],
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
+
+# Funny / wholesome video subreddits per genre. One is picked per run (RSS is rate-limited), with
+# the rest as fallbacks if the first is empty/blocked. Override with --subreddits.
+GENRE_SUBS = {
+    "fails":  ["Whatcouldgowrong", "instantkarma", "instant_regret", "IdiotsInCars", "funny"],
+    "cats":   ["cats", "catsstandingup", "Catloaf", "IllegallySmolCats", "CatsBeingCats"],
+    "babies": ["KidsAreFuckingStupid", "ContagiousLaughter", "funny"],
+    "dogs":   ["WhatsWrongWithYourDog", "dogswithjobs", "Zoomies", "rarepuppers"],
 }
-# Default (no genre given) = a broad funny mix.
-DEFAULT_CHANNELS = ["@FailArmy", "@AFV", "@TheDodo", "@PetCollective",
-                    "@viralhog", "@JukinMedia", "@dailydoseofinternet"]
+DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
 
 
-def _ydl_search_opts(per_channel):
-    opts = {"quiet": True, "no_warnings": True, "noprogress": True,
-            "extract_flat": "in_playlist", "skip_download": True,
-            "playlistend": per_channel, "socket_timeout": 30, "extractor_retries": 1,
-            # datacenter IPs get bot-challenged on the web client; mobile/tv clients usually don't.
-            "extractor_args": {"youtube": {"player_client": ["tv", "ios", "mweb", "web"]}}}
-    cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
-    if os.path.isfile(cookie):
-        opts["cookiefile"] = cookie
-    return opts
+def fetch_rss(subreddit, period, attempts=3):
+    """Return the raw RSS for a subreddit's top feed, retrying with backoff on 429."""
+    url = f"https://www.reddit.com/r/{subreddit}/top/.rss?t={period}"
+    last = None
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": UA})
+            return urllib.request.urlopen(req, timeout=30).read().decode("utf-8", "replace")
+        except Exception as e:
+            last = e
+            if "429" in str(e) and i < attempts - 1:
+                time.sleep(6 * (i + 1))   # back off and retry
+                continue
+            raise last
 
 
-def pull_channel(handle, per_channel):
-    from yt_dlp import YoutubeDL
-    h = handle.strip()
-    if not h.startswith("@") and "youtube.com" not in h:
-        h = "@" + h
-    url = h if "youtube.com" in h else f"https://www.youtube.com/{h}/shorts"
-    items = []
-    with YoutubeDL(_ydl_search_opts(per_channel)) as ydl:
-        info = ydl.extract_info(url, download=False)
-    for e in (info.get("entries") or []):
-        vid = e.get("id")
-        if not vid:
+def load_used(path):
+    """Set of Reddit post ids already used in past videos (so we never repeat a clip)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return set(json.load(f).get("used", []))
+    except (OSError, json.JSONDecodeError):
+        return set()
+
+
+def parse_posts(rss):
+    """Pull (id, title, permalink) out of the RSS entries (skip the feed header entry)."""
+    items, seen = [], set()
+    for block in rss.split("<entry>")[1:]:
+        m = re.search(r'href="(https://www\.reddit\.com/r/[^"]+/comments/([^/"]+)/[^"]*)"', block)
+        if not m:
             continue
-        items.append({"id": vid, "title": e.get("title") or "",
-                      # /shorts tab entries carry no duration in flat mode; they're Shorts (<=~60s),
-                      # and build_ranking_video probes + caps each one, so None is fine.
-                      "duration": e.get("duration"),
-                      "url": e.get("url") or f"https://www.youtube.com/shorts/{vid}",
-                      "channel": h})
+        url, vid = m.group(1), m.group(2)
+        if vid in seen:
+            continue
+        seen.add(vid)
+        tm = re.search(r"<title>(.*?)</title>", block, re.S)
+        title = html.unescape((tm.group(1) if tm else "").strip())
+        items.append({"id": vid, "title": title, "duration": None, "url": url})
     return items
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--genre", default=None, choices=list(GENRES),
-                    help="Pull from this genre's curated channels (fails/cats/babies/dogs)")
-    ap.add_argument("--channels", default=None,
-                    help="Comma-separated channel handles/URLs (overrides --genre)")
-    ap.add_argument("--per-channel", type=int, default=12, help="Recent Shorts to pull per channel")
-    ap.add_argument("--max", type=int, default=20, help="Total candidates to return")
-    # accepted for backward-compat with the orchestrator; ignored (we pull channels, not search).
+    ap.add_argument("--genre", default=None, choices=list(GENRE_SUBS),
+                    help="Pick subreddits for this genre (fails/cats/babies/dogs)")
+    ap.add_argument("--subreddits", default=None, help="Comma-separated subreddits (overrides --genre)")
+    ap.add_argument("--period", default=None, choices=["day", "week", "month", "year", "all"],
+                    help="Reddit top period (default: random week/month/year for variety)")
+    ap.add_argument("--max", type=int, default=20, help="Max candidates to return")
+    ap.add_argument("--history", default="state/used_clips.json",
+                    help="JSON of already-used post ids, to avoid repeating clips run to run")
+    # accepted for backward-compat with the orchestrator; ignored (we pull Reddit, not search).
     ap.add_argument("--query", default=None)
     ap.add_argument("--out", default=".tmp/rank_candidates.json")
     args = ap.parse_args()
 
     load_env()
-    if args.channels:
-        channels = [c.strip() for c in args.channels.split(",") if c.strip()]
+    if args.subreddits:
+        subs = [s.strip() for s in args.subreddits.split(",") if s.strip()]
     elif args.genre:
-        channels = list(GENRES[args.genre])
+        subs = list(GENRE_SUBS[args.genre])
     else:
-        channels = list(DEFAULT_CHANNELS)
-    random.shuffle(channels)   # vary the mix run to run
+        subs = list(DEFAULT_SUBS)
+    random.shuffle(subs)                                    # vary the source run to run
+    period = args.period or random.choice(["week", "month", "year"])   # vary the time window too
+    used = load_used(args.history)
 
-    cands, seen, errors = [], set(), []
-    for ch in channels:
+    seen, fresh, errors = {}, [], []   # seen = id->post (all), fresh = not-yet-used
+    chosen_sub = None
+    for sub in subs:                   # ONE feed is usually enough; stop once we have 5 fresh posts
         try:
-            for it in pull_channel(ch, args.per_channel):
-                if it["id"] in seen:
-                    continue
-                seen.add(it["id"])
-                cands.append(it)
+            posts = parse_posts(fetch_rss(sub, period))
         except Exception as e:
-            errors.append(f"{ch}: {str(e)[:80]}")
+            errors.append(f"{sub}: {str(e)[:80]}")
             continue
+        for p in posts:
+            seen.setdefault(p["id"], p)
+        sub_fresh = [p for p in posts if p["id"] not in used]
+        if len(sub_fresh) >= 5:
+            fresh, chosen_sub = sub_fresh, sub
+            break
 
-    if len(cands) < 5:
-        fail(f"Only {len(cands)} usable Shorts from channels -- need >=5.",
-             candidates=cands, channel_errors=errors)
+    if not fresh:                      # no single feed had 5 unused -> pool fresh across feeds...
+        fresh = [p for p in seen.values() if p["id"] not in used]
+        chosen_sub = "mixed"
+    if len(fresh) < 5:                 # ...and only if we've genuinely drained them, allow repeats
+        fresh = list(seen.values())
+
+    if len(fresh) < 5:
+        fail(f"Only {len(fresh)} candidate posts from Reddit -- need >=5.", reasons=errors[:6])
         return
 
-    random.shuffle(cands)
-    cands = cands[: args.max]
-
+    random.shuffle(fresh)              # vary which clips reach the ranker
+    cands = fresh[: args.max]
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"candidates": cands}, f, indent=2, ensure_ascii=False)
-    emit({"count": len(cands), "candidates": cands, "channel_errors": errors, "path": args.out})
+        json.dump({"subreddit": chosen_sub, "period": period, "candidates": cands},
+                  f, indent=2, ensure_ascii=False)
+    emit({"count": len(cands), "subreddit": chosen_sub, "period": period,
+          "candidates": cands, "path": args.out})
 
 
 if __name__ == "__main__":

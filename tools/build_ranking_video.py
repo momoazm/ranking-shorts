@@ -59,13 +59,12 @@ def _ydl_opts(out_base, fmt, player_client=None):
     return opts
 
 
-# Tried in order. Default web client gives the best quality and works on normal IPs; the android
-# client is the fallback that still serves media on some blocked/datacenter IPs (GitHub Actions).
-# When YouTube hard bot-checks the IP, none of these work without the YT_COOKIES secret.
+# Tried in order. The first lenient format works for Reddit (the default source) and normal YouTube;
+# the android attempt is a YouTube fallback for blocked/datacenter IPs (the youtube player_client is
+# simply ignored by other extractors like Reddit).
 _DL_ATTEMPTS = [
-    (None, "bv*[height<=480]+ba/b[height<=480]/b"),
+    (None, "bv*[height<=720]+ba/b[height<=720]/b/best"),
     (["android"], "best"),
-    (["web_safari"], "best[height<=720]/best"),
 ]
 
 
