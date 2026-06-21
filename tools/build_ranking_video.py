@@ -128,8 +128,11 @@ def mean_volume_db(src, offset, dur):
     return float(m.group(1)) if m else None
 
 
-def normalize(src, offset, dur, out):
+def normalize(src, offset, dur, out, loop=0):
     """Whole frame FIT into 9:16 over a blurred fill (no crop-zoom).
+
+    `loop` repeats the source N extra times (for short Tenor gifs) so each rank gets enough screen
+    time; the gif is a loop anyway, so this reads naturally.
 
     Audio layering (the user's spec) on EVERY clip:
       * keep the clip's ORIGINAL sound when it's audible; if it's silent, sit it on silence;
@@ -151,7 +154,8 @@ def normalize(src, offset, dur, out):
     a = [f"[3:a]atrim=0:0.9,volume=0.5[wh]",                                  # trending transition
          f"[1:a]atrim=0:1.2,adelay={boom_ms}|{boom_ms},volume=0.7[bm]",       # boom on fail
          f"[2:a]adelay={fahh_ms}|{fahh_ms},volume=0.6[fa]"]                   # fahh on fail
-    inputs = ["-ss", f"{offset:.2f}", "-i", src, "-i", BOOM, "-i", FAIL_SFX, "-i", WHOOSH]
+    loop_opt = ["-stream_loop", str(loop)] if loop else []
+    inputs = [*loop_opt, "-ss", f"{offset:.2f}", "-i", src, "-i", BOOM, "-i", FAIL_SFX, "-i", WHOOSH]
     if audible:
         a.append("[0:a]aresample=44100,volume=1.0[base]")
     else:
@@ -229,6 +233,8 @@ def main():
     cap = min(args.per_clip, args.max_total / max(1, len(entries)))
 
     from _media import probe_duration
+    MIN_SHOW = 3.0                                      # loop short gifs up to this many seconds
+    import math
     clips, segments, cursor, errors = [], [], 0.0, []
     for i, e in enumerate(entries):
         try:
@@ -237,19 +243,21 @@ def main():
             errors.append(f"download #{e.get('rank', i)}: {str(ex).splitlines()[0][:160]}")
             continue
         try:
-            dsrc = probe_duration(src)                 # real duration (shorts carry none in search)
+            dsrc = probe_duration(src)                 # real duration
         except Exception:
             dsrc = None
-        if dsrc and dsrc < 2:                          # skip degenerate/blank clips
+        if dsrc and dsrc < 0.8:                         # skip only truly degenerate/blank clips
+            errors.append(f"too short #{e.get('rank', i)}: {dsrc:.1f}s")
             continue
-        dur = min(cap, dsrc) if dsrc else cap
-        # The funny PAYOFF (the fail itself) is almost always at the END of the clip. If the short is
-        # longer than our per-clip budget, show its TAIL, not its intro -- otherwise we'd cut off the
-        # actual fail (the bug the user hit). Short clips that fit are shown whole.
-        offset = max(0.0, dsrc - dur) if (dsrc and dsrc > dur) else 0.0
+        target = min(cap, max(dsrc or cap, MIN_SHOW))  # each rank gets >= MIN_SHOW of screen time
+        if dsrc and dsrc < target:                     # short gif -> loop it to fill the target
+            loop, offset, dur = math.ceil(target / dsrc), 0.0, target
+        else:                                          # long enough -> show its END (the payoff)
+            loop, dur = 0, min(cap, dsrc or cap)
+            offset = max(0.0, (dsrc - dur)) if (dsrc and dsrc > dur) else 0.0
         clip = os.path.join(TMPDIR, f"clip_{i}.mp4")
         try:
-            normalize(src, offset, dur, clip)
+            normalize(src, offset, dur, clip, loop)
         except Exception as ex:
             errors.append(f"normalize #{e.get('rank', i)}: {str(ex).splitlines()[0][:160]}")
             continue
