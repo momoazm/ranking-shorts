@@ -28,7 +28,8 @@ OUT_W, OUT_H, FPS = 1080, 1920, 30
 TMPDIR = ".tmp/rank"
 SFX_DIR = REPO_ROOT / "assets" / "sfx"
 BOOM = str(SFX_DIR / "boom.mp3")        # impact placed on the fail moment
-FAIL_SFX = str(SFX_DIR / "fail.mp3")    # fallback comedic "womp" for clips with no audio
+FAIL_SFX = str(SFX_DIR / "fail.mp3")    # comedic "fahh/womp" on the fail
+WHOOSH = str(SFX_DIR / "whoosh.mp3")    # trending transition sound at each clip's start
 SILENCE_DB = -50.0                       # below this mean volume a clip counts as "silent"
 
 
@@ -94,11 +95,11 @@ def mean_volume_db(src, offset, dur):
 def normalize(src, offset, dur, out):
     """Whole frame FIT into 9:16 over a blurred fill (no crop-zoom).
 
-    Audio rules (the user's spec):
-      * keep each clip's ORIGINAL sound when it has audible audio;
-      * if the clip is silent / has no audio track, drop in a fallback comedic 'womp' so EVERY clip
-        has a sound (not a trending track);
-      * add a BOOM impact on the fail moment (the clip's end, since we end-weight) as an effect."""
+    Audio layering (the user's spec) on EVERY clip:
+      * keep the clip's ORIGINAL sound when it's audible; if it's silent, sit it on silence;
+      * a trending WHOOSH transition at the clip's start;
+      * a 'fahh' (womp) + BOOM impact landing together on the FAIL moment (the clip's end, since we
+        end-weight the window so the payoff is what's shown)."""
     vf = (f"[0:v]split=2[b][f];"
           f"[b]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,crop={OUT_W}:{OUT_H},"
           f"boxblur=20:1,setsar=1[bg];"
@@ -107,20 +108,23 @@ def normalize(src, offset, dur, out):
 
     lvl = mean_volume_db(src, offset, dur)
     audible = lvl is not None and lvl > SILENCE_DB
-    boom_ms = int(max(0.0, dur - 0.85) * 1000)   # impact lands on the payoff at the end
+    boom_ms = int(max(0.0, dur - 0.6) * 1000)    # impact right on the payoff
+    fahh_ms = int(max(0.0, dur - 0.95) * 1000)   # 'fahh' leads into the impact
 
-    # inputs: 0 = clip, 1 = boom; (silent only) 2 = fallback womp, 3 = silence base
-    chain = vf + f";[1:a]atrim=0:1.2,adelay={boom_ms}|{boom_ms},volume=0.7[bm]"
+    # inputs: 0=clip, 1=boom, 2=fahh, 3=whoosh; (silent only) 4=silence base
+    a = [f"[3:a]atrim=0:0.9,volume=0.5[wh]",                                  # trending transition
+         f"[1:a]atrim=0:1.2,adelay={boom_ms}|{boom_ms},volume=0.7[bm]",       # boom on fail
+         f"[2:a]adelay={fahh_ms}|{fahh_ms},volume=0.6[fa]"]                   # fahh on fail
+    inputs = ["-ss", f"{offset:.2f}", "-i", src, "-i", BOOM, "-i", FAIL_SFX, "-i", WHOOSH]
     if audible:
-        chain += ";[0:a]aresample=44100,volume=1.0[base];[base][bm]amix=inputs=2:duration=first:normalize=0[a]"
+        a.append("[0:a]aresample=44100,volume=1.0[base]")
     else:
-        chain += (f";[2:a]adelay={boom_ms}|{boom_ms},volume=0.9[womp];"
-                  f"[3:a][bm][womp]amix=inputs=3:duration=first:normalize=0[a]")
+        inputs += ["-f", "lavfi", "-t", f"{dur:.2f}", "-i", "anullsrc=r=44100:cl=stereo"]
+        a.append("[4:a]volume=1.0[base]")
+    a.append("[base][wh][bm][fa]amix=inputs=4:duration=first:normalize=0[a]")
+    chain = vf + ";" + ";".join(a)
 
-    run_ffmpeg(["-ss", f"{offset:.2f}", "-i", src, "-i", BOOM,
-                *(["-i", FAIL_SFX, "-f", "lavfi", "-t", f"{dur:.2f}", "-i",
-                   "anullsrc=r=44100:cl=stereo"] if not audible else []),
-                "-filter_complex", chain, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
+    run_ffmpeg([*inputs, "-filter_complex", chain, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
                 "-ar", "44100", "-ac", "2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
                 "-c:a", "aac", "-b:a", "160k", out])
 
@@ -137,26 +141,28 @@ def build_overlay_ass(segments, title, total):
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
         # Header: the overall video title, pinned top-centre for the whole video.
         "Style: Header,Arial,62,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,50,50,120,1\n"
-        # Board: a COMPACT leaderboard down the left side -- all ranks shown small, active one lit.
-        "Style: Board,Arial,46,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,4,45,40,0,1\n\n"
+        # Board: a COMPACT leaderboard down the left side -- top-anchored, fixed slots, #1 on top.
+        "Style: Board,Arial,46,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,7,45,40,330,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     # rank -> short funny label (e.g. "Aura Lost"); each rank has its own.
     by_rank = {s["rank"]: (s.get("label") or "") for s in segments}
-    ranks_desc = sorted(by_rank, reverse=True)            # 5,4,3,2,1 top-to-bottom (countdown feel)
+    ranks_asc = sorted(by_rank)                           # 1,2,3,4,5 top-to-bottom (#1 on top)
 
     rows = [f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:55]}"]
     for s in segments:
         cur = s["rank"]
         lines = []
-        for k in ranks_desc:
+        for k in ranks_asc:
             lbl = esc(by_rank[k])[:16]
             txt = (f"#{k} {lbl}").strip()
-            if k == cur:                                  # active rank: gold, bold, full opacity
+            if k == cur:                                  # the rank being revealed now: gold, bold
                 lines.append("{\\c" + GOLD + "\\b1\\alpha&H00&}" + txt + "{\\r}")
-            else:                                         # the rest: dimmed so it stays unobtrusive
+            elif k > cur:                                 # already counted down past -> dimmed
                 lines.append("{\\alpha&H85&}" + txt + "{\\r}")
+            else:                                         # not revealed yet -> invisible (keeps slot)
+                lines.append("{\\alpha&HFF&}" + txt + "{\\r}")
         board = "\\N".join(lines)
         rows.append(f"Dialogue: 0,{ass_time(s['start'])},{ass_time(s['end'])},Board,,0,0,0,,{board}")
     return head + "\n".join(rows) + "\n"

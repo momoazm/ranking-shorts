@@ -38,10 +38,12 @@ def main():
     {"rank": 4, ...}, {"rank": 3, ...}, {"rank": 2, ...}, {"rank": 1, ...}
   ]
 }
-Pick the 5 BEST candidates for the topic and rank them subjectively by the criterion. Each `label`
-is a SHORT punchy Gen-Z meme caption for that clip (1-3 words, <=16 chars), DIFFERENT for each rank
--- e.g. "Aura Lost", "Skill Issue", "Pure Pain", "Certified Bruh", "Massive L", "Caught in 4K".
-Use each candidate_index at most once. Output JSON only."""
+Pick the 5 candidates that best MATCH THE TOPIC and rank them by the criterion. IMPORTANT: prefer
+clips whose title shows the actual event the topic promises (for a "fails" topic pick real fails/
+accidents/mishaps -- someone falls, crashes, slips, things go wrong; avoid merely cute or calm clips
+unless nothing better exists). Each `label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
+words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", "Pure Pain",
+"Certified Bruh", "Massive L", "Caught in 4K". Use each candidate_index at most once. Output JSON only."""
     prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n\n"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 

@@ -71,8 +71,8 @@ def main():
                     help="Pull from this genre's curated channels (fails/cats/babies/dogs)")
     ap.add_argument("--channels", default=None,
                     help="Comma-separated channel handles/URLs (overrides --genre)")
-    ap.add_argument("--per-channel", type=int, default=10, help="Recent Shorts to pull per channel")
-    ap.add_argument("--max", type=int, default=14, help="Total candidates to return")
+    ap.add_argument("--per-channel", type=int, default=12, help="Recent Shorts to pull per channel")
+    ap.add_argument("--max", type=int, default=20, help="Total candidates to return")
     # accepted for backward-compat with the orchestrator; ignored (we pull channels, not search).
     ap.add_argument("--query", default=None)
     ap.add_argument("--out", default=".tmp/rank_candidates.json")
