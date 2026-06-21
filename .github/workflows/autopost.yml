@@ -1,9 +1,9 @@
 name: ranking-shorts
 
-# Builds & posts a #5->#1 RANKING Short (funny clips pulled from Tenor) autonomously in
-# GitHub's cloud — works even when your laptop is off. Tenor's CDN serves clips to servers with no
-# auth/IP-block (unlike YouTube/Reddit, which block datacenter IPs), so no cookies are needed.
-# Cron is UTC and may be delayed a few minutes under load; "every 4h" is approximate.
+# Builds & posts a #5->#1 RANKING Short (funny clips pulled from Reddit video posts, WITH their
+# own audio) autonomously in GitHub's cloud — works even when your laptop is off. Reddit's RSS +
+# v.redd.it CDN serve to servers without cookies (the .json API 403s for bots, but .rss + the CDN
+# do not). Cron is UTC and may be delayed a few minutes under load; "every 4h" is approximate.
 on:
   schedule:
     - cron: "0 */4 * * *"      # every 4 hours -> 6 uploads/day (under YouTube's 10k/day quota)
@@ -79,9 +79,9 @@ jobs:
             echo "::error::YOUTUBE_TOKEN_JSON secret is empty or missing. Paste the full contents of clipping/token.json."
             exit 1
           fi
-          # YT_COOKIES is unused now: clips come from Tenor (no auth/IP-block on cloud IPs).
+          # YT_COOKIES is unused: clips come from Reddit (RSS + v.redd.it CDN, no cookies needed).
           if [ -z "$YT_COOKIES" ]; then
-            echo "::notice::YT_COOKIES not set -- fine, clips come from Tenor which needs no cookies."
+            echo "::notice::YT_COOKIES not set -- fine, clips come from Reddit which needs no cookies."
           fi
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::warning::GEMINI_API_KEY empty (only needed if you switch back to the Nano Banana brainrot movie via autopost.py)."
@@ -105,10 +105,10 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}   # also injected directly, so the LLM never depends on the file
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # THE automation: a #5->#1 ranking Short from funny Tenor clips -- single trending genre,
-        # leaderboard overlay, layered SFX. Auto-posts to YouTube + emails a copy. No cookies needed
-        # (Tenor's CDN serves servers fine). (The old AI brainrot movie still lives in
-        # tools/autopost.py if ever needed, but it is no longer scheduled.)
+        # THE automation: a #5->#1 ranking Short from funny Reddit clips (with their own audio) --
+        # single trending genre, leaderboard overlay, ducked music bed, NO SFX. Auto-posts to
+        # YouTube + emails a copy. No cookies needed (Reddit RSS + v.redd.it CDN serve servers fine).
+        # (The old AI brainrot movie still lives in tools/autopost.py but is no longer scheduled.)
         run: python tools/rank_autopost.py --privacy public --platforms youtube,email
 
       - name: Upload final.mp4 artifact (for inspection)
