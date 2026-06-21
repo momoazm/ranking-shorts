@@ -85,6 +85,16 @@ def download(url, out_base):
     Tries the client/format chain in _DL_ATTEMPTS so a bot-checked default client can fall back to
     another that still serves media without cookies."""
     import glob
+    # Direct media files (Tenor mp4s) -> just fetch the bytes; no extractor needed.
+    if url.lower().split("?")[0].endswith((".mp4", ".webm", ".mov")):
+        import urllib.request
+        out = out_base + ".mp4"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            data = r.read()
+        with open(out, "wb") as f:
+            f.write(data)
+        return out
     from yt_dlp import YoutubeDL
     last = None
     for player_client, fmt in _DL_ATTEMPTS:

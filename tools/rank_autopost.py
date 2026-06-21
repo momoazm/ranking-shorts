@@ -105,7 +105,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
-    ap.add_argument("--subreddits", default=None, help="Override the funny subreddits (comma-sep)")
+    ap.add_argument("--search", default=None, help="Override the Tenor search query")
     ap.add_argument("--platforms", default="youtube,email")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
     ap.add_argument("--music", default=None, help="Optional music bed path (default: none -- keep clip audio)")
@@ -132,13 +132,13 @@ def main():
     # 1) topic (most-trending genre + title) -> 2) pull short clips from that genre's channels -> 3) rank 5
     topic = run_tool("rank_topic.py", ["--niche", args.niche, "--out", TOPIC])
     find_args = ["--out", CANDS]
-    if args.subreddits:
-        find_args += ["--subreddits", args.subreddits]
+    if args.search:
+        find_args += ["--search", args.search]
     elif topic.get("genre"):
         find_args += ["--genre", topic["genre"]]
     _f, ferr = run_tool_safe("find_ranking_clips.py", find_args)
-    if ferr and not args.subreddits and topic.get("genre") != "fails":
-        # the picked genre didn't have enough downloadable videos -> fall back to the reliable one
+    if ferr and not args.search and topic.get("genre") != "fails":
+        # the picked genre didn't have enough clips -> fall back to the reliable one
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
     elif ferr:
         raise RuntimeError(ferr)

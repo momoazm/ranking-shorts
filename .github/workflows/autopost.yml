@@ -1,7 +1,8 @@
 name: ranking-shorts
 
-# Builds & posts a #5->#1 RANKING Short (funny clips pulled from Reddit) autonomously in
-# GitHub's cloud — works even when your laptop is off. Reddit needs no cookies on cloud IPs.
+# Builds & posts a #5->#1 RANKING Short (funny clips pulled from Tenor) autonomously in
+# GitHub's cloud — works even when your laptop is off. Tenor's CDN serves clips to servers with no
+# auth/IP-block (unlike YouTube/Reddit, which block datacenter IPs), so no cookies are needed.
 # Cron is UTC and may be delayed a few minutes under load; "every 4h" is approximate.
 on:
   schedule:
@@ -78,10 +79,9 @@ jobs:
             echo "::error::YOUTUBE_TOKEN_JSON secret is empty or missing. Paste the full contents of clipping/token.json."
             exit 1
           fi
-          # YT_COOKIES is OPTIONAL now: clips come from Reddit (no bot-check on cloud IPs). It is
-          # only used if you point the pipeline back at YouTube via --subreddits/--genre overrides.
+          # YT_COOKIES is unused now: clips come from Tenor (no auth/IP-block on cloud IPs).
           if [ -z "$YT_COOKIES" ]; then
-            echo "::notice::YT_COOKIES not set -- fine, the ranking pipeline pulls clips from Reddit which needs no cookies."
+            echo "::notice::YT_COOKIES not set -- fine, clips come from Tenor which needs no cookies."
           fi
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::warning::GEMINI_API_KEY empty (only needed if you switch back to the Nano Banana brainrot movie via autopost.py)."
@@ -105,9 +105,9 @@ jobs:
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}   # also injected directly, so the LLM never depends on the file
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        # THE automation: a #5->#1 ranking Short from funny Reddit clips -- single trending genre,
+        # THE automation: a #5->#1 ranking Short from funny Tenor clips -- single trending genre,
         # leaderboard overlay, layered SFX. Auto-posts to YouTube + emails a copy. No cookies needed
-        # (Reddit downloads fine from cloud IPs). (The old AI brainrot movie still lives in
+        # (Tenor's CDN serves servers fine). (The old AI brainrot movie still lives in
         # tools/autopost.py if ever needed, but it is no longer scheduled.)
         run: python tools/rank_autopost.py --privacy public --platforms youtube,email
 
