@@ -287,8 +287,12 @@ def main():
     concat_in = "".join(f"[{k}:v][{k}:a]" for k in range(n))
     chain = f"{concat_in}concat=n={n}:v=1:a=1[cv][ca];[cv]ass={ass_rel}[v]"
     if music_idx is not None:
+        # normalize=0 so the clips' ORIGINAL audio keeps its full level (default amix
+        # would halve every input); the bed sits UNDER it at music_volume. A final
+        # limiter guards the summed signal against clipping.
         chain += (f";[ca]volume=1.0[base];[{music_idx}:a]volume={args.music_volume}[mus];"
-                  f"[base][mus]amix=inputs=2:duration=first:dropout_transition=0[a]")
+                  f"[base][mus]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,"
+                  f"alimiter=level_in=1:level_out=1:limit=0.97[a]")
         amap = "[a]"
     else:
         amap = "[ca]"
