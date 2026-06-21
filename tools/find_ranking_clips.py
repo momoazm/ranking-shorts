@@ -65,24 +65,25 @@ def load_used(path):
 
 
 def parse_posts(rss):
-    """Pull VIDEO posts (id, title, permalink) out of the RSS entries.
+    """Pull VIDEO posts (id, title, v.redd.it URL) out of the RSS entries.
 
-    Top feeds are mostly images/text; only Reddit-hosted videos (v.redd.it) are reliably downloadable
-    by yt-dlp without auth, so we keep just those -- otherwise the build gets nothing to download."""
+    Two reasons we key on v.redd.it: (1) top feeds are mostly images/text and only Reddit-hosted
+    videos are downloadable; (2) we hand yt-dlp the v.redd.it CDN URL directly instead of the
+    reddit.com permalink -- the permalink hits Reddit's API, which 'requires authentication' from
+    datacenter IPs (GitHub Actions), while the CDN/DASH manifest serves the media without auth."""
     items, seen = [], set()
     for block in rss.split("<entry>")[1:]:
-        if "v.redd.it" not in block:                  # keep only Reddit-hosted videos
+        vm = re.search(r"(https?://v\.redd\.it/[A-Za-z0-9]+)", block)
+        if not vm:                                    # keep only Reddit-hosted videos
             continue
-        m = re.search(r'href="(https://www\.reddit\.com/r/[^"]+/comments/([^/"]+)/[^"]*)"', block)
-        if not m:
-            continue
-        url, vid = m.group(1), m.group(2)
+        m = re.search(r'href="https://www\.reddit\.com/r/[^"]+/comments/([^/"]+)/[^"]*"', block)
+        vid = m.group(1) if m else vm.group(1).rsplit("/", 1)[-1]
         if vid in seen:
             continue
         seen.add(vid)
         tm = re.search(r"<title>(.*?)</title>", block, re.S)
         title = html.unescape((tm.group(1) if tm else "").strip())
-        items.append({"id": vid, "title": title, "duration": None, "url": url})
+        items.append({"id": vid, "title": title, "duration": None, "url": vm.group(1)})
     return items
 
 
