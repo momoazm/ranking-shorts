@@ -144,12 +144,20 @@ def main():
         raise RuntimeError(ferr)
     run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
 
-    # 4) optional background music (default OFF -- keep each clip's own sound) -> 5) build the video
+    # 4) background music -> 5) build the video.
+    # Default: ALWAYS mix in the committed background bed (assets/music/bg.mp3 -- the
+    # user's chosen track, extracted from the reference Short). SFX are gone, so this is
+    # the only non-clip audio. An explicit --music overrides it; --with-music can still
+    # pull a trending track instead. (The bed is committed because the cloud runner's IP
+    # is blocked from YouTube downloads, so we can't re-extract it at runtime.)
     MUSIC = ".tmp/music.mp3"
+    BG_BED = ROOT / "assets" / "music" / "bg.mp3"
     music_path = args.music
     if not music_path and args.with_music:
         _m, merr = run_tool_safe("fetch_trending_music.py", ["--query", args.music_query, "--out", MUSIC])
         music_path = MUSIC if (not merr and (ROOT / MUSIC).is_file()) else None
+    if not music_path and BG_BED.is_file():
+        music_path = str(BG_BED)
 
     build_args = ["--ranked", RANKED, "--max-total", "120", "--per-clip", str(args.per_clip),
                   "--title", topic["title"], "--out", FINAL]

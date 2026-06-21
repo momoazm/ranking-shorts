@@ -26,10 +26,6 @@ from _media import run_ffmpeg, get_ffmpeg
 
 OUT_W, OUT_H, FPS = 1080, 1920, 30
 TMPDIR = ".tmp/rank"
-SFX_DIR = REPO_ROOT / "assets" / "sfx"
-BOOM = str(SFX_DIR / "boom.mp3")        # impact placed on the fail moment
-FAIL_SFX = str(SFX_DIR / "fail.mp3")    # comedic "fahh/womp" on the fail
-WHOOSH = str(SFX_DIR / "whoosh.mp3")    # trending transition sound at each clip's start
 SILENCE_DB = -50.0                       # below this mean volume a clip counts as "silent"
 
 
@@ -134,11 +130,10 @@ def normalize(src, offset, dur, out, loop=0):
     `loop` repeats the source N extra times (for short Tenor gifs) so each rank gets enough screen
     time; the gif is a loop anyway, so this reads naturally.
 
-    Audio layering (the user's spec) on EVERY clip:
-      * keep the clip's ORIGINAL sound when it's audible; if it's silent, sit it on silence;
-      * a trending WHOOSH transition at the clip's start;
-      * a 'fahh' (womp) + BOOM impact landing together on the FAIL moment (the clip's end, since we
-        end-weight the window so the payoff is what's shown)."""
+    Audio (per the user's spec): NO sound effects -- the whoosh/boom/'fahh' SFX were
+    removed. Each clip keeps ONLY its ORIGINAL sound when it's audible, or sits on
+    silence when it's quiet. The background-music bed is mixed in once over the whole
+    video by the final assembly in main() (--music), not per clip."""
     vf = (f"[0:v]split=2[b][f];"
           f"[b]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,crop={OUT_W}:{OUT_H},"
           f"boxblur=20:1,setsar=1[bg];"
@@ -147,21 +142,15 @@ def normalize(src, offset, dur, out, loop=0):
 
     lvl = mean_volume_db(src, offset, dur)
     audible = lvl is not None and lvl > SILENCE_DB
-    boom_ms = int(max(0.0, dur - 0.6) * 1000)    # impact right on the payoff
-    fahh_ms = int(max(0.0, dur - 0.95) * 1000)   # 'fahh' leads into the impact
 
-    # inputs: 0=clip, 1=boom, 2=fahh, 3=whoosh; (silent only) 4=silence base
-    a = [f"[3:a]atrim=0:0.9,volume=0.5[wh]",                                  # trending transition
-         f"[1:a]atrim=0:1.2,adelay={boom_ms}|{boom_ms},volume=0.7[bm]",       # boom on fail
-         f"[2:a]adelay={fahh_ms}|{fahh_ms},volume=0.6[fa]"]                   # fahh on fail
+    # inputs: 0=clip; (silent only) 1=silence base. No SFX inputs.
     loop_opt = ["-stream_loop", str(loop)] if loop else []
-    inputs = [*loop_opt, "-ss", f"{offset:.2f}", "-i", src, "-i", BOOM, "-i", FAIL_SFX, "-i", WHOOSH]
+    inputs = [*loop_opt, "-ss", f"{offset:.2f}", "-i", src]
     if audible:
-        a.append("[0:a]aresample=44100,volume=1.0[base]")
+        a = ["[0:a]aresample=44100,volume=1.0[a]"]
     else:
         inputs += ["-f", "lavfi", "-t", f"{dur:.2f}", "-i", "anullsrc=r=44100:cl=stereo"]
-        a.append("[4:a]volume=1.0[base]")
-    a.append("[base][wh][bm][fa]amix=inputs=4:duration=first:normalize=0[a]")
+        a = ["[1:a]volume=1.0[a]"]
     chain = vf + ";" + ";".join(a)
 
     run_ffmpeg([*inputs, "-filter_complex", chain, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
