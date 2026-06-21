@@ -34,7 +34,7 @@ GENRE_SUBS = {
     "fails":  ["Whatcouldgowrong", "instantkarma", "instant_regret", "IdiotsInCars", "funny"],
     "cats":   ["cats", "catsstandingup", "Catloaf", "IllegallySmolCats", "CatsBeingCats"],
     "babies": ["KidsAreFuckingStupid", "ContagiousLaughter", "funny"],
-    "dogs":   ["WhatsWrongWithYourDog", "dogswithjobs", "Zoomies", "rarepuppers"],
+    "dogs":   ["WhatsWrongWithYourDog", "Zoomies", "dogswithjobs", "AnimalsBeingDerps"],
 }
 DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
 
@@ -65,9 +65,14 @@ def load_used(path):
 
 
 def parse_posts(rss):
-    """Pull (id, title, permalink) out of the RSS entries (skip the feed header entry)."""
+    """Pull VIDEO posts (id, title, permalink) out of the RSS entries.
+
+    Top feeds are mostly images/text; only Reddit-hosted videos (v.redd.it) are reliably downloadable
+    by yt-dlp without auth, so we keep just those -- otherwise the build gets nothing to download."""
     items, seen = [], set()
     for block in rss.split("<entry>")[1:]:
+        if "v.redd.it" not in block:                  # keep only Reddit-hosted videos
+            continue
         m = re.search(r'href="(https://www\.reddit\.com/r/[^"]+/comments/([^/"]+)/[^"]*)"', block)
         if not m:
             continue
@@ -107,25 +112,27 @@ def main():
     period = args.period or random.choice(["week", "month", "year"])   # vary the time window too
     used = load_used(args.history)
 
-    seen, fresh, errors = {}, [], []   # seen = id->post (all), fresh = not-yet-used
-    chosen_sub = None
-    for sub in subs:                   # ONE feed is usually enough; stop once we have 5 fresh posts
+    seen, errors, hit_subs = {}, [], []   # seen = id->video post (deduped across feeds)
+    for sub in subs:                       # accumulate VIDEOS across feeds until we have plenty
         try:
             posts = parse_posts(fetch_rss(sub, period))
         except Exception as e:
             errors.append(f"{sub}: {str(e)[:80]}")
             continue
+        new = 0
         for p in posts:
-            seen.setdefault(p["id"], p)
-        sub_fresh = [p for p in posts if p["id"] not in used]
-        if len(sub_fresh) >= 5:
-            fresh, chosen_sub = sub_fresh, sub
+            if p["id"] not in seen:
+                seen[p["id"]] = p
+                new += 1
+        if new:
+            hit_subs.append(sub)
+        fresh_now = [p for p in seen.values() if p["id"] not in used]
+        if len(fresh_now) >= 10:           # enough unused videos; stop hitting RSS (rate limits)
             break
 
-    if not fresh:                      # no single feed had 5 unused -> pool fresh across feeds...
-        fresh = [p for p in seen.values() if p["id"] not in used]
-        chosen_sub = "mixed"
-    if len(fresh) < 5:                 # ...and only if we've genuinely drained them, allow repeats
+    fresh = [p for p in seen.values() if p["id"] not in used]
+    chosen_sub = hit_subs[0] if len(hit_subs) == 1 else "mixed"
+    if len(fresh) < 5:                      # only if we've genuinely drained the fresh pool, allow repeats
         fresh = list(seen.values())
 
     if len(fresh) < 5:

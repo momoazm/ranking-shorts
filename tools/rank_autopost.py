@@ -54,7 +54,10 @@ def run_tool_safe(name, args):
     if data is None:
         return None, f"{name} did not return JSON (exit {proc.returncode}). stderr:\n{(proc.stderr or '')[-500:]}"
     if proc.returncode != 0 or "error" in data:
-        return data, f"{name} failed: {data.get('error', out[-300:])}"
+        msg = data.get("error", out[-300:])
+        if data.get("reasons"):                       # surface per-item diagnostics (e.g. why clips failed)
+            msg += " | reasons: " + "; ".join(str(r) for r in data["reasons"][:5])
+        return data, f"{name} failed: {msg}"
     return data, None
 
 
@@ -133,7 +136,12 @@ def main():
         find_args += ["--subreddits", args.subreddits]
     elif topic.get("genre"):
         find_args += ["--genre", topic["genre"]]
-    run_tool("find_ranking_clips.py", find_args)
+    _f, ferr = run_tool_safe("find_ranking_clips.py", find_args)
+    if ferr and not args.subreddits and topic.get("genre") != "fails":
+        # the picked genre didn't have enough downloadable videos -> fall back to the reliable one
+        run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
+    elif ferr:
+        raise RuntimeError(ferr)
     run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
 
     # 4) optional background music (default OFF -- keep each clip's own sound) -> 5) build the video
