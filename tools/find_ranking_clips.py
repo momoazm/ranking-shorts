@@ -19,12 +19,18 @@ import random
 
 from _common import load_env, emit, fail, REPO_ROOT
 
-# Curated funny / wholesome Shorts channels (verified to expose a /shorts tab). These license or own
-# their footage, which is the most defensible source for reused clips. Override with --channels.
-DEFAULT_CHANNELS = [
-    "@FailArmy", "@AFV", "@TheDodo", "@PetCollective",
-    "@viralhog", "@JukinMedia", "@dailydoseofinternet",
-]
+# Curated Shorts channels per genre (each verified to expose a /shorts tab). These license or own
+# their footage, the most defensible source for reused clips. Pick a genre with --genre, or override
+# the channel list directly with --channels.
+GENRES = {
+    "fails":  ["@FailArmy", "@AFV", "@viralhog", "@JukinMedia"],
+    "cats":   ["@TheDodo", "@PetCollective", "@TheCatReviewer"],
+    "babies": ["@AFV", "@CuteBabyClub"],
+    "dogs":   ["@TheDodo", "@FunnyDogs"],
+}
+# Default (no genre given) = a broad funny mix.
+DEFAULT_CHANNELS = ["@FailArmy", "@AFV", "@TheDodo", "@PetCollective",
+                    "@viralhog", "@JukinMedia", "@dailydoseofinternet"]
 
 
 def _ydl_search_opts(per_channel):
@@ -61,9 +67,11 @@ def pull_channel(handle, per_channel):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--channels", default=",".join(DEFAULT_CHANNELS),
-                    help="Comma-separated channel handles/URLs to pull Shorts from")
-    ap.add_argument("--per-channel", type=int, default=8, help="Recent Shorts to pull per channel")
+    ap.add_argument("--genre", default=None, choices=list(GENRES),
+                    help="Pull from this genre's curated channels (fails/cats/babies/dogs)")
+    ap.add_argument("--channels", default=None,
+                    help="Comma-separated channel handles/URLs (overrides --genre)")
+    ap.add_argument("--per-channel", type=int, default=10, help="Recent Shorts to pull per channel")
     ap.add_argument("--max", type=int, default=14, help="Total candidates to return")
     # accepted for backward-compat with the orchestrator; ignored (we pull channels, not search).
     ap.add_argument("--query", default=None)
@@ -71,7 +79,12 @@ def main():
     args = ap.parse_args()
 
     load_env()
-    channels = [c.strip() for c in args.channels.split(",") if c.strip()]
+    if args.channels:
+        channels = [c.strip() for c in args.channels.split(",") if c.strip()]
+    elif args.genre:
+        channels = list(GENRES[args.genre])
+    else:
+        channels = list(DEFAULT_CHANNELS)
     random.shuffle(channels)   # vary the mix run to run
 
     cands, seen, errors = [], set(), []

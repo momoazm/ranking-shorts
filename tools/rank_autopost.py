@@ -89,9 +89,11 @@ def main():
     ap.add_argument("--channels", default=None, help="Override curated Shorts channels (comma-sep)")
     ap.add_argument("--platforms", default="youtube,email")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
-    ap.add_argument("--music", default=None, help="Music bed path; if omitted, a trending track is fetched")
+    ap.add_argument("--music", default=None, help="Optional music bed path (default: none -- keep clip audio)")
     ap.add_argument("--music-query", default="trending tiktok background music 2026")
-    ap.add_argument("--no-music", action="store_true", help="Skip the background music bed")
+    ap.add_argument("--with-music", action="store_true",
+                    help="Add a trending background-music bed under the clips (default: off)")
+    ap.add_argument("--per-clip", type=float, default=6.0, help="Max seconds shown per clip (short!)")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_VIDEOS", "6")))
     ap.add_argument("--keep-tmp", action="store_true")
     args = ap.parse_args()
@@ -107,22 +109,25 @@ def main():
             return
         daily_increment()
 
-    # 1) topic (overall title/hook) -> 2) pull short clips from curated channels -> 3) LLM ranks 5
+    # 1) topic (most-trending genre + title) -> 2) pull short clips from that genre's channels -> 3) rank 5
     topic = run_tool("rank_topic.py", ["--niche", args.niche, "--out", TOPIC])
     find_args = ["--out", CANDS]
     if args.channels:
         find_args += ["--channels", args.channels]
+    elif topic.get("genre"):
+        find_args += ["--genre", topic["genre"]]
     run_tool("find_ranking_clips.py", find_args)
     run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
 
-    # 4) trending background music (best-effort) -> 5) build the countdown video
+    # 4) optional background music (default OFF -- keep each clip's own sound) -> 5) build the video
     MUSIC = ".tmp/music.mp3"
     music_path = args.music
-    if not music_path and not args.no_music:
+    if not music_path and args.with_music:
         _m, merr = run_tool_safe("fetch_trending_music.py", ["--query", args.music_query, "--out", MUSIC])
         music_path = MUSIC if (not merr and (ROOT / MUSIC).is_file()) else None
 
-    build_args = ["--ranked", RANKED, "--max-total", "180", "--out", FINAL]
+    build_args = ["--ranked", RANKED, "--max-total", "60", "--per-clip", str(args.per_clip),
+                  "--title", topic["title"], "--out", FINAL]
     if music_path:
         build_args += ["--music", music_path]
     build = run_tool("build_ranking_video.py", build_args)

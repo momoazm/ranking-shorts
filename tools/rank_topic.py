@@ -15,17 +15,19 @@ import os
 from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
+GENRES = ["fails", "cats", "babies", "dogs"]
+
 SCHEMA = """Return ONE JSON object with exactly these keys:
 {
-  "title": string,         // the video title, a punchy "Top 5 ..." countdown (<=80 chars, English)
-  "search_query": string,  // a YouTube search query returning many SHORT, single standalone clips
-                           //   (NOT hour-long compilations — avoid the word "compilation"; favor short funny clips)
-  "criterion": string,     // what we're ranking by (e.g. "how jaw-dropping it is")
-  "hook": string           // a 1-sentence spoken hook to open the video
+  "genre": string,         // EXACTLY one of: fails, cats, babies, dogs -- pick the MOST TRENDING/viral right now
+  "title": string,         // "Ranking The Best <Genre> <Thing>" style, English, <=70 chars
+                           //   (e.g. "Ranking The Best Cat Fails", "Ranking The Funniest Baby Moments")
+  "criterion": string,     // what we're ranking by (e.g. "how hard it makes you laugh")
+  "hook": string           // a 1-sentence opener for the description
 }
-Pick a TRENDING, highly visual, broadly-appealing topic that works as a 5-clip countdown using
-real YouTube footage (e.g. craziest sports moments, most insane goals, wildest animal moments,
-biggest mansions, fastest cars, most satisfying videos). Output JSON only."""
+You make single-genre "Ranking" Shorts from real funny clips (like the viral "Ranking Best Pool
+Fails" format). Choose the ONE genre from the allowed list that is most trending and rewatchable as
+quick funny clips. Output JSON only."""
 
 
 def main():
@@ -54,10 +56,12 @@ def main():
         fail(f"Topic pick failed: {e}")
         return
 
-    for k in ("title", "search_query", "criterion", "hook"):
+    for k in ("genre", "title", "criterion", "hook"):
         if not data.get(k):
             fail(f"Topic JSON missing '{k}': {out['text'][:300]}")
             return
+    if data["genre"] not in GENRES:
+        data["genre"] = "fails"   # safe default if the model picks something off-list
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:

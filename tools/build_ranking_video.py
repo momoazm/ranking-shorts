@@ -85,33 +85,35 @@ def normalize(src, offset, dur, out):
                 "-c:a", "aac", "-b:a", "160k", out])
 
 
-def build_overlay_ass(segments):
+def build_overlay_ass(segments, title, total):
     head = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
         "[V4+ Styles]\n"
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
         "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, "
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        "Style: Rank,Arial,210,&H0066D7FF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,6,3,8,40,40,70,1\n"
-        "Style: Title,Arial,62,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,5,2,8,70,70,320,1\n\n"
+        # Header: the overall video title, pinned top-centre for the whole video.
+        "Style: Header,Arial,66,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,60,60,150,1\n"
+        # Rank: a big gold number on the LEFT side, vertically centred, one per clip.
+        "Style: Rank,Arial,260,&H0066D7FF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,7,4,4,55,40,0,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
-    rows = []
+    rows = [f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:60]}"]
     for s in segments:
         st, en = ass_time(s["start"]), ass_time(s["end"])
         rows.append(f"Dialogue: 0,{st},{en},Rank,,0,0,0,,#{s['rank']}")
-        rows.append(f"Dialogue: 0,{st},{en},Title,,0,0,0,,{esc(s['title'])[:70]}")
     return head + "\n".join(rows) + "\n"
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ranked", default=".tmp/ranked.json")
+    ap.add_argument("--title", default=None, help="Overall video title pinned at the top")
     ap.add_argument("--music", default=None)
     ap.add_argument("--music-volume", type=float, default=0.18)
-    ap.add_argument("--max-total", type=float, default=180.0, help="Hard cap on total length (3 min)")
-    ap.add_argument("--per-clip", type=float, default=35.0, help="Max seconds shown per clip")
+    ap.add_argument("--max-total", type=float, default=60.0, help="Hard cap on total length")
+    ap.add_argument("--per-clip", type=float, default=6.0, help="Max seconds shown per clip (short!)")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -161,9 +163,10 @@ def main():
         s["rank"] = n - p                              # first shown = highest number, last = #1
     total = round(min(cursor, args.max_total), 2)
 
+    title = args.title or data.get("title") or "Ranking"
     ass_path = os.path.join(TMPDIR, "overlay.ass")
     with open(ass_path, "w", encoding="utf-8") as f:
-        f.write(build_overlay_ass(segments))
+        f.write(build_overlay_ass(segments, title, total))
     ass_rel = os.path.relpath(ass_path, os.getcwd()).replace("\\", "/")
 
     ff = []
