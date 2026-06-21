@@ -93,7 +93,8 @@ def main():
     ap.add_argument("--music-query", default="trending tiktok background music 2026")
     ap.add_argument("--with-music", action="store_true",
                     help="Add a trending background-music bed under the clips (default: off)")
-    ap.add_argument("--per-clip", type=float, default=6.0, help="Max seconds shown per clip (short!)")
+    ap.add_argument("--per-clip", type=float, default=24.0,
+                    help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_VIDEOS", "6")))
     ap.add_argument("--keep-tmp", action="store_true")
     args = ap.parse_args()
@@ -126,7 +127,7 @@ def main():
         _m, merr = run_tool_safe("fetch_trending_music.py", ["--query", args.music_query, "--out", MUSIC])
         music_path = MUSIC if (not merr and (ROOT / MUSIC).is_file()) else None
 
-    build_args = ["--ranked", RANKED, "--max-total", "60", "--per-clip", str(args.per_clip),
+    build_args = ["--ranked", RANKED, "--max-total", "120", "--per-clip", str(args.per_clip),
                   "--title", topic["title"], "--out", FINAL]
     if music_path:
         build_args += ["--music", music_path]

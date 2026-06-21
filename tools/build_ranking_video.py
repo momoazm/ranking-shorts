@@ -18,12 +18,18 @@ Prints JSON: {"path","byte_size","duration_sec","entries","title"}
 import argparse
 import json
 import os
+import re
+import subprocess
 
 from _common import REPO_ROOT, load_env, emit, fail
-from _media import run_ffmpeg
+from _media import run_ffmpeg, get_ffmpeg
 
 OUT_W, OUT_H, FPS = 1080, 1920, 30
 TMPDIR = ".tmp/rank"
+SFX_DIR = REPO_ROOT / "assets" / "sfx"
+BOOM = str(SFX_DIR / "boom.mp3")        # impact placed on the fail moment
+FAIL_SFX = str(SFX_DIR / "fail.mp3")    # fallback comedic "womp" for clips with no audio
+SILENCE_DB = -50.0                       # below this mean volume a clip counts as "silent"
 
 
 def ass_time(t):
@@ -72,17 +78,54 @@ def download(url, out_base):
     return path
 
 
+def mean_volume_db(src, offset, dur):
+    """Mean loudness (dB) of the shown window, or None if the clip has no audio at all."""
+    try:
+        p = subprocess.run([get_ffmpeg(), "-hide_banner", "-nostats", "-ss", f"{offset:.2f}",
+                            "-t", f"{dur:.2f}", "-i", src, "-map", "0:a:0?", "-af", "volumedetect",
+                            "-f", "null", "-"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace")
+    except Exception:
+        return None
+    m = re.search(r"mean_volume:\s*(-?\d+(?:\.\d+)?) dB", p.stderr or "")
+    return float(m.group(1)) if m else None
+
+
 def normalize(src, offset, dur, out):
-    """Whole frame FIT into 9:16 over a blurred fill (no crop-zoom), original audio kept."""
+    """Whole frame FIT into 9:16 over a blurred fill (no crop-zoom).
+
+    Audio rules (the user's spec):
+      * keep each clip's ORIGINAL sound when it has audible audio;
+      * if the clip is silent / has no audio track, drop in a fallback comedic 'womp' so EVERY clip
+        has a sound (not a trending track);
+      * add a BOOM impact on the fail moment (the clip's end, since we end-weight) as an effect."""
     vf = (f"[0:v]split=2[b][f];"
           f"[b]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,crop={OUT_W}:{OUT_H},"
           f"boxblur=20:1,setsar=1[bg];"
           f"[f]scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=decrease,setsar=1[fg];"
           f"[bg][fg]overlay=(W-w)/2:(H-h)/2,fps={FPS},format=yuv420p[v]")
-    run_ffmpeg(["-ss", f"{offset:.2f}", "-i", src, "-t", f"{dur:.2f}",
-                "-filter_complex", vf, "-map", "[v]", "-map", "0:a",
+
+    lvl = mean_volume_db(src, offset, dur)
+    audible = lvl is not None and lvl > SILENCE_DB
+    boom_ms = int(max(0.0, dur - 0.85) * 1000)   # impact lands on the payoff at the end
+
+    # inputs: 0 = clip, 1 = boom; (silent only) 2 = fallback womp, 3 = silence base
+    chain = vf + f";[1:a]atrim=0:1.2,adelay={boom_ms}|{boom_ms},volume=0.7[bm]"
+    if audible:
+        chain += ";[0:a]aresample=44100,volume=1.0[base];[base][bm]amix=inputs=2:duration=first:normalize=0[a]"
+    else:
+        chain += (f";[2:a]adelay={boom_ms}|{boom_ms},volume=0.9[womp];"
+                  f"[3:a][bm][womp]amix=inputs=3:duration=first:normalize=0[a]")
+
+    run_ffmpeg(["-ss", f"{offset:.2f}", "-i", src, "-i", BOOM,
+                *(["-i", FAIL_SFX, "-f", "lavfi", "-t", f"{dur:.2f}", "-i",
+                   "anullsrc=r=44100:cl=stereo"] if not audible else []),
+                "-filter_complex", chain, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
                 "-ar", "44100", "-ac", "2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
                 "-c:a", "aac", "-b:a", "160k", out])
+
+
+GOLD = "&H0066D7FF&"   # ASS AABBGGRR -> bright gold (the active rank)
 
 
 def build_overlay_ass(segments, title, total):
@@ -93,16 +136,29 @@ def build_overlay_ass(segments, title, total):
         "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, "
         "Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
         # Header: the overall video title, pinned top-centre for the whole video.
-        "Style: Header,Arial,66,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,60,60,150,1\n"
-        # Rank: a big gold number on the LEFT side, vertically centred, one per clip.
-        "Style: Rank,Arial,260,&H0066D7FF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,7,4,4,55,40,0,1\n\n"
+        "Style: Header,Arial,62,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,50,50,120,1\n"
+        # Board: a COMPACT leaderboard down the left side -- all ranks shown small, active one lit.
+        "Style: Board,Arial,46,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,4,45,40,0,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
-    rows = [f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:60]}"]
+    # rank -> short funny label (e.g. "Aura Lost"); each rank has its own.
+    by_rank = {s["rank"]: (s.get("label") or "") for s in segments}
+    ranks_desc = sorted(by_rank, reverse=True)            # 5,4,3,2,1 top-to-bottom (countdown feel)
+
+    rows = [f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:55]}"]
     for s in segments:
-        st, en = ass_time(s["start"]), ass_time(s["end"])
-        rows.append(f"Dialogue: 0,{st},{en},Rank,,0,0,0,,#{s['rank']}")
+        cur = s["rank"]
+        lines = []
+        for k in ranks_desc:
+            lbl = esc(by_rank[k])[:16]
+            txt = (f"#{k} {lbl}").strip()
+            if k == cur:                                  # active rank: gold, bold, full opacity
+                lines.append("{\\c" + GOLD + "\\b1\\alpha&H00&}" + txt + "{\\r}")
+            else:                                         # the rest: dimmed so it stays unobtrusive
+                lines.append("{\\alpha&H85&}" + txt + "{\\r}")
+        board = "\\N".join(lines)
+        rows.append(f"Dialogue: 0,{ass_time(s['start'])},{ass_time(s['end'])},Board,,0,0,0,,{board}")
     return head + "\n".join(rows) + "\n"
 
 
@@ -112,8 +168,9 @@ def main():
     ap.add_argument("--title", default=None, help="Overall video title pinned at the top")
     ap.add_argument("--music", default=None)
     ap.add_argument("--music-volume", type=float, default=0.18)
-    ap.add_argument("--max-total", type=float, default=60.0, help="Hard cap on total length")
-    ap.add_argument("--per-clip", type=float, default=6.0, help="Max seconds shown per clip (short!)")
+    ap.add_argument("--max-total", type=float, default=120.0, help="Hard cap on total length (2 min)")
+    ap.add_argument("--per-clip", type=float, default=24.0,
+                    help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -140,16 +197,21 @@ def main():
             dsrc = probe_duration(src)                 # real duration (shorts carry none in search)
         except Exception:
             dsrc = None
-        dur = min(cap, dsrc) if dsrc else cap          # show the WHOLE short, capped to keep <=3 min
         if dsrc and dsrc < 2:                          # skip degenerate/blank clips
             continue
+        dur = min(cap, dsrc) if dsrc else cap
+        # The funny PAYOFF (the fail itself) is almost always at the END of the clip. If the short is
+        # longer than our per-clip budget, show its TAIL, not its intro -- otherwise we'd cut off the
+        # actual fail (the bug the user hit). Short clips that fit are shown whole.
+        offset = max(0.0, dsrc - dur) if (dsrc and dsrc > dur) else 0.0
         clip = os.path.join(TMPDIR, f"clip_{i}.mp4")
         try:
-            normalize(src, 0.0, dur, clip)
+            normalize(src, offset, dur, clip)
         except Exception:
             continue                                   # e.g. clip had no audio track
         clips.append(clip)
-        segments.append({"start": cursor, "end": round(cursor + dur, 2), "title": e["title"]})
+        segments.append({"start": cursor, "end": round(cursor + dur, 2), "title": e["title"],
+                         "label": e.get("label") or ""})
         cursor = round(cursor + dur, 2)
         if len(clips) >= 5:                            # five is enough for a Top-5
             break

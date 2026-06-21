@@ -34,13 +34,14 @@ def main():
     schema = """Return ONE JSON object:
 {
   "entries": [   // EXACTLY 5 items, ordered from rank 5 (first/worst) to rank 1 (last/best)
-    {"rank": 5, "candidate_index": <int index from the list>, "line": "<punchy 1-sentence spoken commentary, English, <=22 words>"},
+    {"rank": 5, "candidate_index": <int index from the list>, "label": "<short funny meme caption, 1-3 words>"},
     {"rank": 4, ...}, {"rank": 3, ...}, {"rank": 2, ...}, {"rank": 1, ...}
   ]
 }
-Pick the 5 BEST candidates for the topic and rank them subjectively by the criterion. Each `line`
-is what the narrator says over that clip — energetic, opinionated, building hype toward #1. Use each
-candidate_index at most once. Output JSON only."""
+Pick the 5 BEST candidates for the topic and rank them subjectively by the criterion. Each `label`
+is a SHORT punchy Gen-Z meme caption for that clip (1-3 words, <=16 chars), DIFFERENT for each rank
+-- e.g. "Aura Lost", "Skill Issue", "Pure Pain", "Certified Bruh", "Massive L", "Caught in 4K".
+Use each candidate_index at most once. Output JSON only."""
     prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n\n"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
@@ -63,7 +64,7 @@ candidate_index at most once. Output JSON only."""
         c = cands[idx]
         clean.append({"rank": e.get("rank"), "candidate_index": idx, "id": c["id"],
                       "title": c["title"], "url": c["url"], "duration": c.get("duration"),
-                      "line": str(e.get("line", "")).strip()})
+                      "label": str(e.get("label", "")).strip()[:16]})
     if len(clean) < 5:
         fail(f"Ranking produced only {len(clean)} valid entries.", entries=clean)
         return
