@@ -69,7 +69,8 @@ jobs:
             exit 1
           fi
           if [ -z "$YT_COOKIES" ]; then
-            echo "::warning::YT_COOKIES secret is empty. The ranking pipeline's YouTube downloads will likely hit a bot-check on cloud IPs. Add a Netscape cookies.txt as the YT_COOKIES secret."
+            echo "::error::YT_COOKIES secret is empty. YouTube bot-checks downloads from GitHub's IPs, so the ranking pipeline cannot fetch clips without it. Export a Netscape cookies.txt while logged into YouTube (e.g. the 'Get cookies.txt LOCALLY' browser extension) and paste its full contents as the YT_COOKIES secret."
+            exit 1
           fi
           if [ -z "$GEMINI_API_KEY" ]; then
             echo "::warning::GEMINI_API_KEY empty (only needed if you switch back to the Nano Banana brainrot movie via autopost.py)."

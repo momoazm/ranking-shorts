@@ -42,19 +42,31 @@ def esc(text):
     return str(text).replace("\\", " ").replace("{", "(").replace("}", ")").replace("\n", " ").strip()
 
 
-def _ydl_opts(out_base):
+def _ydl_opts(out_base, fmt, player_client=None):
     from _media import get_ffmpeg
-    opts = {"format": "bv*[height<=480]+ba/b[height<=480]/b", "merge_output_format": "mp4",
+    opts = {"format": fmt, "merge_output_format": "mp4",
             "outtmpl": out_base + ".%(ext)s", "noplaylist": True, "quiet": True,
             "no_warnings": True, "noprogress": True, "overwrites": True,
             "ffmpeg_location": os.path.dirname(get_ffmpeg()),
             # Fast-fail on slow/bad videos so one hang can't stall the whole run (it gets skipped).
             "socket_timeout": 30, "retries": 2, "fragment_retries": 2, "extractor_retries": 1,
             "concurrent_fragment_downloads": 4}
+    if player_client:
+        opts["extractor_args"] = {"youtube": {"player_client": player_client}}
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
     return opts
+
+
+# Tried in order. Default web client gives the best quality and works on normal IPs; the android
+# client is the fallback that still serves media on some blocked/datacenter IPs (GitHub Actions).
+# When YouTube hard bot-checks the IP, none of these work without the YT_COOKIES secret.
+_DL_ATTEMPTS = [
+    (None, "bv*[height<=480]+ba/b[height<=480]/b"),
+    (["android"], "best"),
+    (["web_safari"], "best[height<=720]/best"),
+]
 
 
 def _resolve(out_base):
@@ -69,14 +81,29 @@ def download(url, out_base):
 
     We deliberately do NOT range-download: cutting a section forces yt-dlp to stream the entire
     source through ffmpeg (>150s on long videos), which is why the old compilation approach was
-    unusable. Candidates here come from /shorts tabs, so the whole file is tiny."""
+    unusable. Candidates come from /shorts tabs, so the whole file is tiny.
+
+    Tries the client/format chain in _DL_ATTEMPTS so a bot-checked default client can fall back to
+    another that still serves media without cookies."""
+    import glob
     from yt_dlp import YoutubeDL
-    with YoutubeDL(_ydl_opts(out_base)) as ydl:
-        ydl.extract_info(url, download=True)
-    path = _resolve(out_base)
-    if not path:
-        raise RuntimeError("download produced no file")
-    return path
+    last = None
+    for player_client, fmt in _DL_ATTEMPTS:
+        for f in glob.glob(out_base + ".*"):           # clear partials from a prior attempt
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+        try:
+            with YoutubeDL(_ydl_opts(out_base, fmt, player_client)) as ydl:
+                ydl.extract_info(url, download=True)
+            path = _resolve(out_base)
+            if path:
+                return path
+        except Exception as e:
+            last = e
+            continue
+    raise last or RuntimeError("download produced no file")
 
 
 def mean_volume_db(src, offset, dur):
@@ -193,11 +220,12 @@ def main():
     cap = min(args.per_clip, args.max_total / max(1, len(entries)))
 
     from _media import probe_duration
-    clips, segments, cursor = [], [], 0.0
+    clips, segments, cursor, errors = [], [], 0.0, []
     for i, e in enumerate(entries):
         try:
             src = download(e["url"], os.path.join(TMPDIR, f"src_{i}"))
-        except Exception:
+        except Exception as ex:
+            errors.append(f"download #{e.get('rank', i)}: {str(ex).splitlines()[0][:160]}")
             continue
         try:
             dsrc = probe_duration(src)                 # real duration (shorts carry none in search)
@@ -213,8 +241,9 @@ def main():
         clip = os.path.join(TMPDIR, f"clip_{i}.mp4")
         try:
             normalize(src, offset, dur, clip)
-        except Exception:
-            continue                                   # e.g. clip had no audio track
+        except Exception as ex:
+            errors.append(f"normalize #{e.get('rank', i)}: {str(ex).splitlines()[0][:160]}")
+            continue
         clips.append(clip)
         segments.append({"start": cursor, "end": round(cursor + dur, 2), "title": e["title"],
                          "label": e.get("label") or ""})
@@ -223,7 +252,11 @@ def main():
             break
 
     if len(clips) < 3:
-        fail(f"Only {len(clips)} usable clips — need >=3.")
+        hint = ""
+        if any("bot" in e.lower() or "sign in" in e.lower() for e in errors):
+            hint = (" -- YouTube is blocking downloads from this IP (bot-check). On GitHub Actions "
+                    "set the YT_COOKIES secret to a valid Netscape cookies.txt.")
+        fail(f"Only {len(clips)} usable clips — need >=3.{hint}", reasons=errors[:8])
         return
 
     n = len(clips)

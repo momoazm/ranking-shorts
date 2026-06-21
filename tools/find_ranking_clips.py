@@ -36,7 +36,9 @@ DEFAULT_CHANNELS = ["@FailArmy", "@AFV", "@TheDodo", "@PetCollective",
 def _ydl_search_opts(per_channel):
     opts = {"quiet": True, "no_warnings": True, "noprogress": True,
             "extract_flat": "in_playlist", "skip_download": True,
-            "playlistend": per_channel, "socket_timeout": 30, "extractor_retries": 1}
+            "playlistend": per_channel, "socket_timeout": 30, "extractor_retries": 1,
+            # datacenter IPs get bot-challenged on the web client; mobile/tv clients usually don't.
+            "extractor_args": {"youtube": {"player_client": ["tv", "ios", "mweb", "web"]}}}
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
