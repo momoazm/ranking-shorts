@@ -4,9 +4,11 @@ API.env
 credentials.json
 token.json
 *token*.json
+cookies.txt
 
 # Scratch / intermediates
 .tmp/
+exports/
 __pycache__/
 *.pyc
 .venv/

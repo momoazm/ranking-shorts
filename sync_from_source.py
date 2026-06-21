@@ -28,6 +28,16 @@ PIPELINE_TOOLS = [
     "_common.py", "_characters.py", "_llm.py", "_media.py",
     "write_story.py", "generate_voiceover.py", "align_captions.py",
     "build_audio_mix.py", "assemble_video.py",
+    # Nano Banana whole-video visuals + research-driven hashtags.
+    "generate_ai_image.py", "generate_scene_images.py", "build_playbook.py",
+    "tavily_search.py", "build_captions.py",
+    # Extra-platform uploaders (TikTok / Instagram) + public hosting for IG.
+    "upload_tiktok.py", "upload_instagram.py", "host_public.py",
+    # Semi-manual delivery (save / email the video + captions for manual IG/TikTok posting).
+    "export_local.py", "email_video.py",
+    # Ranking-video pipeline (#5->#1 countdowns from real YouTube clips).
+    "rank_topic.py", "find_ranking_clips.py", "rank_clips.py", "build_ranking_video.py",
+    "fetch_trending_music.py",
 ]
 JOBS = [(SRC / "tools" / t, ROOT / "tools" / t) for t in PIPELINE_TOOLS]
 JOBS.append((CLIP / "tools" / "upload_youtube.py", ROOT / "tools" / "upload_youtube.py"))

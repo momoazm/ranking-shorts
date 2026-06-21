@@ -34,6 +34,9 @@ CHARACTERS = {
             "Peter Griffin energy: loud, dim-witted, overconfident, blue-collar dad who derails "
             "into non-sequiturs, brags, and misunderstands simple things. Crude but good-natured."
         ),
+        # Short VISUAL description for AI-image (aigen) prompts — how to DRAW the character.
+        "visual": ("a chubby bald cartoon man with round glasses, a green shirt and tan trousers, "
+                   "big round chin"),
         "caption_color": _AMBER,
         "image": "assets/characters/peter.png",
     },
@@ -47,6 +50,8 @@ CHARACTERS = {
             "with a huge vocabulary who belittles the other character and is exasperated by their "
             "stupidity. Sophisticated, sarcastic, dramatic."
         ),
+        "visual": ("a cartoon baby with a football-shaped head, light brown hair, wearing red "
+                   "overalls over a yellow shirt"),
         "caption_color": _CYAN,
         "image": "assets/characters/stewie.png",
     },
@@ -54,27 +59,32 @@ CHARACTERS = {
     # live Italian-brainrot trend). Edge-TTS Italian voices, separated further by pitch. ---
     "tung": {
         "name": "Tung",
-        "voice": "it-IT-DiegoNeural",     # Italian male; deep/ominous after the pitch drop
-        "pitch": "-12Hz",
+        "voice": "en-US-ChristopherNeural",   # English, deep/mature; ominous after the pitch drop
+        "pitch": "-6Hz",
         "fish_voice_id": None,             # no Fish model — Edge engine is used automatically
         "persona": (
             "Tung Tung Tung Sahur energy: a menacing, deadpan wooden baseball-bat creature who "
             "speaks in slow, ominous threats and keeps intoning 'tung tung tung'. Blunt, literal, "
             "intimidating, and utterly convinced he is the original and scariest brainrot."
         ),
+        "visual": ("Tung Tung Tung Sahur: an upright light-brown wooden log creature shaped like a "
+                   "baseball bat, with a carved angry face, big round eyes, two tiny stick arms, "
+                   "holding a small wooden bat"),
         "caption_color": "#D9A441",        # wood amber
         "image": "assets/characters/tung.png",
     },
     "tralalero": {
         "name": "Tralalero",
-        "voice": "it-IT-GiuseppeNeural",   # different Italian male voice for clear separation
-        "pitch": "+2Hz",
+        "voice": "en-US-GuyNeural",        # different English male voice for clear separation
+        "pitch": "+8Hz",
         "fish_voice_id": None,
         "persona": (
             "Tralalero Tralala energy: a cocky, fast-talking blue shark in fresh sneakers who "
             "brags nonstop, throws playful insults, and insists HE is the real king of Italian "
             "brainrot. Slick, irreverent, hype, dismissive of everyone else."
         ),
+        "visual": ("Tralalero Tralala: a cartoon blue shark standing upright on three legs, each "
+                   "foot wearing a blue-and-white Nike sneaker, sharp toothy grin"),
         "caption_color": "#29B6F6",        # shark blue
         "image": "assets/characters/tralalero.png",
     },
@@ -85,12 +95,13 @@ CHARACTERS = {
         "pitch": "+0Hz",
         "fish_voice_id": None,
         "persona": "Pretentious, calm, faux-intellectual; thinks he's the smartest in the room.",
+        "visual": "a white cartoon dog standing upright, often holding a martini glass",
         "caption_color": _CYAN,
         "image": "assets/characters/brian.png",
     },
 }
 
-DEFAULT_DUO = ["peter", "stewie"]
+DEFAULT_DUO = ["tung", "tralalero"]   # Italian-brainrot duo (the channel's actual niche)
 
 
 def resolve_characters(names=None):
@@ -121,6 +132,7 @@ def resolve_characters(names=None):
             "pitch": entry.get("pitch", "+0Hz"),
             "fish_voice_id": entry.get("fish_voice_id"),
             "persona": entry["persona"],
+            "visual": entry.get("visual", ""),
             "caption_color": entry["caption_color"],
             "image": entry["image"],
             "has_image": os.path.isfile(image_abs),

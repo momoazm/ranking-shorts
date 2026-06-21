@@ -45,15 +45,22 @@ DIALOGUE_SCHEMA = """Return ONE JSON object with exactly these keys:
   "description": string,     // 1-3 sentences + a few relevant #hashtags on the last line
   "tags": [string, ...],     // 8-15 lowercase search tags, no '#'
   "background_type": string, // gameplay background, e.g. "minecraft parkour", "subway surfers"
-  "turns": [                 // the argument, in order. ALTERNATE strictly between the two speakers.
-    {"speaker": "<EXACT character name>", "text": "<one short spoken line, 1 sentence, <=18 words>"},
+  "turns": [                 // the script, in order. ALTERNATE strictly between the two speakers.
+    {"speaker": "<EXACT character name>",
+     "text": "<one short spoken line, 1 sentence, <=18 words>",
+     "visual": "<a vivid CINEMATIC description of what we SEE during this line, like a movie shot: "
+               "the LOCATION/setting, WHICH characters are on screen (and any extras such as a "
+               "cashier, a crowd, a referee), and the ACTION + camera angle. CHANGE the location as "
+               "the story moves (e.g. if someone goes to buy pizza, show them at the counter of a "
+               "pizza shop with a cashier). Keep recurring characters' look consistent.>"},
     ...
   ]
 }
 Rules: the FIRST line is the hook and must grab attention instantly. Keep each line short and
-punchy (spoken-word rhythm). Make them genuinely argue/banter and escalate, then land a funny
-or surprising payoff on the last line. Use ONLY the exact character names given. No stage
-directions, no emojis, no parentheticals. Output JSON only, no commentary."""
+punchy. Tell a real mini-MOVIE: the `visual` of each line should move the story through DIFFERENT
+locations and show the characters DOING things (not just standing arguing), with extra background
+characters where it makes sense. Land a funny or surprising payoff on the last line. Use ONLY the
+exact character names given for speakers. No emojis. Output JSON only, no commentary."""
 
 
 def load_playbook(path):
@@ -73,6 +80,9 @@ def build_pb_context(playbook):
         "PLAYBOOK GUIDANCE (apply it):\n"
         f"- Hook formulas: {playbook.get('hook_formulas')}\n"
         f"- Title patterns: {playbook.get('title_patterns')}\n"
+        f"- Topic ideas to argue about: {playbook.get('topic_ideas')}\n"
+        f"- Trending hashtags (fold the most relevant into 'tags', without '#'): "
+        f"{playbook.get('trending_hashtags')}\n"
         f"- Story genres that perform: {playbook.get('story_genres')}\n"
         f"- Trending backgrounds: {playbook.get('trending_backgrounds')}\n"
         f"- Pacing: {playbook.get('pacing_notes')}\n\n"
@@ -113,23 +123,32 @@ def write_dialogue(args, playbook, target_words, seconds, cast):
     # Models tend to stop early with terse fragments, so enforce a hard floor on line count
     # and a per-line word range — this is what actually fills the target runtime.
     min_turns = max(12, target_words // 8)
+    max_turns = min_turns + 4
+    max_words = int(target_words * 1.2)
     prompt = (
         f"{build_pb_context(playbook)}"
+        f"LANGUAGE: write EVERYTHING — every spoken line, the title, the description, and every "
+        f"visual — in ENGLISH ONLY (even though the characters have Italian meme names).\n"
         f"FORMAT: a two-character argument/banter short, in the viral 'cartoon characters arguing' style.\n"
         f"CHARACTERS (write each strictly in-character):\n{roster}\n\n"
         f"TOPIC they argue about: {args.topic or '(you choose a funny, relatable, debatable topic)'}\n"
         f"TARGET LENGTH: about {target_words} words total across all lines (~{seconds}s of speech).\n"
-        f"LENGTH IS MANDATORY: write AT LEAST {min_turns} alternating lines. Do NOT end early — keep the "
-        f"argument escalating with new angles until you have at least that many lines. Each line must be a "
-        f"complete spoken sentence of roughly 8-16 words (NOT 2-4 word fragments).\n\n"
-        f"Write {names} arguing. Strictly alternate speakers. Open with a punchy hook line, escalate the "
-        f"disagreement with quick jabs and rising stakes, and end on a funny or surprising payoff.\n\n"
+        f"LENGTH RULES (important for runtime limits): write between {min_turns} and {max_turns} "
+        f"alternating lines, and DO NOT exceed {max_words} words total. Each line is a complete spoken "
+        f"sentence of roughly 8-16 words (NOT 2-4 word fragments). Escalate with a new angle each line.\n\n"
+        f"Write {names} in a SHORT STORY told through dialogue — not just random bickering. Build a "
+        f"clear arc: (1) a punchy hook line that drops us into a situation with real stakes, "
+        f"(2) setup — what they want and why it matters, (3) escalation with specific, vivid, funny "
+        f"details and a complication that raises the stakes each line, (4) a twist or reversal, "
+        f"(5) a payoff that lands hard on the final line. Give them clear goals and a sense of place. "
+        f"Strictly alternate speakers; keep it punchy and spoken.\n\n"
         f"{DIALOGUE_SCHEMA}"
     )
     out = llm_complete(
         prompt,
         system="You are a viral short-form comedy writer for faceless YouTube Shorts. You write "
-        "tight, punchy two-character argument scripts, perfectly in character, as strict JSON.",
+        "tight, punchy two-character argument scripts, perfectly in character, as strict JSON. "
+        "You ALWAYS write in English.",
         json_mode=True,
         temperature=0.95,
     )
@@ -150,7 +169,7 @@ def write_dialogue(args, playbook, target_words, seconds, cast):
         if canon is None:
             # Snap unknown/garbled speaker labels to the alternating expectation.
             canon = cast[len(turns) % len(cast)]["name"]
-        turns.append({"speaker": canon, "text": txt})
+        turns.append({"speaker": canon, "text": txt, "visual": str(t.get("visual", "")).strip()})
     if len(turns) < 2:
         raise ValueError("Dialogue produced fewer than 2 usable turns.")
 

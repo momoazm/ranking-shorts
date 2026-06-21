@@ -1,0 +1,175 @@
+"""Autonomous orchestrator for #5->#1 RANKING Shorts built from real YouTube clips.
+
+Pipeline (each step = one tool, cwd = project root):
+  rank_topic -> find_ranking_clips -> rank_clips -> build_ranking_video -> build_captions
+  -> deliver (email / export / youtube).
+
+Auto-picks a trending topic, pulls candidate clips via yt-dlp (no API quota), the LLM ranks the
+best 5 with commentary, then they're trimmed, captioned with a countdown overlay, narrated, and
+delivered. Same safety/daily-cap conventions as autopost.py.
+
+Usage:
+    python tools/rank_autopost.py [--no-upload] [--niche "..."] [--platforms email,export]
+        [--privacy public] [--max-videos 6] [--keep-tmp]
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import date
+from pathlib import Path
+
+from _common import emit
+
+ROOT = Path(__file__).resolve().parent.parent
+TMP = ROOT / ".tmp"
+PY = sys.executable
+
+TOPIC = ".tmp/rank_topic.json"
+CANDS = ".tmp/rank_candidates.json"
+RANKED = ".tmp/ranked.json"
+FINAL = ".tmp/final.mp4"
+RANK_STORY = ".tmp/rank_story.json"
+CAPMETA = ".tmp/captions_meta.json"
+DAILY_COUNT = ".tmp/daily_count.json"
+
+
+def run_tool_safe(name, args):
+    proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
+    out = (proc.stdout or "").strip()
+    data = None
+    if out:
+        try:
+            data = json.loads(out)
+        except json.JSONDecodeError:
+            i, j = out.find("{"), out.rfind("}")
+            if i != -1 and j > i:
+                try:
+                    data = json.loads(out[i:j + 1])
+                except json.JSONDecodeError:
+                    data = None
+    if data is None:
+        return None, f"{name} did not return JSON (exit {proc.returncode}). stderr:\n{(proc.stderr or '')[-500:]}"
+    if proc.returncode != 0 or "error" in data:
+        return data, f"{name} failed: {data.get('error', out[-300:])}"
+    return data, None
+
+
+def run_tool(name, args):
+    data, err = run_tool_safe(name, args)
+    if err:
+        raise RuntimeError(err)
+    return data
+
+
+def load_json(path):
+    try:
+        return json.load(open(ROOT / path, encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def daily_used():
+    d = load_json(DAILY_COUNT) or {}
+    return d.get("count", 0) if d.get("date") == date.today().isoformat() else 0
+
+
+def daily_increment():
+    with open(ROOT / DAILY_COUNT, "w", encoding="utf-8") as f:
+        json.dump({"date": date.today().isoformat(), "count": daily_used() + 1}, f)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--no-upload", action="store_true")
+    ap.add_argument("--niche", default="funny videos / fails / funny moments")
+    ap.add_argument("--channels", default=None, help="Override curated Shorts channels (comma-sep)")
+    ap.add_argument("--platforms", default="youtube,email")
+    ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
+    ap.add_argument("--music", default=None, help="Music bed path; if omitted, a trending track is fetched")
+    ap.add_argument("--music-query", default="trending tiktok background music 2026")
+    ap.add_argument("--no-music", action="store_true", help="Skip the background music bed")
+    ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_VIDEOS", "6")))
+    ap.add_argument("--keep-tmp", action="store_true")
+    args = ap.parse_args()
+
+    TMP.mkdir(exist_ok=True)
+    platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
+    t0 = time.time()
+    publishing = not args.no_upload
+    if publishing:
+        if daily_used() >= args.max_videos:
+            print(json.dumps({"status": "skipped_daily_cap", "used_today": daily_used(),
+                              "max_videos": args.max_videos}, indent=2))
+            return
+        daily_increment()
+
+    # 1) topic (overall title/hook) -> 2) pull short clips from curated channels -> 3) LLM ranks 5
+    topic = run_tool("rank_topic.py", ["--niche", args.niche, "--out", TOPIC])
+    find_args = ["--out", CANDS]
+    if args.channels:
+        find_args += ["--channels", args.channels]
+    run_tool("find_ranking_clips.py", find_args)
+    run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+
+    # 4) trending background music (best-effort) -> 5) build the countdown video
+    MUSIC = ".tmp/music.mp3"
+    music_path = args.music
+    if not music_path and not args.no_music:
+        _m, merr = run_tool_safe("fetch_trending_music.py", ["--query", args.music_query, "--out", MUSIC])
+        music_path = MUSIC if (not merr and (ROOT / MUSIC).is_file()) else None
+
+    build_args = ["--ranked", RANKED, "--max-total", "180", "--out", FINAL]
+    if music_path:
+        build_args += ["--music", music_path]
+    build = run_tool("build_ranking_video.py", build_args)
+
+    # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
+    title = topic["title"]
+    tags = [w for w in "".join(c if c.isalnum() else " " for c in title.lower()).split() if len(w) > 3]
+    with open(ROOT / RANK_STORY, "w", encoding="utf-8") as f:
+        json.dump({"title": title, "description": topic.get("hook", title),
+                   "tags": (tags + ["ranking", "top5", "countdown", "viral"])[:15]}, f)
+    run_tool_safe("build_captions.py", ["--story", RANK_STORY, "--out", CAPMETA])
+    meta = load_json(CAPMETA) or {}
+
+    result = {"status": "built", "title": title, "final": FINAL,
+              "byte_size": build.get("byte_size"), "duration_sec": build.get("duration_sec"),
+              "entries": build.get("entries"), "elapsed_sec": round(time.time() - t0, 1),
+              "delivery": {}}
+
+    # 6) deliver
+    if "email" in platforms:
+        m, err = run_tool_safe("email_video.py", ["--video", FINAL, "--captions-meta", CAPMETA,
+                                                  "--subject", f"Ranking Short: {title}"])
+        result["delivery"]["email"] = {"skipped": err.splitlines()[0][:140]} if err else {"sent_to": m.get("to")}
+    if "export" in platforms:
+        m, err = run_tool_safe("export_local.py", ["--video", FINAL, "--captions-meta", CAPMETA, "--title", title])
+        result["delivery"]["export"] = {"error": err.splitlines()[0][:140]} if err else {"folder": m.get("folder")}
+    if publishing and "youtube" in platforms:
+        yt = (meta.get("youtube") or {})
+        m, err = run_tool_safe("upload_youtube.py", ["--video", FINAL, "--title", yt.get("title", title),
+                               "--description", yt.get("description", ""),
+                               "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
+                               "--privacy", args.privacy, "--confirm"])
+        result["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:140]} if err else {"url": m.get("url")}
+        result["status"] = "uploaded"
+
+    if not args.keep_tmp:
+        import shutil
+        # Wipe the downloaded source clips + intermediates so disk doesn't fill up run to run.
+        shutil.rmtree(ROOT / ".tmp" / "rank", ignore_errors=True)
+        for p in (CANDS, RANKED, RANK_STORY, FINAL, CAPMETA, ".tmp/music.mp3", ".tmp/email_small.mp4"):
+            try:
+                (ROOT / p).unlink()
+            except (OSError, IsADirectoryError):
+                pass
+
+    emit(result)   # ASCII-safe on Windows cp1252 (titles can contain non-cp1252 chars)
+
+
+if __name__ == "__main__":
+    main()
