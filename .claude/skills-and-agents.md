@@ -1,7 +1,21 @@
-# Building & Using Skills and Subagents
+---
+name: skills-and-agents
+description: Use when creating, optimizing, or auditing a skill OR a subagent in this project. Guides capability development following Claude Code best practices plus this project's conventions.
+---
 
-Reference for creating and invoking reusable capabilities. **Read this before building a new skill
-or subagent.** Two kinds — pick by context, not by name:
+## What This Covers
+
+Creating and optimizing Claude Code **skills** and **subagents**. Use when building a new one,
+optimizing/auditing an existing one, deciding inline-skill vs subagent, or troubleshooting one.
+
+Official refs: skills → https://code.claude.com/docs/en/skills ·
+subagents → https://code.claude.com/docs/en/sub-agents
+
+---
+
+## First Decision: Inline Skill vs Subagent
+
+**Pick by context, not by name.**
 
 | | **Inline skill** | **Subagent** |
 |---|---|---|
@@ -9,53 +23,94 @@ or subagent.** Two kinds — pick by context, not by name:
 | Returns | continues the flow | a summary back to the main thread |
 | Best for | a **step inside/at the end of an automation** (e.g. email the report we just built) | a **self-contained job** whose noise (search results, render logs) should stay off the main thread |
 | Model | inherits the flow's model | own **task-suited model** (saves tokens) |
+| Lives in | `.claude/skills/<name>/SKILL.md` | `.claude/agents/<name>.md` |
 
-**Required for both:** YAML frontmatter with a **`name`** and a **`description`** — the only required
-fields. Write `description` as *when to use it* (this is what drives auto-delegation / the `/menu`).
-Everything else (`model`, `tools`, `context`…) is optional.
+**Required for either:** YAML frontmatter with a **`name`** and a **`description`** (the only required
+fields). Write `description` as *when to use it* — that's what drives selection and auto-delegation.
 
-## Inline skills
-- **Create at:** `.claude/skills/<name>/SKILL.md` — put the **full instructions in the body**, and do
-  **not** set `context: fork` (forking would isolate it). For `name`: optional (defaults to the
-  folder name); set it for clarity.
-- **Use by:** Moemen typing `/<name>`, or I run them as a step within a flow.
-- All skills here are inline. Current: **`/send-email`**, **`/cross-post-video`** (both irreversible —
-  stop at the confirmation gate and get an explicit "go").
+**Project rules:**
+- **All skills are inline** — never `context: fork`. A self-contained/heavy task → build a subagent.
+- **Select by `name` + `description` only**; read a capability's full body **only after choosing it**.
+- Descriptions are always loaded so Claude knows what's available; full bodies load only on use.
 
-## Subagents (best practice)
-From the Claude Code subagents docs (code.claude.com/docs/en/sub-agents) + our conventions.
+---
 
-- **Create at:** `.claude/agents/<name>.md` (project scope — version-controlled, shareable) or
-  `~/.claude/agents/<name>.md` for ones meant to work across all projects.
-- **Use by:** I **delegate automatically** when a task matches the agent's `description`, or it's
-  launched via the Agent tool.
-- **Frontmatter:**
-  - `name` — lowercase-with-hyphens, unique across the tree.
-  - `description` — *when to delegate*; specific and action-oriented. Add "Use proactively…" /
-    "MUST BE USED for…" when it should fire automatically.
-  - `model` — the **lightest model that does the job well** (token-saving is a standing goal):
-    `haiku` for mechanical work (run a tool, look up, format), `sonnet` for reasoning/creative,
-    `opus` only when genuinely needed. Defaults to `inherit` if omitted.
-  - `tools` — limit to only what's needed (omitting inherits all). Read-only agents get no
-    `Edit`/`Write`. Prefer least privilege.
-  - Optional when useful: `color` (UI id), `memory: project` (cross-session learning),
-    `disallowedTools`, `permissionMode`.
-- **Body = the agent's entire system prompt** — subagents do **not** receive CLAUDE.md or the main
-  prompt. Make it **self-contained**: role, steps, provider/fallback order, branding, and the
-  confirm-before-irreversible gate where relevant. **One job per subagent.**
+## Mode 1: Build
 
-## Standing defaults (both kinds)
-- Echo the relevant `API.env` fallback chain (best provider → next on limit/error). Never print or
-  commit secret values.
-- **Confirm before anything irreversible or public** (email sends, uploads, deploys, deletes).
-- Branding from the root `brand/` is not optional.
+Run the **Discovery Interview** first — don't write files until it's done.
 
-## When to make which
-As a request starts repeating: an **inline skill** if it's a step in a flow, a **subagent** if it's
-a self-contained job. `/agents` → "Generate with Claude" can scaffold a subagent draft — still apply
-the above.
+### Discovery Interview
 
-## Current capabilities
-- **Inline skills:** `send-email`, `cross-post-video`.
+Ask with AskUserQuestion, **one round at a time**, until 95% confident. Skip rounds already answered.
+
+1. **Goal & Name** — what it does; what to call it (lowercase-hyphens, ≤64 chars).
+2. **Inline skill or subagent?** — step-in-a-flow (skill) vs self-contained job (subagent). For a
+   skill: user-only / auto-invocable / both; does it take arguments?
+3. **Process** — exact steps trigger→output; per step, does Claude act directly, run a script, or delegate?
+4. **Inputs / Outputs / Dependencies** — inputs needed; what it produces and where (default `.tmp/`);
+   APIs/scripts and which fallback chain; reference files/templates/brand assets.
+5. **Guardrails & Edge cases** — failure modes; hard boundaries; cost concerns; ordering; any
+   irreversible step (needs a gate).
+6. **Confirm** — summarize back, then build only on approval:
+   ```
+   Type: inline skill | subagent · Goal: … · When to use: … · Args: …
+   Process: 1… 2… · Inputs/Outputs(+where)/Dependencies · Guardrails(+irreversible gate) · Model: …
+   ```
+
+### Build an inline skill
+Create `.claude/skills/<name>/SKILL.md` with the **full instructions in the body**. Frontmatter:
+`name` (matches the folder), `description`; optional `argument-hint` (args), `model`, `allowed-tools`.
+Body = Context → numbered steps → output format (templates, paths) → Notes. Use `$ARGUMENTS`/`$N` for
+input; keep under ~500 lines.
+
+### Build a subagent
+Create `.claude/agents/<name>.md`. Frontmatter: `name`, `description`; optional `model` (see model
+routing in Conventions), `tools` (least privilege — read-only agents get no `Edit`/`Write`), `color`,
+`memory: project`. The **body is the agent's entire system prompt** — it does NOT receive CLAUDE.md,
+so make it self-contained (role, steps, fallback order, branding, gate). **One job per subagent.**
+
+### Test
+Natural-language trigger (revise `description` keywords if it doesn't fire) · direct `/name` with
+args (check `$ARGUMENTS` substitute + output paths) · edge cases (missing/empty input).
+
+---
+
+## Mode 2: Audit
+
+Read the file first; fix issues before finishing.
+
+- **Frontmatter:** `name` correct; `description` has real trigger keywords, specific yet not
+  false-firing; `argument-hint` if a skill takes args; `model` is the lightest that works;
+  tools restricted (least privilege); skills have **no `context: fork`**; no unused fields.
+- **Content:** under ~500 lines; numbered workflow; output format + all paths specified;
+  `$ARGUMENTS`/`$N` where it takes input; subagent body self-contained; Notes cover edge cases +
+  irreversible gate; uses the right fallback chain, never hardcodes/prints secrets.
+- **Integration:** in the CLAUDE.md index; single responsibility; delegates to a subagent when output
+  would flood the main context; doesn't duplicate info living elsewhere; predictable output paths.
+
+---
+
+## Project Conventions
+
+Apply to every capability (don't restate these in each file — they live here):
+
+- **Model routing (token-saving):** `haiku` = mechanical (run a tool, look up, format),
+  `sonnet` = reasoning/creative, `opus` = rarely.
+- **API.env fallback chains** — best provider first, next on rate-limit/error, surface only
+  whole-chain failures; never print/commit secrets:
+  - search Firecrawl→Tavily→Exa · extract Tavily→trafilatura(+Groq)
+  - LLM Groq→Cerebras→OpenRouter(`:free`)→Mistral→Gemini
+  - image Cloudflare→HF→Pollinations→Gemini · TTS Fish Audio→Edge-TTS
+- **Confirm before anything irreversible/public** (sends, uploads, deploys, deletes) via a gate in
+  the body — not by disabling invocation.
+- **Branding** from the root `brand/` is not optional.
+- **Document** each new capability in the CLAUDE.md index.
+
+## Current Capabilities
+- **Inline skills:** `send-email`, `cross-post-video` (irreversible — gate first).
 - **Subagents:** `research`, `extract-article`, `generate-image` (haiku); `trend-research`,
   `generate-video`, `video-virality-pass` (sonnet).
+
+## Important Notes
+- Always **read** an existing capability before editing it.
+- Before building, check whether a similar one exists to extend instead.
