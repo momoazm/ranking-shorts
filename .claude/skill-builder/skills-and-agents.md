@@ -107,7 +107,8 @@ Apply to every capability (don't restate these in each file — they live here):
 - **Document** each new capability in the CLAUDE.md index.
 
 ## Current Capabilities
-- **Inline skills:** `send-email`, `cross-post-video` (irreversible — gate first).
+- **Inline skills:** `send-email`, `cross-post-video` (irreversible — gate first); `infographics`
+  (branded infographic from a video's key points, via AI image).
 - **Subagents:** `research`, `extract-article`, `generate-image` (haiku); `trend-research`,
   `generate-video`, `video-virality-pass` (sonnet).
 

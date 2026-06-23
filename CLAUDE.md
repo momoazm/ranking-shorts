@@ -62,15 +62,15 @@ song) as well as ongoing operation. **Read a project's rules file before working
 workstreams get their own folder + README here.
 
 ## Skills & Agents
-Two kinds of reusable capability: **inline skills** (`/send-email`, `/cross-post-video` — run within
-the current flow) and **subagents** (research, extract-article, generate-image, trend-research,
+Two kinds of reusable capability: **inline skills** (`/send-email`, `/cross-post-video`,
+`/infographics` — run within the current flow) and **subagents** (research, extract-article, generate-image, trend-research,
 generate-video, video-virality-pass — run isolated, on a task-suited model).
 
 **Selecting one:** match the task against each skill/subagent's **`name` and `description` only** —
 that's enough to pick the right one. Read the **rest of its `.md` (the body/steps) only after
 choosing it**, when you're about to run it. Don't load every file's full body to decide.
 
-**How to build, invoke, and choose between them → `.claude/skills-and-agents.md`.** Read it before
+**How to build, invoke, and choose between them → `.claude/skill-builder/skills-and-agents.md`.** Read it before
 creating either. The short version: each needs a `name` + `description`; pick an inline skill for a
 step in a flow, a subagent for a self-contained job.
 
