@@ -72,6 +72,10 @@ Two kinds of reusable capability. **Pick by context, not by name:**
 | Best for | a **step inside/at the end of an automation** (e.g. email the report we just built) | a **self-contained job** whose noise (search results, render logs) should stay off the main thread |
 | Model | inherits the flow's model | own **task-suited model** (saves tokens) |
 
+**Every skill and subagent needs YAML frontmatter with a `name` and a `description`** (the only
+required fields; write `description` as *when to use it*). Everything else (`model`, `tools`,
+`context`…) is optional.
+
 **Inline skills** — **all skills here are inline** (never `context: fork`).
 - **Create at:** `.claude/skills/<name>/SKILL.md` (full instructions in the skill body, no `context: fork`).
 - **Use by:** typing `/<name>`, or I run them as a step within a flow.
