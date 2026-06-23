@@ -1,0 +1,33 @@
+# Research (copied tools)
+tavily-python>=0.5
+exa-py>=1.7
+trafilatura>=1.12
+httpx>=0.27
+python-dotenv>=1.0
+
+# LLM script/playbook generation (free-tier fallback chain: Groq -> Cerebras -> Gemini -> Mistral -> OpenRouter)
+groq>=0.11
+google-generativeai>=0.8     # Gemini (script fallback + optional TTS fallback)
+openai>=1.40                 # OpenAI-compatible client for Cerebras / OpenRouter / Mistral endpoints
+
+# Voiceover: Edge-TTS (free, keyless) + optional Fish Audio character voices (paid, FISH_AUDIO_API_KEY)
+edge-tts>=6.1
+fish-audio-sdk>=2024.1
+
+# Caption alignment (local, free; CPU-friendly, downloads a Whisper model on first run)
+faster-whisper>=1.0
+
+# Video assembly + background download (bundled ffmpeg binary, no system install on Windows)
+imageio-ffmpeg>=0.5
+yt-dlp>=2024.8
+
+# Branded thumbnail rendering (HTML -> PNG)
+playwright>=1.47
+
+# Character-art cutout (flood-fill a white/checker background to transparent) for dialogue mode
+pillow>=10.0
+
+# YouTube upload (resumable, OAuth)
+google-api-python-client>=2.140
+google-auth-oauthlib>=1.2
+google-auth-httplib2>=0.2

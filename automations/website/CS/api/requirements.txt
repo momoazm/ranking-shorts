@@ -1,0 +1,3 @@
+# Intentionally empty. The calendar function uses only the Python standard library.
+# This file keeps Vercel from installing the project-root requirements (pinecone,
+# google-genai, etc.) — those are for the CLI tools, not this serverless function.

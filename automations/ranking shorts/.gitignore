@@ -1,0 +1,10 @@
+.env
+credentials.json
+token.json
+*token*.json
+.tmp/
+.venv/
+__pycache__/
+*.pyc
+# Downloaded gameplay footage / music beds — large + copyright-sensitive, never commit
+assets/

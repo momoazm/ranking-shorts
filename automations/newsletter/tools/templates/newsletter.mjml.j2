@@ -1,0 +1,61 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{ content.subject }}</mj-title>
+    <mj-preview>{{ content.preheader }}</mj-preview>
+    <mj-font name="{{ theme.fonts.display.google_font }}" href="https://fonts.googleapis.com/css2?family={{ theme.fonts.display.google_font | replace(' ', '+') }}:wght@700&display=swap" />
+    <mj-font name="{{ theme.fonts.body.google_font }}" href="https://fonts.googleapis.com/css2?family={{ theme.fonts.body.google_font | replace(' ', '+') }}:wght@400;600&display=swap" />
+    <mj-attributes>
+      <mj-all font-family="{{ theme.fonts.body.google_font }}, {{ theme.fonts.body.fallback_stack }}" />
+      <mj-text color="{{ theme.colors.text_on_dark }}" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="{{ theme.colors.navy }}" width="600px">
+    <mj-section background-color="{{ theme.colors.navy }}" padding="28px 0 12px 0">
+      <mj-column>
+        <mj-image src="cid:logo" width="110px" alt="MOMO" padding="0 0 10px 0" />
+        <mj-text align="center" color="{{ theme.colors.gold }}" font-size="11px" letter-spacing="2px" text-transform="uppercase">
+          {{ content.preheader }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    {% for section in content.sections %}
+    <mj-section background-color="{{ theme.colors.navy_light if loop.index is odd else theme.colors.navy }}" padding="22px 24px">
+      <mj-column>
+        <mj-text font-family="{{ theme.fonts.display.google_font }}, {{ theme.fonts.display.fallback_stack }}"
+                  color="{{ theme.colors.gold }}" font-size="22px" font-weight="700" padding-bottom="10px">
+          {{ section.heading }}
+        </mj-text>
+        {% if section.image_cid %}
+        <mj-image src="cid:{{ section.image_cid }}" padding="4px 0 16px 0" border-radius="6px" />
+        {% endif %}
+        <mj-text color="{{ theme.colors.text_on_dark }}" font-size="15px" line-height="1.6">
+          {{ section.body }}
+        </mj-text>
+        {% if section.cta %}
+        <mj-button background-color="{{ theme.colors.gold }}" color="{{ theme.colors.text_on_gold }}"
+                    font-weight="600" border-radius="{{ theme.button.border_radius_px }}px"
+                    href="{{ section.cta.url }}" padding="18px 0 0 0">
+          {{ section.cta.text }}
+        </mj-button>
+        {% endif %}
+      </mj-column>
+    </mj-section>
+    {% endfor %}
+
+    {% if content.sources %}
+    <mj-section background-color="{{ theme.colors.navy }}" padding="20px 24px 28px 24px">
+      <mj-column>
+        <mj-text color="{{ theme.colors.sterling_silver }}" font-size="11px" padding-bottom="6px" text-transform="uppercase" letter-spacing="1px">
+          Sources
+        </mj-text>
+        {% for src in content.sources %}
+        <mj-text font-size="11px" padding="2px 0">
+          <a href="{{ src.url }}" style="color:{{ theme.colors.gold }}; text-decoration:none;">{{ src.title }}</a>
+        </mj-text>
+        {% endfor %}
+      </mj-column>
+    </mj-section>
+    {% endif %}
+  </mj-body>
+</mjml>

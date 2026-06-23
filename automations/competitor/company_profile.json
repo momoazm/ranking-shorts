@@ -1,0 +1,22 @@
+{
+  "_comment": "MOMO business profile — the baseline the competitor analysis compares against. The workflow at workflows/competitor_analysis.md reads this file.",
+  "company_name": "MOMO",
+  "one_liner": "AI cinematic / storytelling short-form videos on YouTube Shorts",
+  "niche": "AI cinematic & visual storytelling (short films, surreal/cinematic AI scenes)",
+  "platforms": ["YouTube Shorts"],
+  "handles": {
+    "youtube": "@Moemen-i2f6l"
+  },
+  "content_types": ["AI-generated cinematic / storytelling videos"],
+  "tools_used": ["Opus (user-stated — clipping/prompting)"],
+  "posting_cadence": "unknown — to confirm",
+  "key_metrics": {
+    "followers": "unknown (new/small channel; YouTube stats gated to scraping)",
+    "avg_views": "unknown — to confirm",
+    "engagement_rate": "unknown"
+  },
+  "strengths": ["AI-generated cinematic visuals"],
+  "known_weaknesses": ["wants to improve AI-video quality, hooks/retention, and grow reach"],
+  "named_competitors": [],
+  "goals": "Improve AI-video (cinematic) quality + clipping/hooks and grow reach on YouTube Shorts. 'Exceeding them' = better hooks/retention, higher avg views, faster subscriber growth."
+}

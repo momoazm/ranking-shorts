@@ -1,0 +1,3 @@
+google-genai>=1.0      # unified Google GenAI SDK, import: from google import genai
+pinecone>=5.0          # new package name (NOT pinecone-client)
+python-dotenv>=1.0

@@ -1,7 +1,22 @@
+# Secrets — the single shared credential file for every WAT project in this repo.
+# NEVER commit this; it holds all API keys + Gmail config.
+API.env
+
+# Any stray per-project env files
+**/.env
+
+# Google OAuth
+**/credentials.json
+**/token.json
+
+# Python / runtime artifacts
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.tmp/
+
+# Root env + assistant local files
 .env
-credentials.json
-token.json
-.tmp/
-.venv/
-__pycache__/
-*.pyc
+CLAUDE.local.md
+.claude/settings.local.json
+node_modules/

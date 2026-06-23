@@ -1,0 +1,7 @@
+gradio>=4.44
+google-genai>=1.0
+pinecone>=5.0
+python-dotenv>=1.0   # local dev only; harmless on the Space
+fastapi>=0.110       # api.py bridge for the MOMO website front-end
+uvicorn>=0.29        # ASGI server for api.py
+python-multipart>=0.0.9  # FastAPI file/form uploads (/api/ingest)
