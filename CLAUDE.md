@@ -62,38 +62,29 @@ All workstreams live in `projects/`, each with a `README.md` (status) + its own 
 song) as well as ongoing operation. **Read a project's rules file before working in it.** New
 workstreams get their own folder + README here.
 
-## Skills & Agents (two layers)
-Clean separation: **skills = entry points, agents = workers.**
+## Skills & Agents
+Two kinds of reusable capability. **Pick by context, not by name:**
 
-**Skills** — slash-command entry points Moemen types; each forks (`context: fork`) into the matching
-agent and is user-invoked only (`disable-model-invocation: true`). Kept **only for deliberate "action"
-kickoffs** (`/send-email`, `/cross-post-video`, `/generate-video`); read-only capabilities have no
-skill because their agents auto-delegate.
-- **Create at:** `.claude/skills/<name>/SKILL.md`
-- **Use by:** typing `/<name>` (e.g. `/generate-video`).
+| | **Inline skill** | **Subagent** |
+|---|---|---|
+| Runs in | the **current flow** (shares its context) | its **own context window** (isolated) |
+| Returns | continues the flow | a summary back to the main thread |
+| Best for | a **step inside/at the end of an automation** (e.g. email the report we just built) | a **self-contained job** whose noise (search results, render logs) should stay off the main thread |
+| Model | inherits the flow's model | own **task-suited model** (saves tokens) |
 
-**Agents (subagents)** — the actual workers; run in their **own context window** on a **task-suited
-model** (saves tokens — heavy work stays off the main thread). Follow `.claude/rules/subagent-authoring.md`.
+**Inline skills** — **all skills here are inline** (never `context: fork`).
+- **Create at:** `.claude/skills/<name>/SKILL.md` (full instructions in the skill body, no `context: fork`).
+- **Use by:** typing `/<name>`, or I run them as a step within a flow.
+- These: **`/send-email`**, **`/cross-post-video`** — both irreversible, confirm at the gate.
+
+**Subagents** — follow `.claude/rules/subagent-authoring.md`.
 - **Create at:** `.claude/agents/<name>.md` (project) or `~/.claude/agents/<name>.md` (all projects).
-- **Use by:** I **delegate automatically** when a task matches the agent's `description`, when a skill
-  forks into it, or when launched via the Agent tool. **Delegate to the matching agent whenever a task fits.**
+- **Use by:** I **delegate automatically** when a task matches the agent's `description`, or via the Agent tool.
+- These: **research**, **extract-article**, **generate-image** (haiku); **trend-research**,
+  **generate-video**, **video-virality-pass** (sonnet).
 
-Available capabilities (all are agents; `/` marks the ones that also have a skill shortcut):
-
-**Light/mechanical (model: haiku):**
-- **research** — gather info from the web (Firecrawl → Tavily → Exa).
-- **extract-article** — pull clean full text from a URL (Tavily → trafilatura + Groq).
-- **generate-image** — AI image / card / chart (Cloudflare → HF → Pollinations → Gemini).
-- **send-email** `/` — send via Gmail (irreversible — confirm first).
-- **cross-post-video** `/` — publish one video to TikTok + Instagram + YouTube (confirm first).
-
-**Reasoning/creative (model: sonnet):**
-- **trend-research** — find current trends → ranked video ideas.
-- **generate-video** `/` — build a ranking Short (the `ranking shorts` pipeline) up to the preview gate.
-- **video-virality-pass** — review/improve a video's hook, pacing, title, thumbnail.
-
-Add a new subagent here whenever a request starts repeating; set its `model` to the lightest one
-that does the job well.
+Add a new one as a request repeats: an **inline skill** if it's a step in a flow, a **subagent** if
+it's a self-contained job (set its `model` to the lightest one that does the job well).
 
 ## Decision Log
 Meaningful decisions go in `decisions/log.md` — **append-only**, never edit past entries.

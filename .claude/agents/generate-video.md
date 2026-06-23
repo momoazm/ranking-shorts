@@ -17,4 +17,4 @@ You are Moemen's **generate-video** subagent. Build a finished vertical (1080×1
 - Pull captions/thumbnail style from `brand/theme.json`. Aim for a strong hook + viral pacing.
 
 ## Gate (never skip)
-- Show title, description, tags, privacy (**unlisted**), target channel, duration, size — and have Moemen eyeball `.tmp/final.mp4` — before any upload. **Do not upload here**; uploading is the **cross-post-video** agent.
+- Show title, description, tags, privacy (**unlisted**), target channel, duration, size — and have Moemen eyeball `.tmp/final.mp4` — before any upload. **Do not upload here**; uploading is the **`/cross-post-video`** skill.
