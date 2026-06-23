@@ -66,9 +66,11 @@ workstreams get their own folder + README here.
 Clean separation: **skills = entry points, agents = workers.**
 
 **Skills** — slash-command entry points Moemen types; each forks (`context: fork`) into the matching
-agent and is user-invoked only (`disable-model-invocation: true`).
+agent and is user-invoked only (`disable-model-invocation: true`). Kept **only for deliberate "action"
+kickoffs** (`/send-email`, `/cross-post-video`, `/generate-video`); read-only capabilities have no
+skill because their agents auto-delegate.
 - **Create at:** `.claude/skills/<name>/SKILL.md`
-- **Use by:** typing `/<name>` (e.g. `/research`, `/generate-video`).
+- **Use by:** typing `/<name>` (e.g. `/generate-video`).
 
 **Agents (subagents)** — the actual workers; run in their **own context window** on a **task-suited
 model** (saves tokens — heavy work stays off the main thread). Follow `.claude/rules/subagent-authoring.md`.
@@ -76,18 +78,18 @@ model** (saves tokens — heavy work stays off the main thread). Follow `.claude
 - **Use by:** I **delegate automatically** when a task matches the agent's `description`, when a skill
   forks into it, or when launched via the Agent tool. **Delegate to the matching agent whenever a task fits.**
 
-Available capabilities (skill `/name` ↔ agent, same names):
+Available capabilities (all are agents; `/` marks the ones that also have a skill shortcut):
 
 **Light/mechanical (model: haiku):**
 - **research** — gather info from the web (Firecrawl → Tavily → Exa).
 - **extract-article** — pull clean full text from a URL (Tavily → trafilatura + Groq).
 - **generate-image** — AI image / card / chart (Cloudflare → HF → Pollinations → Gemini).
-- **send-email** — send via Gmail (irreversible — confirm first).
-- **cross-post-video** — publish one video to TikTok + Instagram + YouTube (confirm first).
+- **send-email** `/` — send via Gmail (irreversible — confirm first).
+- **cross-post-video** `/` — publish one video to TikTok + Instagram + YouTube (confirm first).
 
 **Reasoning/creative (model: sonnet):**
 - **trend-research** — find current trends → ranked video ideas.
-- **generate-video** — build a ranking Short (the `ranking shorts` pipeline) up to the preview gate.
+- **generate-video** `/` — build a ranking Short (the `ranking shorts` pipeline) up to the preview gate.
 - **video-virality-pass** — review/improve a video's hook, pacing, title, thumbnail.
 
 Add a new subagent here whenever a request starts repeating; set its `model` to the lightest one
