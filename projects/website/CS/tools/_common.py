@@ -15,7 +15,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent          # the CS/ folder
-SHARED_ENV = REPO_ROOT.parent / "API.env"                   # repo-root shared keys
+SHARED_ENV = next(                                          # nearest API.env above CS/
+    (p / "API.env" for p in REPO_ROOT.parents if (p / "API.env").is_file()),
+    REPO_ROOT.parent / "API.env",
+)
 LOCAL_ENV = REPO_ROOT / ".env"                              # CS/.env (PINECONE_*)
 
 
