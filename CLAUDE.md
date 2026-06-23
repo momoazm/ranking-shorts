@@ -62,10 +62,16 @@ All workstreams live in `projects/`, each with a `README.md` (status) + its own 
 song) as well as ongoing operation. **Read a project's rules file before working in it.** New
 workstreams get their own folder + README here.
 
-## Agents (subagents)
-Reusable capabilities are **subagents** in `.claude/agents/`, each as `<name>.md`. They run in
-their **own context window** on a **task-suited model** (saves tokens — heavy work stays off the
-main thread). **Delegate to the matching agent whenever a task fits it** — don't re-derive steps.
+## Skills & Agents (two layers)
+Clean separation: **skills = entry points, agents = workers.**
+- **`.claude/skills/<name>/SKILL.md`** — slash-command entry points Moemen types (`/research`,
+  `/generate-video`…). Each forks (`context: fork`) into the matching agent. They're user-invoked
+  only (`disable-model-invocation: true`).
+- **`.claude/agents/<name>.md`** — the actual workers. They run in their **own context window** on a
+  **task-suited model** (saves tokens — heavy work stays off the main thread). **Delegate to the
+  matching agent whenever a task fits it**, whether triggered by a skill or by you directly.
+
+Available capabilities (skill `/name` ↔ agent, same names):
 
 **Light/mechanical (model: haiku):**
 - **research** — gather info from the web (Firecrawl → Tavily → Exa).
