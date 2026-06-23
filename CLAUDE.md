@@ -41,6 +41,19 @@ load brand colors/fonts from here, never re-derive them.
   relative to the project folder. Those copies should **mirror the root master**; if the brand
   changes, update root `brand/` and re-sync the project copies.
 
+## API keys & fallback chains
+All keys live in **`API.env`** at the repo root (gitignored — never print or commit the values).
+**Rule:** for each job use the **best provider first; if it hits a rate limit or errors, fall to
+the next**, and only report a failure when the *whole chain* is exhausted (don't loop silently).
+
+- **Research / web search:** Firecrawl (MCP) or `TAVILY_API_KEY` → `EXA_API_KEY`
+- **Article extract / scrape:** Tavily → trafilatura (+ `GROQ_API_KEY` cleanup)
+- **Text / LLM:** `GROQ_API_KEY` → `CEREBRAS_API_KEY` → `OPENROUTER_API_KEY` (`:free` models) → `MISTRAL_API_KEY` → `GEMINI_API_KEY`
+- **AI images:** `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) → `HF_API_TOKEN` → Pollinations (no key) → `GEMINI_API_KEY`
+- **Character voice (TTS):** `FISH_AUDIO_API_KEY` → Edge-TTS (free, no key)
+- **Email:** Gmail via `GMAIL_*` (the only irreversible send step — confirm first).
+- **GitHub push:** `GITHUB_TOKEN` (temporary).
+
 ## Projects
 All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
 (how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **newsletter**,
