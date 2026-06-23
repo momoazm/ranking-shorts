@@ -8,6 +8,8 @@ API.env
 # Google OAuth
 **/credentials.json
 **/token.json
+**/client_secret_*.json
+GWS/
 
 # Python / runtime artifacts
 **/.venv/

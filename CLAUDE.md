@@ -29,7 +29,17 @@ Behavioral rules live in `.claude/rules/` and apply automatically:
 - **Claude Code** — primary build environment (this folder).
 - **Firecrawl (MCP)** — web search/scrape/extract; use it for web research.
 - Also in daily use: **Gemini, YouTube, TikTok, Google Drive.** No other MCP servers connected yet.
-- The automation projects share one **`API.env` at the repo root** (search/LLM/image/Gmail keys).
+- The projects share one **`API.env` at the repo root** (search/LLM/image/Gmail keys).
+- **`GWS/`** — Google Workspace credentials: the OAuth **client secret** for the gws CLI / Google
+  APIs (Gmail, Drive, Calendar, etc.). Treat it like a secret; don't print or commit its contents.
+
+## Brand (canonical assets)
+The **master MOMO brand lives in `brand/` at the repo root** (`logo.png`, `theme.json`,
+`brandguidelines.png`), sourced from the newsletter brand set. **This is the source of truth** —
+load brand colors/fonts from here, never re-derive them.
+- Each project keeps its own `brand/` copy because its deterministic tools load `brand/theme.json`
+  relative to the project folder. Those copies should **mirror the root master**; if the brand
+  changes, update root `brand/` and re-sync the project copies.
 
 ## Projects
 All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
