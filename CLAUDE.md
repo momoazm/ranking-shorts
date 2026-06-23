@@ -52,7 +52,7 @@ the next**, and only report a failure when the *whole chain* is exhausted (don't
 - **AI images:** `CLOUDFLARE_API_TOKEN` (+ `CLOUDFLARE_ACCOUNT_ID`) → `HF_API_TOKEN` → Pollinations (no key) → `GEMINI_API_KEY`
 - **Character voice (TTS):** `FISH_AUDIO_API_KEY` → Edge-TTS (free, no key)
 - **Email:** Gmail via `GMAIL_*` (the only irreversible send step — confirm first).
-- **GitHub push:** `GITHUB_TOKEN` (temporary).
+- **GitHub push:** handled by the `gh` CLI / Git Credential Manager (no token in `API.env`).
 
 ## Projects
 All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
@@ -62,17 +62,22 @@ song) as well as ongoing operation. **Read a project's rules file before working
 workstreams get their own folder + README here.
 
 ## Skills
-Reusable workflows live in `.claude/skills/`. The pattern:
-- Each skill is a folder: `.claude/skills/skill-name/SKILL.md`.
-- Skills are built **organically**, when a request starts repeating — not upfront.
-- (None built yet.)
+Reusable workflows live in `.claude/skills/`, each as `.claude/skills/<name>/SKILL.md`.
+**Use the matching skill whenever a task fits it** — don't re-derive the steps. Available now:
 
-### Skills to Build (backlog)
-From what Moemen wants to hand off — turn these into skills as they recur:
-1. **cross-post-video** — auto-post one finished video to **TikTok + Instagram + YouTube** in one run.
-2. **video-virality-pass** — review/improve an uploaded (or about-to-upload) video for hook,
-   pacing, title, and thumbnail to maximize reach.
-3. **trend-research** — pull current trends/topics worth making videos about.
+**Capabilities** (reusable building blocks, best-provider-first per the chains above):
+- **research** — gather info from the web (Firecrawl → Tavily → Exa).
+- **extract-article** — pull clean full text from a URL (Tavily → trafilatura + Groq).
+- **generate-image** — AI image / card / chart (Cloudflare → HF → Pollinations → Gemini).
+- **generate-video** — build a short-form Short (the `ranking shorts` pipeline).
+- **send-email** — send via Gmail (irreversible — confirm first).
+
+**Workflows** (end-to-end, built on the capabilities):
+- **trend-research** — find current trends → ranked video ideas.
+- **cross-post-video** — publish one video to TikTok + Instagram + YouTube (confirm first).
+- **video-virality-pass** — review/improve a video's hook, pacing, title, thumbnail.
+
+Build a new skill (and add it here) whenever a request starts repeating.
 
 ## Decision Log
 Meaningful decisions go in `decisions/log.md` — **append-only**, never edit past entries.
