@@ -64,12 +64,17 @@ workstreams get their own folder + README here.
 
 ## Skills & Agents (two layers)
 Clean separation: **skills = entry points, agents = workers.**
-- **`.claude/skills/<name>/SKILL.md`** — slash-command entry points Moemen types (`/research`,
-  `/generate-video`…). Each forks (`context: fork`) into the matching agent. They're user-invoked
-  only (`disable-model-invocation: true`).
-- **`.claude/agents/<name>.md`** — the actual workers. They run in their **own context window** on a
-  **task-suited model** (saves tokens — heavy work stays off the main thread). **Delegate to the
-  matching agent whenever a task fits it**, whether triggered by a skill or by you directly.
+
+**Skills** — slash-command entry points Moemen types; each forks (`context: fork`) into the matching
+agent and is user-invoked only (`disable-model-invocation: true`).
+- **Create at:** `.claude/skills/<name>/SKILL.md`
+- **Use by:** typing `/<name>` (e.g. `/research`, `/generate-video`).
+
+**Agents (subagents)** — the actual workers; run in their **own context window** on a **task-suited
+model** (saves tokens — heavy work stays off the main thread). Follow `.claude/rules/subagent-authoring.md`.
+- **Create at:** `.claude/agents/<name>.md` (project) or `~/.claude/agents/<name>.md` (all projects).
+- **Use by:** I **delegate automatically** when a task matches the agent's `description`, when a skill
+  forks into it, or when launched via the Agent tool. **Delegate to the matching agent whenever a task fits.**
 
 Available capabilities (skill `/name` ↔ agent, same names):
 
