@@ -299,7 +299,7 @@ available here too. Same script/voice/caption pipeline; the visuals and uploads 
   `_characters.py` (free providers ignore reference images).
   - **End-to-end verified:** built "Tung vs Tralalero: Brainrot Supremacy" (6 Cloudflare-FLUX scenes,
     1080x1920 H.264, 32.6s, 8.5 MB) and **emailed it** via `email_video.py` (reuses the
-    newsletter/competitor Gmail `gmail.send` token; `GMAIL_TOKEN_PATH` → that token.json). Nano
+    newsletter Gmail `gmail.send` token; `GMAIL_TOKEN_PATH` → that token.json). Nano
     Banana was attempted first, 429'd, and the run transparently used Cloudflare.
   - **Delivery for manual posting:** IG/TikTok official APIs were blocked at account/business
     verification, so the chosen workflow is **semi-manual** — `autopost.py --platforms youtube,email`

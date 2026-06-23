@@ -1,12 +1,12 @@
 {
-  "_source": "2026-06-23 brand refresh: recolored to a brighter, more vivid gold and a way-darker navy (per Moemen). Old palette was gold #C9A96C / navy #0B1622; logo + brandguidelines recolored to match and the logo background made transparent. Originals archived in archives/brand-old/.",
+  "_source": "Sampled directly from brand/logo.png and brand/brandguidelines.png pixel data (the guideline image's printed CMYK/RGB labels were illegible/garbled, so colors were color-picked from the actual rendered swatches and logo artwork instead).",
   "name": "MOMO",
   "colors": {
-    "navy": "#040810",
-    "navy_light": "#0C1722",
-    "gold": "#FFD23F",
-    "gold_light": "#FFE488",
-    "gold_dark": "#D9A521",
+    "navy": "#0B1622",
+    "navy_light": "#142233",
+    "gold": "#C9A96C",
+    "gold_light": "#E5CE93",
+    "gold_dark": "#A8804A",
     "scarab_red": "#A33B37",
     "nile_teal": "#2E7C8C",
     "sterling_silver": "#B5B5B5",
@@ -35,13 +35,13 @@
   "button": {
     "shape": "pill",
     "border_radius_px": 28,
-    "background_color": "#FFD23F",
+    "background_color": "#C9A96C",
     "text_color": "#14202C",
     "note": "Matches the guideline's gold pill-shaped 'EXPLORE' CTA button. Maps directly to MJML mj-button border-radius/background-color/color."
   },
   "icon_style": {
     "style": "line",
-    "color": "#FFD23F",
+    "color": "#C9A96C",
     "weight": "thin",
     "note": "Simple thin gold line icons for section markers/bullets, matching the guideline's iconography row."
   }

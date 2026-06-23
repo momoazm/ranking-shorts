@@ -147,9 +147,8 @@ def main():
     # 4) background music -> 5) build the video.
     # Default: ALWAYS mix in the committed background bed (assets/music/bg.mp3 -- the
     # user's chosen track, extracted from the reference Short). The per-line whoosh/boom
-    # SFX are gone; the only remaining effect is a single intro swoosh that
-    # build_ranking_video.py adds at t=0 by default (assets/sfx/whoosh.mp3). The bed is
-    # the only non-clip audio. An explicit --music overrides it; --with-music can still
+    # SFX are gone, and the intro swoosh is removed too (user rule, 2026-06-23) -- the bed
+    # is now the ONLY non-clip audio. An explicit --music overrides it; --with-music can still
     # pull a trending track instead. (The bed is committed because the cloud runner's IP
     # is blocked from YouTube downloads, so we can't re-extract it at runtime.)
     MUSIC = ".tmp/music.mp3"
@@ -161,7 +160,7 @@ def main():
     if not music_path and BG_BED.is_file():
         music_path = str(BG_BED)
 
-    build_args = ["--ranked", RANKED, "--max-total", "120", "--per-clip", str(args.per_clip),
+    build_args = ["--ranked", RANKED, "--max-total", "60", "--per-clip", str(args.per_clip),
                   "--title", topic["title"], "--out", FINAL]
     if music_path:
         build_args += ["--music", music_path]

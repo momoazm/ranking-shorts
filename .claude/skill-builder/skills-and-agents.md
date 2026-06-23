@@ -108,7 +108,8 @@ Apply to every capability (don't restate these in each file — they live here):
 
 ## Current Capabilities
 - **Inline skills:** `send-email`, `cross-post-video` (irreversible — gate first); `infographics`
-  (branded infographic from a video's key points, via AI image).
+  (branded infographic from a video's key points, via AI image); `compare-youtube-channels`
+  (MOMO vs rivals, in-chat comparison; web research via Firecrawl→Tavily→Exa, no email/PDF).
 - **Subagents:** `research`, `extract-article`, `generate-image` (haiku); `trend-research`,
   `generate-video`, `video-virality-pass` (sonnet).
 

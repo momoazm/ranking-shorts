@@ -20,7 +20,7 @@ Produces finished **vertical (1080×1920) faceless ranking Shorts** for MOMO's Y
   leaderboard that reveals from `#5` up to `#1`.
 - A **trending background-music bed** is mixed in under the clip audio, pitch/tempo-shifted to
   dodge YouTube Content ID.
-- The whole video is capped so it stays **≤ 2 minutes** (≤ 60 s for true Shorts).
+- The whole video is capped so it stays **≤ 1 minute** (true-Shorts length).
 
 ## Pipeline (each step = one tool, cwd = project root)
 
@@ -57,10 +57,12 @@ python tools/youtube_auth_setup.py                      # one-time OAuth → tok
 
 ## Hard rules specific to this project
 
-- **2-minute hard cap on any video** (user rule, 2026-06-18); `build_ranking_video.py` defaults to
-  `--max-total 120` and caps per-clip time. For YouTube *Shorts* keep it ≤ 60 s.
-- **Audio: NO whoosh/boom/fail SFX.** Each clip keeps ONLY its original sound (or sits on silence
-  when it's quiet). The background-music bed is mixed in once over the whole video.
+- **1-minute hard cap on any video** (user rule, 2026-06-23, tightened from the original 2 min);
+  `build_ranking_video.py` defaults to `--max-total 60` and caps per-clip time accordingly.
+- **Audio: NO whoosh/boom/fail SFX and NO intro swoosh** (user rule, 2026-06-23). Each clip keeps
+  ONLY its original sound (or sits on silence when it's quiet). The background-music bed is the only
+  non-clip audio, mixed in once over the whole video. `--intro-swoosh` is OFF unless an explicit
+  path is passed.
 - **Branding is not optional.** Captions/thumbnails pull from `brand/theme.json` (gold `#C9A96C`,
   navy `#0B1622`, cream `#F2E9D8`, Cinzel/Poppins) and `brand/logo.png`. Never re-derive
   colors/fonts.

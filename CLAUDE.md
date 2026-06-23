@@ -57,14 +57,15 @@ the next**, and only report a failure when the *whole chain* is exhausted (don't
 ## Projects
 All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
 (how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **newsletter**,
-**competitor**, **website**. Each has finite "improve feature X" goals (e.g. add the trending
+**website**. Each has finite "improve feature X" goals (e.g. add the trending
 song) as well as ongoing operation. **Read a project's rules file before working in it.** New
 workstreams get their own folder + README here.
 
 ## Skills & Agents
-Two kinds of reusable capability: **inline skills** (`/send-email`, `/cross-post-video`,
-`/infographics` — run within the current flow) and **subagents** (research, extract-article, generate-image, trend-research,
-generate-video, video-virality-pass — run isolated, on a task-suited model).
+Two kinds of reusable capability: **inline skills** (`/send-email`, `/infographics`,
+`/compare-youtube-channels` — run within the current flow) and **subagents** (run isolated, on a
+task-suited model). **No subagents are currently defined** — add one via the guide below when a
+task is self-contained and heavy enough to warrant its own context.
 
 **Selecting one:** match the task against each skill/subagent's **`name` and `description` only** —
 that's enough to pick the right one. Read the **rest of its `.md` (the body/steps) only after

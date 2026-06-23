@@ -207,14 +207,15 @@ def main():
                     help="Pitch/tempo-shift the bed to dodge YouTube Content ID fingerprinting "
                          "(1.0 = off; 1.06 ~= +1 semitone with the tempo preserved)")
     ap.add_argument("--intro-swoosh", default=None,
-                    help="One-shot SFX placed once at t=0 (default: assets/sfx/whoosh.mp3 if present)")
+                    help="One-shot SFX placed once at t=0. OFF by default (user rule, 2026-06-23 — "
+                         "no intro swoosh); only added when an explicit path is passed here.")
     ap.add_argument("--swoosh-volume", type=float, default=0.7,
                     help="Intro swoosh gain. The synthesized swoosh is loud, so it stays audible "
                          "over full-level clip/background audio without ducking.")
     ap.add_argument("--swoosh-duck", type=float, default=0.0,
                     help="Seconds to duck the clip/background audio at the start so the swoosh is "
                          "audible. 0 = no duck (background stays at full level).")
-    ap.add_argument("--max-total", type=float, default=120.0, help="Hard cap on total length (2 min)")
+    ap.add_argument("--max-total", type=float, default=60.0, help="Hard cap on total length (1 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--out", default=".tmp/final.mp4")
@@ -287,11 +288,9 @@ def main():
         f.write(build_overlay_ass(segments, title, total))
     ass_rel = os.path.relpath(ass_path, os.getcwd()).replace("\\", "/")
 
-    # Resolve the intro swoosh: explicit path, else the committed asset if it exists.
+    # Intro swoosh removed (user rule, 2026-06-23): NO intro swoosh by default. It is only
+    # added when an explicit --intro-swoosh path is passed; no auto-pickup of assets/sfx/whoosh.mp3.
     intro_swoosh = args.intro_swoosh
-    if intro_swoosh is None:
-        cand = str(REPO_ROOT / "assets" / "sfx" / "whoosh.mp3")
-        intro_swoosh = cand if os.path.isfile(cand) else None
 
     ff = []
     for c in clips:

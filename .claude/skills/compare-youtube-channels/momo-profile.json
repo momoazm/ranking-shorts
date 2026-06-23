@@ -1,0 +1,21 @@
+{
+  "_comment": "MOMO's baseline for the compare-youtube-channels skill. Niche is canonical per context/work.md (faceless ranking Shorts). Keep handles/metrics/named_competitors current as you learn them. YouTube channel stats are gated to scraping, so 'unknown' is honest — fill only what you can cite.",
+  "channel_name": "MOMO Shorts",
+  "one_liner": "Faceless YouTube Shorts — 'ranking' (Top-N ranked-list) videos",
+  "niche": "Faceless ranking / Top-N list Shorts (entertainment, fast-paced)",
+  "platforms": ["YouTube Shorts"],
+  "handles": {
+    "youtube": "@Moemen-i2f6l"
+  },
+  "content_types": ["Faceless Top-N ranked-list Shorts (vertical, short)"],
+  "posting_cadence": "unknown — to confirm",
+  "key_metrics": {
+    "subscribers": "unknown (small/new channel; YouTube stats gated to scraping)",
+    "avg_views": "unknown — to confirm",
+    "engagement_rate": "unknown"
+  },
+  "strengths": ["Automated, repeatable ranking-Short pipeline", "Consistent branded format"],
+  "known_weaknesses": ["Wants stronger hooks/retention, more viral picks, faster subscriber growth"],
+  "named_competitors": [],
+  "goals": "Make the ranking Shorts more viral and higher-quality, then expand to TikTok/Instagram. 'Exceeding' rivals = better hooks, higher retention, more views per Short, faster subscriber growth."
+}
