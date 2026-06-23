@@ -6,9 +6,9 @@
 load the brand assets, never re-derive colors/fonts.
 
 ## What I do
-I create videos that get posted to **YouTube** (currently the MOMO Shorts channel —
-Peter & Stewie AI "brainrot" Shorts). The plan is to grow into **multiple accounts with
-different video types across as many social platforms as possible** (TikTok, Instagram, etc.).
+I create videos that get posted to **YouTube** (the MOMO Shorts channel — faceless
+**"ranking" Shorts**, i.e. Top-N ranked-list videos). The plan is to grow into **multiple accounts
+with different video types across as many social platforms as possible** (TikTok, Instagram, etc.).
 
 ## Revenue streams
 - **None yet.** Pre-revenue. The long game is monetizing the content and/or selling the

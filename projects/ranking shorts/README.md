@@ -1,7 +1,7 @@
 # ranking shorts
 
-**One-liner:** Faceless vertical YouTube Shorts pipeline (AI story videos + the "Peter & Stewie"
-dialogue / brainrot format) — the core MOMO content engine.
+**One-liner:** Faceless vertical YouTube Shorts pipeline — "ranking" / Top-N list videos (the core
+MOMO content engine). A character-dialogue format also exists in the tooling as an option.
 
 - **Status:** Active (primary focus)
 - **Rules / how-to:** [ranking-shorts.md](ranking-shorts.md)

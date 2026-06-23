@@ -61,23 +61,25 @@ All workstreams live in `projects/`, each with a `README.md` (status) + its own 
 song) as well as ongoing operation. **Read a project's rules file before working in it.** New
 workstreams get their own folder + README here.
 
-## Skills
-Reusable workflows live in `.claude/skills/`, each as `.claude/skills/<name>/SKILL.md`.
-**Use the matching skill whenever a task fits it** — don't re-derive the steps. Available now:
+## Agents (subagents)
+Reusable capabilities are **subagents** in `.claude/agents/`, each as `<name>.md`. They run in
+their **own context window** on a **task-suited model** (saves tokens — heavy work stays off the
+main thread). **Delegate to the matching agent whenever a task fits it** — don't re-derive steps.
 
-**Capabilities** (reusable building blocks, best-provider-first per the chains above):
+**Light/mechanical (model: haiku):**
 - **research** — gather info from the web (Firecrawl → Tavily → Exa).
 - **extract-article** — pull clean full text from a URL (Tavily → trafilatura + Groq).
 - **generate-image** — AI image / card / chart (Cloudflare → HF → Pollinations → Gemini).
-- **generate-video** — build a short-form Short (the `ranking shorts` pipeline).
 - **send-email** — send via Gmail (irreversible — confirm first).
-
-**Workflows** (end-to-end, built on the capabilities):
-- **trend-research** — find current trends → ranked video ideas.
 - **cross-post-video** — publish one video to TikTok + Instagram + YouTube (confirm first).
+
+**Reasoning/creative (model: sonnet):**
+- **trend-research** — find current trends → ranked video ideas.
+- **generate-video** — build a ranking Short (the `ranking shorts` pipeline) up to the preview gate.
 - **video-virality-pass** — review/improve a video's hook, pacing, title, thumbnail.
 
-Build a new skill (and add it here) whenever a request starts repeating.
+Add a new subagent here whenever a request starts repeating; set its `model` to the lightest one
+that does the job well.
 
 ## Decision Log
 Meaningful decisions go in `decisions/log.md` — **append-only**, never edit past entries.

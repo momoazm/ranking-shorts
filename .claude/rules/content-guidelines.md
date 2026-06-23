@@ -5,8 +5,7 @@ thumbnails, posts.
 
 ## Voice
 - Match the **MOMO brand voice already used in the automations** — don't invent a new tone per
-  piece. The Shorts are energetic, fast, "brainrot"-style entertainment (e.g. Peter & Stewie
-  dialogue). Keep that energy.
+  piece. The Shorts are energetic, fast, punchy ranked-list ("Top N") entertainment. Keep that energy.
 - **Branding is not optional.** Pull colors/fonts/logo from the project's `brand/theme.json`
   (and `projects/newsletter/brand/` for the master assets). Never re-derive brand colors/fonts.
 
