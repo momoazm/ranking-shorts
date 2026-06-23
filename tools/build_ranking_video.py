@@ -208,10 +208,12 @@ def main():
                          "(1.0 = off; 1.06 ~= +1 semitone with the tempo preserved)")
     ap.add_argument("--intro-swoosh", default=None,
                     help="One-shot SFX placed once at t=0 (default: assets/sfx/whoosh.mp3 if present)")
-    ap.add_argument("--swoosh-volume", type=float, default=1.4,
-                    help="Intro swoosh gain. >1 makes the TikTok-style hit punch through the clip.")
-    ap.add_argument("--swoosh-duck", type=float, default=0.8,
-                    help="Seconds to duck the clip audio at the start so the intro swoosh is audible")
+    ap.add_argument("--swoosh-volume", type=float, default=0.7,
+                    help="Intro swoosh gain. The synthesized swoosh is loud, so it stays audible "
+                         "over full-level clip/background audio without ducking.")
+    ap.add_argument("--swoosh-duck", type=float, default=0.0,
+                    help="Seconds to duck the clip/background audio at the start so the swoosh is "
+                         "audible. 0 = no duck (background stays at full level).")
     ap.add_argument("--max-total", type=float, default=120.0, help="Hard cap on total length (2 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
