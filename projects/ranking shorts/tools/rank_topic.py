@@ -20,14 +20,20 @@ GENRES = ["fails", "cats", "babies", "dogs"]
 SCHEMA = """Return ONE JSON object with exactly these keys:
 {
   "genre": string,         // EXACTLY one of: fails, cats, babies, dogs -- pick the MOST TRENDING/viral right now
-  "title": string,         // "Ranking The Best <Genre> <Thing>" style, English, <=70 chars
-                           //   (e.g. "Ranking The Best Cat Fails", "Ranking The Funniest Baby Moments")
+  "title": string,         // A CURIOSITY-GAP / emotional countdown title, English, <=70 chars. It must
+                           //   still read as a Top-5 ranking but open a loop or promise a payoff -- do
+                           //   NOT use the flat "Ranking The Best X" pattern. Use one of these angles:
+                           //   - payoff promise: "Top 5 Cat Fails -- #1 Made Me Scream"
+                           //   - contrast/"shouldn't": "Top 5 Baby Fails That Shouldn't Be This Funny"
+                           //   - escalation: "These Dog Fails Get Worse Every Single Time"
+                           //   - dare/relatable: "Top 5 Fails You Can't Watch Without Laughing"
   "criterion": string,     // what we're ranking by (e.g. "how hard it makes you laugh")
-  "hook": string           // a 1-sentence opener for the description
+  "hook": string           // a 1-sentence opener for the description, written as a curiosity gap
 }
-You make single-genre "Ranking" Shorts from real funny clips (like the viral "Ranking Best Pool
-Fails" format). Choose the ONE genre from the allowed list that is most trending and rewatchable as
-quick funny clips. Output JSON only."""
+You make single-genre "Ranking" Shorts from real funny clips. Choose the ONE genre from the allowed
+list that is most trending and rewatchable. The TITLE is the thumbnail/feed hook -- topic framing
+beats production, so make it a curiosity gap that promises the #1 payoff, never a flat label.
+Output JSON only."""
 
 
 def main():

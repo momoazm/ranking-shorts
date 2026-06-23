@@ -16,6 +16,10 @@
   },
   "strengths": ["Automated, repeatable ranking-Short pipeline", "Consistent branded format"],
   "known_weaknesses": ["Wants stronger hooks/retention, more viral picks, faster subscriber growth"],
-  "named_competitors": [],
+  "named_competitors": [
+    {"name": "FailArmy", "youtube": "@FailArmy", "note": "Format benchmark for the fails genre; ruthless clip curation with the best moment front-loaded. Stats scrape-gated (est. ~20M+ subs)."},
+    {"name": "America's Funniest Videos (AFV)", "youtube": "@AFV", "note": "Premium clip library, clean captions, family-safe shareability; strong Shorts arm. Stats scrape-gated (est. ~20M+ subs)."},
+    {"name": "Top-5/Top-10 faceless countdown creators", "youtube": "(various)", "note": "MOMO's true format twins — same #N countdown, no brand moat; they live/die on hook + topic. Win them on cold-open teaser, kinetic reveals, and curiosity-gap topics."}
+  ],
   "goals": "Make the ranking Shorts more viral and higher-quality, then expand to TikTok/Instagram. 'Exceeding' rivals = better hooks, higher retention, more views per Short, faster subscriber growth."
 }

@@ -35,7 +35,7 @@ Behavioral rules live in `.claude/rules/` and apply automatically:
 
 ## Brand (canonical assets)
 The **master MOMO brand lives in `brand/` at the repo root** (`logo.png`, `theme.json`,
-`brandguidelines.png`), sourced from the newsletter brand set. **This is the source of truth** —
+`brandguidelines.png`). **This is the source of truth** —
 load brand colors/fonts from here, never re-derive them.
 - Each project keeps its own `brand/` copy because its deterministic tools load `brand/theme.json`
   relative to the project folder. Those copies should **mirror the root master**; if the brand
@@ -56,8 +56,8 @@ the next**, and only report a failure when the *whole chain* is exhausted (don't
 
 ## Projects
 All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
-(how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **newsletter**,
-**website**. Each has finite "improve feature X" goals (e.g. add the trending
+(how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **website**.
+Each has finite "improve feature X" goals (e.g. add the trending
 song) as well as ongoing operation. **Read a project's rules file before working in it.** New
 workstreams get their own folder + README here.
 

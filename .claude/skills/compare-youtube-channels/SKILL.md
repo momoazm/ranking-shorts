@@ -72,8 +72,7 @@ Return directly in the conversation (Markdown), in this order:
 ## Notes
 
 - **No publishing, no email, no files.** This skill only researches and writes back to chat. (If
-  Moemen later wants it emailed as a branded PDF, that's the `send-email` skill + newsletter tools —
-  a separate, gated step.)
+  Moemen later wants it emailed, that's the `send-email` skill — a separate, gated step.)
 - **Don't fabricate metrics.** Thin sourcing for a small niche is expected — say so and compare
   qualitatively (hooks, pacing, topics) rather than inventing numbers. Be honest about estimates.
 - **Keep the profile current.** If you confirm a real competitor, metric, or handle this run, offer

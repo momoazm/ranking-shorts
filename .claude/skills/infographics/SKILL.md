@@ -1,40 +1,47 @@
 ---
 name: infographics
-description: Use when Moemen wants a standalone, on-brand infographic made from a finished video's key points — a shareable recap/summary visual with legible text. Runs inline; renders HTML→PNG using the MOMO brand assets.
+description: Use when Moemen wants a standalone, on-brand infographic made from a finished video's key points (or a topic) — rendered with legible text and EMAILED to him. Runs inline; renders HTML→PNG with the MOMO brand assets, then sends it via Gmail.
 argument-hint: [key points, or path to .tmp/story.json]
 ---
 
 ## What This Skill Does
 
-Turn a title + key points into a standalone, on-brand **MOMO infographic** (PNG) with **crisp,
-legible text** and the real brand assets (`brand/theme.json` colors/fonts + `brand/logo.png`).
-Renders **HTML → PNG via Playwright** (`build_infographic.py`) — not AI image generation, so the
-text is always readable. Inline — uses the current flow's context (the video we just built).
+Turn a title + key points into a branded **MOMO infographic** (legible HTML→PNG) and **email it to
+Moemen** — the email is the deliverable, not a saved file. Uses the real brand assets
+(`brand/theme.json` + `brand/logo.png`). Inline.
 
-## Steps (run from `projects/ranking shorts/`)
+## Steps
 
-1. **Gather title + key points.** Prefer the current flow's video: read `.tmp/story.json` (use its
-   `title`; distil `hook` + `narration` into **3–6 short labels**, one phrase each). If `$ARGUMENTS`
-   is given, use that. If nothing's available, ask Moemen for the title + points.
-2. **Render the infographic:**
+1. **Gather title + key points.** Prefer the current flow's video (`.tmp/story.json`: title + 3–6
+   short labels from hook/narration). Else use `$ARGUMENTS`. Else ask Moemen.
+2. **Render** (from `projects/ranking shorts/`):
    ```
-   python tools/build_infographic.py --title "<TITLE>" \
-     --points "<point 1|point 2|point 3|...>" --out .tmp/infographic.png
+   python tools/build_infographic.py --title "<TITLE>" --points "<p1|p2|...>" --out .tmp/infographic.png
    ```
-   - Points are separated by `|`. Keep to **≤7**, each a short phrase that fits one line.
-   - Brand colors/fonts/logo are applied **automatically** from `brand/theme.json` + `brand/logo.png`.
-   - Default 1080×1920 (vertical). For another ratio add `--width/--height` (e.g. `--width 1080
-     --height 1350` for 4:5).
-3. **Show Moemen** `.tmp/infographic.png`. Tweak wording and re-render freely — it's local and free.
-4. *(Optional, only if asked)* For a decorative AI background instead of the flat navy, generate one
-   with `generate_ai_image.py` (brand `--style`, Gemini `--refs brand/logo.png`) and composite.
+   Points separated by `|`, ≤7, one short phrase each. Brand colors/fonts/logo applied automatically.
+3. **Build the email** (also from `projects/ranking shorts/` — the Gmail tools + OAuth live here now):
+   - Write a short HTML body to `.tmp/ig_body.html` (e.g. "Here's your **&lt;title&gt;** infographic.").
+   - ```
+     python tools/build_email_mime.py --to <recipient> --subject "<TITLE> — infographic" \
+       --html .tmp/ig_body.html \
+       --attachments '[{"path":"<ABSOLUTE path to infographic.png>","filename":"<TITLE>.png"}]' \
+       --out .tmp/ig_email.eml
+     ```
+   - Recipient defaults to `GMAIL_TO` / `GMAIL_SENDER_EMAIL` (`moemenyasserazmy@gmail.com`).
+4. **Confirmation gate (never skip — sending is irreversible):** show Moemen the resolved
+   **recipient**, subject, and attachment (filename + size). Wait for an explicit "go." No go → stop.
+5. **Send** only after confirmation:
+   ```
+   python tools/send_gmail_email.py --eml .tmp/ig_email.eml
+   ```
+   Report the result.
 
 ## Output
-- `.tmp/infographic.png` — a legible, on-brand infographic.
+- An **email to Moemen's Gmail** with the infographic attached. (`.tmp/infographic.png` is just the
+  working file behind it.)
 
 ## Notes
-- **Brand assets are not optional** and are applied automatically by the tool (navy/gold/cream,
-  Cinzel/Poppins, MOMO logo). Never re-derive brand colors.
-- **Keep each point short** (a phrase, not a sentence) so it fits one line; ≤7 points.
-- Rendering is **local and free** (no API call) — re-roll wording as much as you like.
-- **Not irreversible/public** — no send gate. Posting it later → `/cross-post-video`.
+- **Irreversible:** never send without explicit confirmation; always echo the resolved recipient at the gate.
+- **Brand assets** are applied automatically by the renderer — never re-derive colors.
+- Keep each point short (a phrase, one line); ≤7 points. Rendering is local/free — re-roll wording freely.
+- Tools split across projects: renderer in `projects/ranking shorts/`, email in `projects/newsletter/` (shared Gmail OAuth).

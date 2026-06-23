@@ -21,9 +21,11 @@ from _common import load_theme, emit, fail
 
 CARD = """
     <div class="card">
-      <div class="num">{n}</div>
+      <div class="num">{n}</div>{icon}
       <div class="ptext">{text}</div>
     </div>"""
+
+ICON = '<img class="icon" src="data:image/png;base64,{b64}"/>'
 
 TEMPLATE = """
 <html><head><style>
@@ -44,6 +46,8 @@ TEMPLATE = """
   .num {{ flex:0 0 auto; width:{num}px; height:{num}px; border-radius:50%;
           background:{gold}; color:{text_on_gold}; font-family:'{display_font}', Georgia, serif;
           font-weight:900; font-size:{num_font}px; display:flex; align-items:center; justify-content:center; }}
+  .icon {{ flex:0 0 auto; width:{icon}px; height:{icon}px; border-radius:14px; object-fit:cover;
+           border:3px solid {gold}; background:{navy}; }}
   .ptext {{ color:{text}; font-size:{ptext_size}px; font-weight:500; line-height:1.28; }}
   .logo {{ margin-top:auto; padding-top:48px; height:120px; opacity:0.95; }}
 </style></head>
@@ -73,6 +77,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--title", required=True)
     parser.add_argument("--points", required=True, help="Key points separated by '|'")
+    parser.add_argument("--icons", default="", help="Optional icon image paths separated by '|', "
+                        "one per point (composited into each card)")
     parser.add_argument("--out", default=".tmp/infographic.png")
     parser.add_argument("--width", type=int, default=1080)
     parser.add_argument("--height", type=int, default=1920)
@@ -101,8 +107,26 @@ def main():
     ptext_size = 50 if n <= 4 else (44 if n <= 5 else 38)
     gap = 30 if n <= 4 else (24 if n <= 5 else 18)
 
+    icon_paths = [p.strip() for p in args.icons.split("|") if p.strip()] if args.icons else []
+    if icon_paths and len(icon_paths) != n:
+        fail(f"--icons count ({len(icon_paths)}) must match points count ({n})")
+        return
+    icons_b64 = []
+    for ip in icon_paths:
+        try:
+            with open(ip, "rb") as f:
+                icons_b64.append(base64.b64encode(f.read()).decode("ascii"))
+        except OSError as e:
+            fail(f"Could not read icon {ip}: {e}")
+            return
+
     cards = "".join(
-        CARD.format(n=i + 1, text=html.escape(p)) for i, p in enumerate(points)
+        CARD.format(
+            n=i + 1,
+            text=html.escape(p),
+            icon=ICON.format(b64=icons_b64[i]) if icons_b64 else "",
+        )
+        for i, p in enumerate(points)
     )
     html_str = TEMPLATE.format(
         width=args.width, height=args.height,
@@ -111,7 +135,7 @@ def main():
         display_font=theme["fonts"]["display"]["google_font"].replace(" ", "+"),
         body_font=theme["fonts"]["body"]["google_font"].replace(" ", "+"),
         title=html.escape(args.title), title_size=96, num=84, num_font=44,
-        ptext_size=ptext_size, gap=gap, cards=cards, logo_b64=logo_b64,
+        icon=96, ptext_size=ptext_size, gap=gap, cards=cards, logo_b64=logo_b64,
     )
 
     try:

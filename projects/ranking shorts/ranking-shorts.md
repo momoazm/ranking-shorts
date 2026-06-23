@@ -20,7 +20,7 @@ Produces finished **vertical (1080×1920) faceless ranking Shorts** for MOMO's Y
   leaderboard that reveals from `#5` up to `#1`.
 - A **trending background-music bed** is mixed in under the clip audio, pitch/tempo-shifted to
   dodge YouTube Content ID.
-- The whole video is capped so it stays **≤ 1 minute** (true-Shorts length).
+- The whole video is capped so it stays **under 1 minute** (~58 s — true-Shorts length).
 
 ## Pipeline (each step = one tool, cwd = project root)
 
@@ -57,8 +57,9 @@ python tools/youtube_auth_setup.py                      # one-time OAuth → tok
 
 ## Hard rules specific to this project
 
-- **1-minute hard cap on any video** (user rule, 2026-06-23, tightened from the original 2 min);
-  `build_ranking_video.py` defaults to `--max-total 60` and caps per-clip time accordingly.
+- **Under-1-minute hard cap on any video** (user rule, 2026-06-24 — strictly *less than* a minute,
+  not exactly 60 s); `build_ranking_video.py` defaults to `--max-total 58` and caps per-clip time
+  accordingly.
 - **Audio: NO whoosh/boom/fail SFX and NO intro swoosh** (user rule, 2026-06-23). Each clip keeps
   ONLY its original sound (or sits on silence when it's quiet). The background-music bed is the only
   non-clip audio, mixed in once over the whole video. `--intro-swoosh` is OFF unless an explicit

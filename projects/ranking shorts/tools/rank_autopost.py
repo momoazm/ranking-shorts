@@ -160,7 +160,7 @@ def main():
     if not music_path and BG_BED.is_file():
         music_path = str(BG_BED)
 
-    build_args = ["--ranked", RANKED, "--max-total", "60", "--per-clip", str(args.per_clip),
+    build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
                   "--title", topic["title"], "--out", FINAL]
     if music_path:
         build_args += ["--music", music_path]
