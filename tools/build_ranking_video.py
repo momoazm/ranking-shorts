@@ -161,7 +161,7 @@ def normalize(src, offset, dur, out, loop=0):
 GOLD = "&H0066D7FF&"   # ASS AABBGGRR -> bright gold (the active rank)
 
 
-def build_overlay_ass(segments, title, total):
+def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text=""):
     head = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
         "[V4+ Styles]\n"
@@ -171,7 +171,9 @@ def build_overlay_ass(segments, title, total):
         # Header: the overall video title, pinned top-centre for the whole video.
         "Style: Header,Arial,62,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,50,50,120,1\n"
         # Board: a COMPACT leaderboard down the left side -- top-anchored, fixed slots, #1 on top.
-        "Style: Board,Arial,46,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,7,45,40,330,1\n\n"
+        "Style: Board,Arial,46,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,7,45,40,330,1\n"
+        # Teaser: the cold-open hook -- big, centred, gold; only on screen during the teaser flash.
+        "Style: Teaser,Arial,90,&H0066D7FF&,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,7,4,5,80,80,0,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
@@ -179,21 +181,31 @@ def build_overlay_ass(segments, title, total):
     by_rank = {s["rank"]: (s.get("label") or "") for s in segments}
     ranks_asc = sorted(by_rank)                           # 1,2,3,4,5 top-to-bottom (#1 on top)
 
-    rows = [f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:55]}"]
+    # Title is pinned for the whole video EXCEPT the teaser flash, where the cold-open hook owns
+    # the screen (a 1s tease of the #1 clip with "WAIT FOR #1" to promise the payoff up front).
+    rows = [f"Dialogue: 0,{ass_time(teaser_dur)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:55]}"]
+    if teaser_dur > 0 and teaser_text:
+        rows.append(
+            f"Dialogue: 0,{ass_time(0)},{ass_time(teaser_dur)},Teaser,,0,0,0,,"
+            # fade in/out + a quick scale-down "pop" so the hook punches on the open.
+            "{\\fad(90,90)\\fscx118\\fscy118\\t(0,220,\\fscx100\\fscy100)}" + esc(teaser_text)[:24])
     for s in segments:
         cur = s["rank"]
         lines = []
         for k in ranks_asc:
             lbl = esc(by_rank[k])[:16]
             txt = (f"#{k} {lbl}").strip()
-            if k == cur:                                  # the rank being revealed now: gold, bold
-                lines.append("{\\c" + GOLD + "\\b1\\alpha&H00&}" + txt + "{\\r}")
+            if k == cur:                                  # the rank being revealed now: gold, bold +
+                # a kinetic "pop": the active row scales 122%->100% over 220ms as it's revealed.
+                lines.append("{\\c" + GOLD + "\\b1\\alpha&H00&\\fscx122\\fscy122"
+                             "\\t(0,220,\\fscx100\\fscy100)}" + txt + "{\\r}")
             elif k > cur:                                 # already counted down past -> dimmed
                 lines.append("{\\alpha&H85&}" + txt + "{\\r}")
             else:                                         # not revealed yet -> invisible (keeps slot)
                 lines.append("{\\alpha&HFF&}" + txt + "{\\r}")
         board = "\\N".join(lines)
-        rows.append(f"Dialogue: 0,{ass_time(s['start'])},{ass_time(s['end'])},Board,,0,0,0,,{board}")
+        rows.append(f"Dialogue: 0,{ass_time(s['start'] + teaser_dur)},"
+                    f"{ass_time(s['end'] + teaser_dur)},Board,,0,0,0,,{board}")
     return head + "\n".join(rows) + "\n"
 
 
@@ -207,16 +219,25 @@ def main():
                     help="Pitch/tempo-shift the bed to dodge YouTube Content ID fingerprinting "
                          "(1.0 = off; 1.06 ~= +1 semitone with the tempo preserved)")
     ap.add_argument("--intro-swoosh", default=None,
-                    help="One-shot SFX placed once at t=0 (default: assets/sfx/whoosh.mp3 if present)")
+                    help="One-shot SFX placed once at t=0. OFF by default (user rule, 2026-06-23 — "
+                         "no intro swoosh); only added when an explicit path is passed here.")
     ap.add_argument("--swoosh-volume", type=float, default=0.7,
                     help="Intro swoosh gain. The synthesized swoosh is loud, so it stays audible "
                          "over full-level clip/background audio without ducking.")
     ap.add_argument("--swoosh-duck", type=float, default=0.0,
                     help="Seconds to duck the clip/background audio at the start so the swoosh is "
                          "audible. 0 = no duck (background stays at full level).")
-    ap.add_argument("--max-total", type=float, default=120.0, help="Hard cap on total length (2 min)")
+    ap.add_argument("--max-total", type=float, default=60.0, help="Hard cap on total length (1 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
+    ap.add_argument("--teaser", dest="teaser", action="store_true", default=True,
+                    help="Cold-open hook: flash ~1.2s of the #1 clip + 'WAIT FOR #1' before the "
+                         "#5 countdown starts (default ON -- biggest retention lever).")
+    ap.add_argument("--no-teaser", dest="teaser", action="store_false",
+                    help="Disable the cold-open teaser; start straight on #5.")
+    ap.add_argument("--teaser-dur", type=float, default=1.2, help="Teaser length in seconds.")
+    ap.add_argument("--teaser-text", default="WAIT FOR #1",
+                    help="On-screen hook shown over the teaser flash.")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -229,8 +250,11 @@ def main():
         return
 
     os.makedirs(TMPDIR, exist_ok=True)
-    # Cap each clip so the whole video stays <= max-total.
-    cap = min(args.per_clip, args.max_total / max(1, len(entries)))
+    # Reserve room for the cold-open teaser so teaser + clips still fit under max-total.
+    teaser_reserve = float(args.teaser_dur) if args.teaser else 0.0
+    budget = max(1.0, args.max_total - teaser_reserve)
+    # Cap each clip so the whole video stays <= budget.
+    cap = min(args.per_clip, budget / max(1, len(entries)))
 
     from _media import probe_duration
     MIN_SHOW = 3.0                                      # loop short gifs up to this many seconds
@@ -279,24 +303,45 @@ def main():
     n = len(clips)
     for p, s in enumerate(segments):
         s["rank"] = n - p                              # first shown = highest number, last = #1
-    total = round(min(cursor, args.max_total), 2)
+    clip_total = round(min(cursor, budget), 2)
+
+    # Cold-open teaser (user/competitor rule, 2026-06-23): flash the first ~1.2s of the #1 clip
+    # (clips[-1] is rank #1) with a "WAIT FOR #1" hook BEFORE the #5 countdown, so the payoff is
+    # promised in frame one -- the single biggest retention lever for countdown Shorts. The teaser
+    # reuses the already-normalised #1 clip, so it inherits the 9:16 blurred-fit look for free.
+    teaser_dur, teaser_clip = 0.0, None
+    if args.teaser and clips:
+        td = min(float(args.teaser_dur), max(0.5, segments[-1]["end"] - segments[-1]["start"]))
+        cand = os.path.join(TMPDIR, "teaser.mp4")
+        try:
+            run_ffmpeg(["-i", clips[-1], "-t", f"{td:.2f}", "-ar", "44100", "-ac", "2",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+                        "-c:a", "aac", "-b:a", "160k", cand])
+            teaser_dur, teaser_clip = td, cand
+        except Exception as ex:                         # teaser is best-effort: skip, never block
+            errors.append(f"teaser: {str(ex).splitlines()[0][:120]}")
+
+    total = round(min(teaser_dur + clip_total, args.max_total), 2)
 
     title = args.title or data.get("title") or "Ranking"
     ass_path = os.path.join(TMPDIR, "overlay.ass")
     with open(ass_path, "w", encoding="utf-8") as f:
-        f.write(build_overlay_ass(segments, title, total))
+        f.write(build_overlay_ass(segments, title, total, teaser_dur,
+                                  args.teaser_text if teaser_dur > 0 else ""))
     ass_rel = os.path.relpath(ass_path, os.getcwd()).replace("\\", "/")
 
-    # Resolve the intro swoosh: explicit path, else the committed asset if it exists.
+    # Intro swoosh removed (user rule, 2026-06-23): NO intro swoosh by default. It is only
+    # added when an explicit --intro-swoosh path is passed; no auto-pickup of assets/sfx/whoosh.mp3.
     intro_swoosh = args.intro_swoosh
-    if intro_swoosh is None:
-        cand = str(REPO_ROOT / "assets" / "sfx" / "whoosh.mp3")
-        intro_swoosh = cand if os.path.isfile(cand) else None
 
+    # Concat order: the teaser (if any) plays first, then the #5->#1 clips.
     ff = []
+    if teaser_clip:
+        ff += ["-i", teaser_clip]
     for c in clips:
         ff += ["-i", c]
-    idx = n
+    n_v = (1 if teaser_clip else 0) + n                 # number of concat (video+audio) inputs
+    idx = n_v
     music_idx = None
     if args.music and os.path.isfile(args.music):
         ff += ["-stream_loop", "-1", "-i", args.music]      # looped bed
@@ -306,8 +351,8 @@ def main():
         ff += ["-i", intro_swoosh]                          # one-shot: NOT looped -> plays once at t=0
         swoosh_idx = idx; idx += 1
 
-    concat_in = "".join(f"[{k}:v][{k}:a]" for k in range(n))
-    chain = f"{concat_in}concat=n={n}:v=1:a=1[cv][ca];[cv]ass={ass_rel}[v]"
+    concat_in = "".join(f"[{k}:v][{k}:a]" for k in range(n_v))
+    chain = f"{concat_in}concat=n={n_v}:v=1:a=1[cv][ca];[cv]ass={ass_rel}[v]"
 
     # Audio mix. The clips' ORIGINAL audio stays at full level; the bed + intro swoosh sit
     # under it. normalize=0 keeps levels (default amix halves every input); a final limiter
