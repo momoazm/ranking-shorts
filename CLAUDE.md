@@ -24,7 +24,6 @@ Behavioral rules live in `.claude/rules/` and apply automatically:
 - **content-guidelines.md** — voice + standards for anything published as MOMO.
 - **automation-practices.md** — how to build automations, and the **confirm-before-anything-
   irreversible** rule (uploads, sends, deploys, deletes). When in doubt, ask before acting publicly.
-- **subagent-authoring.md** — best-practice checklist for building new subagents in `.claude/agents/`.
 
 ## Tools & integrations
 - **Claude Code** — primary build environment (this folder).
@@ -63,32 +62,17 @@ song) as well as ongoing operation. **Read a project's rules file before working
 workstreams get their own folder + README here.
 
 ## Skills & Agents
-Two kinds of reusable capability. **Pick by context, not by name:**
+Two kinds of reusable capability: **inline skills** (`/send-email`, `/cross-post-video` — run within
+the current flow) and **subagents** (research, extract-article, generate-image, trend-research,
+generate-video, video-virality-pass — run isolated, on a task-suited model).
 
-| | **Inline skill** | **Subagent** |
-|---|---|---|
-| Runs in | the **current flow** (shares its context) | its **own context window** (isolated) |
-| Returns | continues the flow | a summary back to the main thread |
-| Best for | a **step inside/at the end of an automation** (e.g. email the report we just built) | a **self-contained job** whose noise (search results, render logs) should stay off the main thread |
-| Model | inherits the flow's model | own **task-suited model** (saves tokens) |
+**Selecting one:** match the task against each skill/subagent's **`name` and `description` only** —
+that's enough to pick the right one. Read the **rest of its `.md` (the body/steps) only after
+choosing it**, when you're about to run it. Don't load every file's full body to decide.
 
-**Every skill and subagent needs YAML frontmatter with a `name` and a `description`** (the only
-required fields; write `description` as *when to use it*). Everything else (`model`, `tools`,
-`context`…) is optional.
-
-**Inline skills** — **all skills here are inline** (never `context: fork`).
-- **Create at:** `.claude/skills/<name>/SKILL.md` (full instructions in the skill body, no `context: fork`).
-- **Use by:** typing `/<name>`, or I run them as a step within a flow.
-- These: **`/send-email`**, **`/cross-post-video`** — both irreversible, confirm at the gate.
-
-**Subagents** — follow `.claude/rules/subagent-authoring.md`.
-- **Create at:** `.claude/agents/<name>.md` (project) or `~/.claude/agents/<name>.md` (all projects).
-- **Use by:** I **delegate automatically** when a task matches the agent's `description`, or via the Agent tool.
-- These: **research**, **extract-article**, **generate-image** (haiku); **trend-research**,
-  **generate-video**, **video-virality-pass** (sonnet).
-
-Add a new one as a request repeats: an **inline skill** if it's a step in a flow, a **subagent** if
-it's a self-contained job (set its `model` to the lightest one that does the job well).
+**How to build, invoke, and choose between them → `.claude/skills-and-agents.md`.** Read it before
+creating either. The short version: each needs a `name` + `description`; pick an inline skill for a
+step in a flow, a subagent for a self-contained job.
 
 ## Decision Log
 Meaningful decisions go in `decisions/log.md` — **append-only**, never edit past entries.
