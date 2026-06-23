@@ -203,6 +203,15 @@ def main():
     ap.add_argument("--title", default=None, help="Overall video title pinned at the top")
     ap.add_argument("--music", default=None)
     ap.add_argument("--music-volume", type=float, default=0.18)
+    ap.add_argument("--music-pitch", type=float, default=1.06,
+                    help="Pitch/tempo-shift the bed to dodge YouTube Content ID fingerprinting "
+                         "(1.0 = off; 1.06 ~= +1 semitone with the tempo preserved)")
+    ap.add_argument("--intro-swoosh", default=None,
+                    help="One-shot SFX placed once at t=0 (default: assets/sfx/whoosh.mp3 if present)")
+    ap.add_argument("--swoosh-volume", type=float, default=1.4,
+                    help="Intro swoosh gain. >1 makes the TikTok-style hit punch through the clip.")
+    ap.add_argument("--swoosh-duck", type=float, default=0.8,
+                    help="Seconds to duck the clip audio at the start so the intro swoosh is audible")
     ap.add_argument("--max-total", type=float, default=120.0, help="Hard cap on total length (2 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
@@ -276,23 +285,60 @@ def main():
         f.write(build_overlay_ass(segments, title, total))
     ass_rel = os.path.relpath(ass_path, os.getcwd()).replace("\\", "/")
 
+    # Resolve the intro swoosh: explicit path, else the committed asset if it exists.
+    intro_swoosh = args.intro_swoosh
+    if intro_swoosh is None:
+        cand = str(REPO_ROOT / "assets" / "sfx" / "whoosh.mp3")
+        intro_swoosh = cand if os.path.isfile(cand) else None
+
     ff = []
     for c in clips:
         ff += ["-i", c]
+    idx = n
     music_idx = None
     if args.music and os.path.isfile(args.music):
-        ff += ["-stream_loop", "-1", "-i", args.music]
-        music_idx = n
+        ff += ["-stream_loop", "-1", "-i", args.music]      # looped bed
+        music_idx = idx; idx += 1
+    swoosh_idx = None
+    if intro_swoosh and os.path.isfile(intro_swoosh):
+        ff += ["-i", intro_swoosh]                          # one-shot: NOT looped -> plays once at t=0
+        swoosh_idx = idx; idx += 1
 
     concat_in = "".join(f"[{k}:v][{k}:a]" for k in range(n))
     chain = f"{concat_in}concat=n={n}:v=1:a=1[cv][ca];[cv]ass={ass_rel}[v]"
+
+    # Audio mix. The clips' ORIGINAL audio stays at full level; the bed + intro swoosh sit
+    # under it. normalize=0 keeps levels (default amix halves every input); a final limiter
+    # guards the summed signal against clipping. duration=first anchors to the clip track
+    # (so the looped bed and the short swoosh don't extend the video).
+    # When there's an intro swoosh, briefly duck the clip audio at t=0 so the swoosh punches
+    # through (otherwise a full-level clip masks it); ramp back to full over swoosh_duck seconds.
+    if swoosh_idx is not None and args.swoosh_duck > 0:
+        d = args.swoosh_duck
+        base_filter = f"[ca]volume='min(1,0.15+0.85*t/{d:.3f})':eval=frame[base]"
+    else:
+        base_filter = "[ca]volume=1.0[base]"
+    pre, labels = [base_filter], ["[base]"]
     if music_idx is not None:
-        # normalize=0 so the clips' ORIGINAL audio keeps its full level (default amix
-        # would halve every input); the bed sits UNDER it at music_volume. A final
-        # limiter guards the summed signal against clipping.
-        chain += (f";[ca]volume=1.0[base];[{music_idx}:a]volume={args.music_volume}[mus];"
-                  f"[base][mus]amix=inputs=2:duration=first:normalize=0:dropout_transition=0,"
-                  f"alimiter=level_in=1:level_out=1:limit=0.97[a]")
+        # Pitch/tempo-shift the bed so its audio FINGERPRINT no longer matches the source
+        # track -> dodges Content ID, while still sounding the same low in the mix. asetrate
+        # pitches+speeds up, aresample fixes the rate, atempo restores the original tempo;
+        # the highpass/lowpass nudge the spectrum a touch further from the original.
+        if abs(args.music_pitch - 1.0) > 1e-3:
+            shift = (f"aresample=44100,asetrate={int(44100 * args.music_pitch)},"
+                     f"aresample=44100,atempo={1.0 / args.music_pitch:.4f},")
+        else:
+            shift = "aresample=44100,"
+        pre.append(f"[{music_idx}:a]{shift}highpass=f=60,lowpass=f=15000,"
+                   f"volume={args.music_volume}[mus]")
+        labels.append("[mus]")
+    if swoosh_idx is not None:
+        pre.append(f"[{swoosh_idx}:a]aresample=44100,volume={args.swoosh_volume}[swh]")
+        labels.append("[swh]")
+    if len(labels) > 1:
+        chain += ";" + ";".join(pre) + ";" + "".join(labels) + (
+            f"amix=inputs={len(labels)}:duration=first:normalize=0:dropout_transition=0,"
+            f"alimiter=level_in=1:level_out=1:limit=0.97[a]")
         amap = "[a]"
     else:
         amap = "[ca]"
