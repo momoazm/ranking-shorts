@@ -24,6 +24,7 @@ Behavioral rules live in `.claude/rules/` and apply automatically:
 - **content-guidelines.md** — voice + standards for anything published as MOMO.
 - **automation-practices.md** — how to build automations, and the **confirm-before-anything-
   irreversible** rule (uploads, sends, deploys, deletes). When in doubt, ask before acting publicly.
+- **subagent-authoring.md** — best-practice checklist for building new subagents in `.claude/agents/`.
 
 ## Tools & integrations
 - **Claude Code** — primary build environment (this folder).
