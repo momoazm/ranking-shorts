@@ -31,12 +31,12 @@ Behavioral rules live in `.claude/rules/` and apply automatically:
 - Also in daily use: **Gemini, YouTube, TikTok, Google Drive.** No other MCP servers connected yet.
 - The automation projects share one **`API.env` at the repo root** (search/LLM/image/Gmail keys).
 
-## Automations & Projects
-- **`automations/`** — my automation product lines, each with a `README.md` (status) + its own
-  rules `.md` (how-to). Current: **ranking shorts** (core video engine), **clipping-auto**,
-  **newsletter**, **competitor**, **website**. **Read a project's rules file before working in it.**
-- **`projects/`** — active, time-bound workstreams/initiatives (e.g. a launch, a one-off build).
-  Empty for now; new initiatives get their own folder + README here.
+## Projects
+All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
+(how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **newsletter**,
+**competitor**, **website**. Each has finite "improve feature X" goals (e.g. add the trending
+song) as well as ongoing operation. **Read a project's rules file before working in it.** New
+workstreams get their own folder + README here.
 
 ## Skills
 Reusable workflows live in `.claude/skills/`. The pattern:

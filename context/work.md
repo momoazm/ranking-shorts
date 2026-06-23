@@ -1,7 +1,7 @@
 # My Work
 
 ## Brand
-**MOMO** — my content brand. Logo and brand guidelines live in `automations/newsletter/brand/`
+**MOMO** — my content brand. Logo and brand guidelines live in `projects/newsletter/brand/`
 (each automation project also carries its own `brand/theme.json`). Branding is not optional:
 load the brand assets, never re-derive colors/fonts.
 
@@ -27,5 +27,5 @@ different video types across as many social platforms as possible** (TikTok, Ins
 ## How the automations are organized (the WAT framework)
 My automations follow a **Workflows / Agents / Tools** split: markdown SOPs in `workflows/`
 describe the plan, deterministic Python scripts in `tools/` do the work, and the agent (you)
-orchestrates. Each automation lives in `automations/<name>/` with its own rules `.md` file — read
+orchestrates. Each project lives in `projects/<name>/` with its own rules `.md` file — read
 it before working in that project. They all share one `API.env` at the repo root.

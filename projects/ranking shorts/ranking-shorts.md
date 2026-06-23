@@ -1,6 +1,6 @@
 # CLAUDE.md — Ranking Shorts Project Rules
 
-> All paths below are relative to this folder (`automations/ranking shorts/`). Run every tool with
+> All paths below are relative to this folder (`projects/ranking shorts/`). Run every tool with
 > this folder as the working directory and the project venv (`.venv/Scripts/python tools/<name>.py`)
 > — `tools/_common.py` resolves `REPO_ROOT` as `tools/`'s parent, so `brand/`, `assets/`, `state/`,
 > and `.tmp/` resolve correctly from here. API keys load from the shared `API.env` at the repo root.
@@ -45,7 +45,7 @@ sourcing (yt-dlp), captions (faster-whisper), and assembly (ffmpeg) are free/loc
 ## Environment setup
 
 ```bash
-cd "automations/ranking shorts"
+cd "projects/ranking shorts"
 python -m venv .venv && .venv/Scripts/python -m pip install -r requirements.txt
 .venv/Scripts/python -m playwright install chromium    # if any visual tool needs it
 python tools/youtube_auth_setup.py                      # one-time OAuth → token.json

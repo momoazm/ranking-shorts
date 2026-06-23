@@ -1,7 +1,7 @@
 # About Me
 
 - **Name:** Moemen
-- **Brand:** MOMO (logo + brand guidelines live in `automations/newsletter/brand/`)
+- **Brand:** MOMO (logo + brand guidelines live in `projects/newsletter/brand/`)
 - **Role:** Student
 - **Location / Timezone:** Cairo, Egypt — Africa/Cairo (UTC+2, UTC+3 in summer)
 - **Email:** moemenyasserazmy@gmail.com

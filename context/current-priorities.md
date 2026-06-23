@@ -15,4 +15,4 @@
 
 ## Standing context
 - Pre-revenue, solo, brand = MOMO.
-- The active automation projects live in `automations/` (see each one's README for status).
+- The active projects live in `projects/` (see each one's README for status).

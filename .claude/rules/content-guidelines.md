@@ -8,7 +8,7 @@ thumbnails, posts.
   piece. The Shorts are energetic, fast, "brainrot"-style entertainment (e.g. Peter & Stewie
   dialogue). Keep that energy.
 - **Branding is not optional.** Pull colors/fonts/logo from the project's `brand/theme.json`
-  (and `automations/newsletter/brand/` for the master assets). Never re-derive brand colors/fonts.
+  (and `projects/newsletter/brand/` for the master assets). Never re-derive brand colors/fonts.
 
 ## Goal of every video
 - The bar is **best-effort and aimed at going viral.** Strong hook in the first seconds, tight
