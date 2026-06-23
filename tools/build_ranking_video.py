@@ -227,7 +227,7 @@ def main():
     ap.add_argument("--swoosh-duck", type=float, default=0.0,
                     help="Seconds to duck the clip/background audio at the start so the swoosh is "
                          "audible. 0 = no duck (background stays at full level).")
-    ap.add_argument("--max-total", type=float, default=60.0, help="Hard cap on total length (1 min)")
+    ap.add_argument("--max-total", type=float, default=58.0, help="Hard cap on total length (under 1 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--teaser", dest="teaser", action="store_true", default=True,
