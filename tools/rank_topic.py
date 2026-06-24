@@ -54,6 +54,9 @@ def main():
     ap.add_argument("--force-genre", default=None, choices=GENRES,
                     help="Lock the genre instead of letting the model pick (e.g. 'worldcup' while "
                          "the tournament is live). Title/criterion/hook are still generated fresh.")
+    ap.add_argument("--force-angle", default=None, choices=WORLDCUP_ANGLES,
+                    help="Lock the worldcup angle to a value already confirmed sourceable "
+                         "(random.choice is used if --force-genre worldcup is set without this).")
     ap.add_argument("--playbook", default=".tmp/playbook.json")
     ap.add_argument("--out", default=".tmp/rank_topic.json")
     args = ap.parse_args()
@@ -73,7 +76,7 @@ def main():
     angle_lock = ""
     forced_angle = None
     if args.force_genre == "worldcup":
-        forced_angle = random.choice(WORLDCUP_ANGLES)
+        forced_angle = args.force_angle or random.choice(WORLDCUP_ANGLES)
         angle_lock = (f"ANGLE IS FIXED to '{forced_angle}' for this run -- commit the title/criterion "
                       f"fully to that single angle (no mixing fan + match content).\n")
     prompt = (f"{pb}{genre_lock}{angle_lock}NICHE STEER (optional): {args.niche or '(you choose the best topic)'}\n\n{SCHEMA}")

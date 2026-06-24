@@ -140,36 +140,57 @@ def main():
             return
         daily_increment()
 
-    # 1) topic (most-trending genre + title) -> 2) pull short clips from that genre's channels -> 3) rank 5
-    topic_args = ["--niche", args.niche, "--out", TOPIC]
-    if args.force_genre:
-        topic_args += ["--force-genre", args.force_genre]
-    topic = run_tool("rank_topic.py", topic_args)
+    # 1) figure out the genre (forced, or let the model pick) -> 2) for worldcup, PROBE which angle
+    # (fan/match) is actually sourceable BEFORE committing to a title -- fan clips are far scarcer
+    # than match clips on Reddit, so locking the angle blind (the old flow) kept silently dropping
+    # the World Cup theme because the chosen angle often turned out unsourceable after the fact.
+    if args.force_genre == "worldcup":
+        topic = {"genre": "worldcup"}   # defer the actual title/angle LLM call until angle is known
+    elif args.force_genre:
+        topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", args.force_genre, "--out", TOPIC])
+    else:
+        topic = run_tool("rank_topic.py", ["--niche", args.niche, "--out", TOPIC])
+
     requested_genre = topic.get("genre")
     fallback_reason = None
-    find_args = ["--out", CANDS]
-    if args.search:
-        find_args += ["--search", args.search]
-    elif topic.get("genre"):
-        find_args += ["--genre", topic["genre"]]
+
     if topic.get("genre") == "worldcup":
-        find_args += ["--max", "30"]   # angle lock (fan-only/match-only) rejects most candidates
-    _f, ferr = run_tool_safe("find_ranking_clips.py", find_args)
-    if ferr and not args.search and topic.get("genre") != "fails":
-        # the picked genre didn't have enough clips -> fall back to the reliable one, and
-        # regenerate the topic too (title/criterion/angle would otherwise no longer match the clips)
-        fallback_reason = f"find_ranking_clips({requested_genre}): {ferr}"
+        _f, ferr = run_tool_safe("find_ranking_clips.py", ["--genre", "worldcup", "--max", "30", "--out", CANDS])
+        chosen_angle = None
+        if not ferr:
+            for cand_angle in ("match", "fan"):   # match is the reliably abundant angle -- try it first
+                probe, perr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--classify-angle", cand_angle])
+                if not perr and probe.get("count", 0) >= 5:
+                    chosen_angle = cand_angle
+                    break
+        if chosen_angle:
+            topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "worldcup",
+                                                "--force-angle", chosen_angle, "--out", TOPIC])
+        else:
+            fallback_reason = f"worldcup: {ferr or 'neither angle had >=5 sourceable candidates'}"
+    else:
+        find_args = ["--out", CANDS]
+        if args.search:
+            find_args += ["--search", args.search]
+        elif topic.get("genre"):
+            find_args += ["--genre", topic["genre"]]
+        _f, ferr = run_tool_safe("find_ranking_clips.py", find_args)
+        if ferr and not args.search and topic.get("genre") != "fails":
+            fallback_reason = f"find_ranking_clips({requested_genre}): {ferr}"
+        elif ferr:
+            raise RuntimeError(ferr)
+
+    if fallback_reason:
+        # couldn't source/fit the requested theme -> regenerate a generic "fails" topic to match
         print(f"::warning::{fallback_reason}", file=sys.stderr)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
-    elif ferr:
-        raise RuntimeError(ferr)
 
     _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
     if rerr and topic.get("genre") != "fails":
-        # a strict constraint (e.g. worldcup's fan-only/match-only angle lock) couldn't find 5
-        # valid clips in this pool -> drop the theme for this run rather than fail the whole video
-        fallback_reason = f"rank_clips({requested_genre}): {rerr}"
+        # last-resort safety net (e.g. re-classification flake right after the probe confirmed
+        # enough candidates) -- drop the theme for this run rather than crash
+        fallback_reason = fallback_reason or f"rank_clips({requested_genre}): {rerr}"
         print(f"::warning::{fallback_reason}", file=sys.stderr)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])

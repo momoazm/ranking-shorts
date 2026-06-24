@@ -14,35 +14,86 @@ import os
 from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
+ANGLE_DESC = {
+    "fan": "crowd/supporters only -- chants, celebrations, reactions in the stands. Exclude anything "
+           "showing on-pitch match action, mascots, animals, or unrelated novelty clips.",
+    "match": "on-pitch match action only -- goals, saves, skills, fouls, ref calls/VAR. Exclude "
+             "anything showing crowd/fan shots, mascots, animals, or unrelated novelty clips.",
+}
+
+
+def classify_angle(cands, angle):
+    """Return (matching_indices, err) -- err is set only on a real LLM/parse failure, NOT when too
+    few candidates match (callers decide what "too few" means for their purpose: filter_by_angle
+    below treats <5 as fatal, but a probe call just wants the raw count)."""
+    listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
+    schema = ('Return ONE JSON object: {"matches": [<int indices that clearly fit>]}\n'
+              f"From the CANDIDATES list, return the indices of every candidate whose title clearly "
+              f"fits: {ANGLE_DESC[angle]} Output JSON only.")
+    prompt = f"CANDIDATES:\n{listing}\n\n{schema}"
+    try:
+        out = llm_complete(prompt, system="You classify clip titles for a strict content filter. Strict JSON.",
+                           json_mode=True, temperature=0.2)
+        data = parse_json(out["text"])
+        idxs = sorted({i for i in data.get("matches", []) if isinstance(i, int) and 0 <= i < len(cands)})
+    except Exception as e:
+        return None, f"Angle classification failed: {e}"
+    return idxs, None
+
+
+def filter_by_angle(cands, angle):
+    """Pre-classify candidates by angle BEFORE ranking, so the ranking step never has to choose
+    between violating the angle lock and failing to fill 5 slots (asking one LLM call to both
+    reject off-angle clips AND always produce exactly 5 is a contradiction the model resolves by
+    duplicating an index, which then gets dropped as invalid -- this splits it into two clean steps."""
+    idxs, err = classify_angle(cands, angle)
+    if err:
+        return None, err
+    if len(idxs) < 5:
+        return None, (f"Only {len(idxs)} candidates fit the '{angle}' angle (need >=5) "
+                      f"out of {len(cands)} total.")
+    return [cands[i] for i in idxs], None
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", default=".tmp/rank_candidates.json")
     ap.add_argument("--topic", default=".tmp/rank_topic.json")
     ap.add_argument("--out", default=".tmp/ranked.json")
+    ap.add_argument("--classify-angle", default=None, choices=list(ANGLE_DESC),
+                    help="Probe mode: just count/list candidates fitting this angle, no ranking. "
+                         "Lets the caller pick a sourceable angle BEFORE committing to a topic title.")
     args = ap.parse_args()
 
     load_env()
     try:
         cands = json.load(open(args.candidates, encoding="utf-8"))["candidates"]
-        topic = json.load(open(args.topic, encoding="utf-8"))
     except (OSError, json.JSONDecodeError, KeyError) as e:
-        fail(f"Could not read inputs: {e}")
+        fail(f"Could not read candidates: {e}")
         return
 
+    if args.classify_angle:
+        idxs, aerr = classify_angle(cands, args.classify_angle)
+        if aerr:
+            fail(aerr)
+            return
+        emit({"angle": args.classify_angle, "count": len(idxs), "ids": [cands[i]["id"] for i in idxs]})
+        return
+
+    try:
+        topic = json.load(open(args.topic, encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, KeyError) as e:
+        fail(f"Could not read topic: {e}")
+        return
+
+    angle = topic.get("angle") if topic.get("genre") == "worldcup" else None
+    if angle in ANGLE_DESC:
+        cands, aerr = filter_by_angle(cands, angle)
+        if aerr:
+            fail(aerr)
+            return
+
     listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
-    angle_rule = ""
-    angle = topic.get("angle")
-    if angle == "fan":
-        angle_rule = ("ANGLE LOCK: this is a FAN-ONLY video -- only pick candidates clearly showing "
-                      "crowd/supporters (chants, celebrations, reactions in the stands). REJECT any "
-                      "candidate showing on-pitch match action, mascots, animals, or unrelated novelty "
-                      "clips, even if no other clips are left.\n")
-    elif angle == "match":
-        angle_rule = ("ANGLE LOCK: this is a MATCH-ONLY video -- only pick candidates clearly showing "
-                      "on-pitch action (goals, saves, skills, fouls, ref calls/VAR). REJECT any "
-                      "candidate showing crowd/fan shots, mascots, animals, or unrelated novelty clips, "
-                      "even if no other clips are left.\n")
     schema = """Return ONE JSON object:
 {
   "entries": [   // EXACTLY 5 items, ordered from rank 5 (first/worst) to rank 1 (last/best)
@@ -59,7 +110,7 @@ most for sports-adjacent feeds (e.g. r/soccer) which mix serious news in with th
 `label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
 words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", "Pure Pain",
 "Certified Bruh", "Massive L", "Caught in 4K". Use each candidate_index at most once. Output JSON only."""
-    prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n{angle_rule}\n"
+    prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n\n"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
     try:
