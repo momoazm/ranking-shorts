@@ -163,11 +163,16 @@ def main():
                 if not perr and probe.get("count", 0) >= 5:
                     chosen_angle = cand_angle
                     break
+            if not chosen_angle:
+                # neither pure angle clears 5, but find_ranking_clips already guarantees >=5 total
+                # candidates exist -- stay on-theme with a "mixed" World Cup video instead of
+                # abandoning the theme entirely; that's a much smaller compromise than going generic.
+                chosen_angle = "mixed"
         if chosen_angle:
             topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "worldcup",
                                                 "--force-angle", chosen_angle, "--out", TOPIC])
         else:
-            fallback_reason = f"worldcup: {ferr or 'neither angle had >=5 sourceable candidates'}"
+            fallback_reason = f"worldcup: {ferr}"
     else:
         find_args = ["--out", CANDS]
         if args.search:

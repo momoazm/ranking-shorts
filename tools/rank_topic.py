@@ -17,7 +17,8 @@ from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
 GENRES = ["fails", "cats", "babies", "dogs", "worldcup"]
-WORLDCUP_ANGLES = ["fan", "match"]
+WORLDCUP_ANGLES = ["fan", "match"]   # the two LOCKABLE angles -- random.choice picks between these
+WORLDCUP_ANGLE_CHOICES = WORLDCUP_ANGLES + ["mixed"]   # "mixed" = last-resort, no angle lock at all
 
 SCHEMA = """Return ONE JSON object with exactly these keys:
 {
@@ -54,9 +55,11 @@ def main():
     ap.add_argument("--force-genre", default=None, choices=GENRES,
                     help="Lock the genre instead of letting the model pick (e.g. 'worldcup' while "
                          "the tournament is live). Title/criterion/hook are still generated fresh.")
-    ap.add_argument("--force-angle", default=None, choices=WORLDCUP_ANGLES,
-                    help="Lock the worldcup angle to a value already confirmed sourceable "
-                         "(random.choice is used if --force-genre worldcup is set without this).")
+    ap.add_argument("--force-angle", default=None, choices=WORLDCUP_ANGLE_CHOICES,
+                    help="Lock the worldcup angle to a value already confirmed sourceable -- 'mixed' "
+                         "means no fan/match lock, just the best World Cup clips overall (last-resort "
+                         "when neither pure angle has enough supply). random.choice(fan/match) is used "
+                         "if --force-genre worldcup is set without this.")
     ap.add_argument("--playbook", default=".tmp/playbook.json")
     ap.add_argument("--out", default=".tmp/rank_topic.json")
     args = ap.parse_args()
@@ -77,8 +80,13 @@ def main():
     forced_angle = None
     if args.force_genre == "worldcup":
         forced_angle = args.force_angle or random.choice(WORLDCUP_ANGLES)
-        angle_lock = (f"ANGLE IS FIXED to '{forced_angle}' for this run -- commit the title/criterion "
-                      f"fully to that single angle (no mixing fan + match content).\n")
+        if forced_angle == "mixed":
+            angle_lock = ("ANGLE IS 'mixed' for this run -- supply is too thin for a pure fan-only "
+                          "or match-only video, so write a general World Cup title/criterion that "
+                          "doesn't commit to either (e.g. \"Top 5 Wildest World Cup Moments\").\n")
+        else:
+            angle_lock = (f"ANGLE IS FIXED to '{forced_angle}' for this run -- commit the title/criterion "
+                          f"fully to that single angle (no mixing fan + match content).\n")
     prompt = (f"{pb}{genre_lock}{angle_lock}NICHE STEER (optional): {args.niche or '(you choose the best topic)'}\n\n{SCHEMA}")
     try:
         out = llm_complete(prompt, system="You are a viral faceless-Shorts strategist who designs "
