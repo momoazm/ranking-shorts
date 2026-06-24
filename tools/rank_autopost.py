@@ -145,6 +145,8 @@ def main():
     if args.force_genre:
         topic_args += ["--force-genre", args.force_genre]
     topic = run_tool("rank_topic.py", topic_args)
+    requested_genre = topic.get("genre")
+    fallback_reason = None
     find_args = ["--out", CANDS]
     if args.search:
         find_args += ["--search", args.search]
@@ -156,6 +158,8 @@ def main():
     if ferr and not args.search and topic.get("genre") != "fails":
         # the picked genre didn't have enough clips -> fall back to the reliable one, and
         # regenerate the topic too (title/criterion/angle would otherwise no longer match the clips)
+        fallback_reason = f"find_ranking_clips({requested_genre}): {ferr}"
+        print(f"::warning::{fallback_reason}", file=sys.stderr)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
     elif ferr:
@@ -165,6 +169,8 @@ def main():
     if rerr and topic.get("genre") != "fails":
         # a strict constraint (e.g. worldcup's fan-only/match-only angle lock) couldn't find 5
         # valid clips in this pool -> drop the theme for this run rather than fail the whole video
+        fallback_reason = f"rank_clips({requested_genre}): {rerr}"
+        print(f"::warning::{fallback_reason}", file=sys.stderr)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
         run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
@@ -206,7 +212,8 @@ def main():
     result = {"status": "built", "title": title, "final": FINAL,
               "byte_size": build.get("byte_size"), "duration_sec": build.get("duration_sec"),
               "entries": build.get("entries"), "elapsed_sec": round(time.time() - t0, 1),
-              "delivery": {}}
+              "requested_genre": requested_genre, "used_genre": topic.get("genre"),
+              "fallback_reason": fallback_reason, "delivery": {}}
 
     # 6) deliver
     if "email" in platforms:
