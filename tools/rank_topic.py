@@ -15,11 +15,13 @@ import os
 from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
-GENRES = ["fails", "cats", "babies", "dogs"]
+GENRES = ["fails", "cats", "babies", "dogs", "worldcup"]
 
 SCHEMA = """Return ONE JSON object with exactly these keys:
 {
-  "genre": string,         // EXACTLY one of: fails, cats, babies, dogs -- pick the MOST TRENDING/viral right now
+  "genre": string,         // EXACTLY one of: fails, cats, babies, dogs, worldcup -- pick the MOST TRENDING/viral right now.
+                           //   "worldcup" = funny World Cup moments: bloopers, comedic own-goals/ref
+                           //   mishaps, and fan/crowd reaction clips (not generic match highlights).
   "title": string,         // A CURIOSITY-GAP / emotional countdown title, English, <=70 chars. It must
                            //   still read as a Top-5 ranking but open a loop or promise a payoff -- do
                            //   NOT use the flat "Ranking The Best X" pattern. Use one of these angles:
@@ -39,6 +41,9 @@ Output JSON only."""
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--niche", default="", help="Optional steer (e.g. 'sports', 'animals')")
+    ap.add_argument("--force-genre", default=None, choices=GENRES,
+                    help="Lock the genre instead of letting the model pick (e.g. 'worldcup' while "
+                         "the tournament is live). Title/criterion/hook are still generated fresh.")
     ap.add_argument("--playbook", default=".tmp/playbook.json")
     ap.add_argument("--out", default=".tmp/rank_topic.json")
     args = ap.parse_args()
@@ -52,7 +57,10 @@ def main():
     except (OSError, json.JSONDecodeError):
         pass
 
-    prompt = (f"{pb}NICHE STEER (optional): {args.niche or '(you choose the best topic)'}\n\n{SCHEMA}")
+    genre_lock = (f"GENRE IS FIXED to '{args.force_genre}' for this run -- write the title/criterion/"
+                  f"hook for that theme; still fill in the genre field with '{args.force_genre}'.\n"
+                  if args.force_genre else "")
+    prompt = (f"{pb}{genre_lock}NICHE STEER (optional): {args.niche or '(you choose the best topic)'}\n\n{SCHEMA}")
     try:
         out = llm_complete(prompt, system="You are a viral faceless-Shorts strategist who designs "
                            "ranking/countdown videos. Output strict JSON in English.",
@@ -68,6 +76,8 @@ def main():
             return
     if data["genre"] not in GENRES:
         data["genre"] = "fails"   # safe default if the model picks something off-list
+    if args.force_genre:
+        data["genre"] = args.force_genre   # don't trust the model to honor the lock
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:

@@ -105,6 +105,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
+    # TEMPORARY (2026-06-25): forcing World Cup content while the 2026 tournament is live
+    # (~through 2026-07-19). Set to None (or pass --force-genre "") to go back to normal rotation.
+    ap.add_argument("--force-genre", default="worldcup", choices=["", "fails", "cats", "babies", "dogs", "worldcup"],
+                    help="Lock every video to one genre instead of letting the topic model rotate.")
     ap.add_argument("--search", default=None, help="Override the Tenor search query")
     ap.add_argument("--platforms", default="youtube,email")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
@@ -137,7 +141,10 @@ def main():
         daily_increment()
 
     # 1) topic (most-trending genre + title) -> 2) pull short clips from that genre's channels -> 3) rank 5
-    topic = run_tool("rank_topic.py", ["--niche", args.niche, "--out", TOPIC])
+    topic_args = ["--niche", args.niche, "--out", TOPIC]
+    if args.force_genre:
+        topic_args += ["--force-genre", args.force_genre]
+    topic = run_tool("rank_topic.py", topic_args)
     find_args = ["--out", CANDS]
     if args.search:
         find_args += ["--search", args.search]

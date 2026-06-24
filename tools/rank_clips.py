@@ -41,7 +41,10 @@ def main():
 Pick the 5 candidates that best MATCH THE TOPIC and rank them by the criterion. IMPORTANT: prefer
 clips whose title shows the actual event the topic promises (for a "fails" topic pick real fails/
 accidents/mishaps -- someone falls, crashes, slips, things go wrong; avoid merely cute or calm clips
-unless nothing better exists). Each `label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
+unless nothing better exists). NEVER pick a clip whose title suggests death/injury, grief or tribute,
+politics, war, or serious news -- skip those candidates even if no other clips are left; this matters
+most for sports-adjacent feeds (e.g. r/soccer) which mix serious news in with the funny clips. Each
+`label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
 words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", "Pure Pain",
 "Certified Bruh", "Massive L", "Caught in 4K". Use each candidate_index at most once. Output JSON only."""
     prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n\n"

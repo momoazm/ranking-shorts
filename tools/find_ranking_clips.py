@@ -35,6 +35,10 @@ GENRE_SUBS = {
     "cats":   ["cats", "catsstandingup", "Catloaf", "IllegallySmolCats", "CatsBeingCats"],
     "babies": ["KidsAreFuckingStupid", "ContagiousLaughter", "funny"],
     "dogs":   ["WhatsWrongWithYourDog", "Zoomies", "dogswithjobs", "AnimalsBeingDerps"],
+    # World Cup funny moments + fan/crowd reactions (forced on while the 2026 tournament is live).
+    # r/soccer deliberately excluded: its "top" feed mixes in tragedy/tribute/political posts
+    # alongside funny clips, which the rank_clips.py safety instruction can't reliably screen out.
+    "worldcup": ["WorldCup", "footballhighlights", "footy"],
 }
 DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
 
