@@ -305,16 +305,18 @@ def main():
         s["rank"] = n - p                              # first shown = highest number, last = #1
     clip_total = round(min(cursor, budget), 2)
 
-    # Cold-open teaser (user/competitor rule, 2026-06-23): flash the first ~1.2s of the #1 clip
-    # (clips[-1] is rank #1) with a "WAIT FOR #1" hook BEFORE the #5 countdown, so the payoff is
-    # promised in frame one -- the single biggest retention lever for countdown Shorts. The teaser
-    # reuses the already-normalised #1 clip, so it inherits the 9:16 blurred-fit look for free.
+    # Cold-open teaser (user/competitor rule, 2026-06-23): flash ~1.2s of the #1 clip's MAIN ACTION
+    # with a "WAIT FOR #1" hook BEFORE the #5 countdown, so the payoff is promised in frame one --
+    # the single biggest retention lever for countdown Shorts. clips[-1] (rank #1) was already
+    # normalized to END on the source's payoff moment (see the "show its END" trim above), so the
+    # teaser grabs clips[-1]'s OWN END (-sseof) rather than its start -- otherwise, for a long #1
+    # clip, the first 1.2s of that payoff window can land well before the actual climax.
     teaser_dur, teaser_clip = 0.0, None
     if args.teaser and clips:
         td = min(float(args.teaser_dur), max(0.5, segments[-1]["end"] - segments[-1]["start"]))
         cand = os.path.join(TMPDIR, "teaser.mp4")
         try:
-            run_ffmpeg(["-i", clips[-1], "-t", f"{td:.2f}", "-ar", "44100", "-ac", "2",
+            run_ffmpeg(["-sseof", f"-{td:.2f}", "-i", clips[-1], "-ar", "44100", "-ac", "2",
                         "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
                         "-c:a", "aac", "-b:a", "160k", cand])
             teaser_dur, teaser_clip = td, cand
