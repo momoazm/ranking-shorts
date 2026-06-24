@@ -154,11 +154,22 @@ def main():
         find_args += ["--max", "30"]   # angle lock (fan-only/match-only) rejects most candidates
     _f, ferr = run_tool_safe("find_ranking_clips.py", find_args)
     if ferr and not args.search and topic.get("genre") != "fails":
-        # the picked genre didn't have enough clips -> fall back to the reliable one
+        # the picked genre didn't have enough clips -> fall back to the reliable one, and
+        # regenerate the topic too (title/criterion/angle would otherwise no longer match the clips)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
+        topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
     elif ferr:
         raise RuntimeError(ferr)
-    run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+
+    _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+    if rerr and topic.get("genre") != "fails":
+        # a strict constraint (e.g. worldcup's fan-only/match-only angle lock) couldn't find 5
+        # valid clips in this pool -> drop the theme for this run rather than fail the whole video
+        run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
+        topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
+        run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+    elif rerr:
+        raise RuntimeError(rerr)
 
     # 4) background music -> 5) build the video.
     # Default: ALWAYS mix in the committed background bed (assets/music/bg.mp3 -- the
