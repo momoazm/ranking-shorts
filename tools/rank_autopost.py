@@ -21,7 +21,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from _common import emit
+from _common import emit, load_env
 
 ROOT = Path(__file__).resolve().parent.parent
 TMP = ROOT / ".tmp"
@@ -120,6 +120,13 @@ def main():
 
     TMP.mkdir(exist_ok=True)
     platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
+    # Auto-enable Instagram when its credentials are configured. The cloud workflow's --platforms
+    # line can't be edited without the 'workflow' OAuth scope, so instead of relying on it we detect
+    # IG creds (written to API.env from repo secrets) and add the platform here. Harmless when not
+    # publishing -- the instagram delivery branch below is gated on `publishing`.
+    load_env()
+    if "instagram" not in platforms and os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+        platforms.append("instagram")
     t0 = time.time()
     publishing = not args.no_upload
     if publishing:

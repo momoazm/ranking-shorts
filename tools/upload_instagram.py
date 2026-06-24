@@ -34,8 +34,15 @@ import time
 
 from _common import load_env, emit, fail
 
-# Newer "Instagram API with Instagram Login" by default; override for the Facebook-login path.
-GRAPH = os.environ.get("IG_API_BASE", "https://graph.instagram.com/v21.0").rstrip("/")
+def resolve_base(node_id):
+    """Pick the Graph host. An explicit IG_API_BASE wins; otherwise infer from the id shape:
+    a numeric IG_USER_ID means the Facebook-login flow (graph.facebook.com); anything else
+    (e.g. node 'me') means the newer Instagram-login flow (graph.instagram.com). This lets the
+    cloud runner publish without the workflow having to set IG_API_BASE."""
+    base = os.environ.get("IG_API_BASE", "").strip().rstrip("/")
+    if base:
+        return base
+    return "https://graph.facebook.com/v21.0" if node_id.isdigit() else "https://graph.instagram.com/v21.0"
 
 
 def main():
@@ -50,6 +57,7 @@ def main():
     token = os.environ.get("IG_ACCESS_TOKEN", "").strip()
     # IG_USER_ID is optional on the Instagram-Login API ("me" works); required on the FB-login API.
     node = os.environ.get("IG_USER_ID", "").strip() or "me"
+    graph = resolve_base(node)
     if not token:
         fail("IG_ACCESS_TOKEN not set in API.env. Get one from your app's "
              "'API setup with Instagram business login -> Generate access tokens', then add the "
@@ -59,6 +67,7 @@ def main():
     if not args.confirm:
         emit({
             "status": "preview", "would_upload": True, "platform": "instagram",
+            "api_base": graph, "node": node,
             "video_url": args.video_url, "caption": args.caption,
             "note": "DRY RUN. Re-run with --confirm to publish.",
         })
@@ -68,7 +77,7 @@ def main():
 
     # 1) create the Reels container.
     try:
-        r = httpx.post(f"{GRAPH}/{node}/media",
+        r = httpx.post(f"{graph}/{node}/media",
                        data={"media_type": "REELS", "video_url": args.video_url,
                              "caption": args.caption, "access_token": token},
                        timeout=60)
@@ -85,7 +94,7 @@ def main():
     status, deadline = None, time.time() + args.poll_timeout
     while time.time() < deadline:
         try:
-            s = httpx.get(f"{GRAPH}/{creation_id}",
+            s = httpx.get(f"{graph}/{creation_id}",
                           params={"fields": "status_code", "access_token": token}, timeout=30)
             s.raise_for_status()
             status = s.json().get("status_code")
@@ -100,7 +109,7 @@ def main():
 
     # 3) publish.
     try:
-        p = httpx.post(f"{GRAPH}/{node}/media_publish",
+        p = httpx.post(f"{graph}/{node}/media_publish",
                        data={"creation_id": creation_id, "access_token": token}, timeout=60)
         p.raise_for_status()
         media_id = p.json().get("id")
