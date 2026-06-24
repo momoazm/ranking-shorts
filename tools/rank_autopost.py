@@ -150,6 +150,8 @@ def main():
         find_args += ["--search", args.search]
     elif topic.get("genre"):
         find_args += ["--genre", topic["genre"]]
+    if topic.get("genre") == "worldcup":
+        find_args += ["--max", "30"]   # angle lock (fan-only/match-only) rejects most candidates
     _f, ferr = run_tool_safe("find_ranking_clips.py", find_args)
     if ferr and not args.search and topic.get("genre") != "fails":
         # the picked genre didn't have enough clips -> fall back to the reliable one

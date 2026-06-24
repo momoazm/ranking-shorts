@@ -134,7 +134,7 @@ def main():
         if new:
             hit_subs.append(sub)
         fresh_now = [p for p in seen.values() if p["id"] not in used]
-        if len(fresh_now) >= 10:           # enough unused videos; stop hitting RSS (rate limits)
+        if len(fresh_now) >= args.max:     # enough unused videos; stop hitting RSS (rate limits)
             break
 
     fresh = [p for p in seen.values() if p["id"] not in used]

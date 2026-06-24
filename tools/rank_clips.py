@@ -31,6 +31,18 @@ def main():
         return
 
     listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
+    angle_rule = ""
+    angle = topic.get("angle")
+    if angle == "fan":
+        angle_rule = ("ANGLE LOCK: this is a FAN-ONLY video -- only pick candidates clearly showing "
+                      "crowd/supporters (chants, celebrations, reactions in the stands). REJECT any "
+                      "candidate showing on-pitch match action, mascots, animals, or unrelated novelty "
+                      "clips, even if no other clips are left.\n")
+    elif angle == "match":
+        angle_rule = ("ANGLE LOCK: this is a MATCH-ONLY video -- only pick candidates clearly showing "
+                      "on-pitch action (goals, saves, skills, fouls, ref calls/VAR). REJECT any "
+                      "candidate showing crowd/fan shots, mascots, animals, or unrelated novelty clips, "
+                      "even if no other clips are left.\n")
     schema = """Return ONE JSON object:
 {
   "entries": [   // EXACTLY 5 items, ordered from rank 5 (first/worst) to rank 1 (last/best)
@@ -47,7 +59,7 @@ most for sports-adjacent feeds (e.g. r/soccer) which mix serious news in with th
 `label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
 words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", "Pure Pain",
 "Certified Bruh", "Massive L", "Caught in 4K". Use each candidate_index at most once. Output JSON only."""
-    prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n\n"
+    prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n{angle_rule}\n"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
     try:
