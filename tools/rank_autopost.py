@@ -197,6 +197,19 @@ def main():
                                "--privacy", args.privacy, "--confirm"])
         result["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:140]} if err else {"url": m.get("url")}
         result["status"] = "uploaded"
+    if publishing and "instagram" in platforms:
+        # IG can't take a local file -> host the mp4 at a PUBLIC url, then publish it as a Reel.
+        ig = (meta.get("instagram") or {})
+        caption = ig.get("caption", title)
+        host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
+        if herr or not (host or {}).get("url"):
+            result["delivery"]["instagram"] = {"skipped": (herr or "host_public returned no url").splitlines()[0][:140]}
+        else:
+            m, err = run_tool_safe("upload_instagram.py", ["--video-url", host["url"],
+                                   "--caption", caption, "--confirm"])
+            result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:140]} if err else {"media_id": m.get("media_id")}
+            if not err:
+                result["status"] = "uploaded"
 
     if not args.keep_tmp:
         import shutil
