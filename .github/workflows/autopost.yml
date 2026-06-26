@@ -40,13 +40,13 @@ jobs:
         run: |
           if (-not (Test-Path ".venv")) { python -m venv .venv }
           $py = Join-Path (Get-Location) ".venv\Scripts\python.exe"
-          "$py" -m pip install --upgrade pip
-          "$py" -m pip install -r requirements.txt
+          Invoke-Expression "& '$py' -m pip install --upgrade pip"
+          Invoke-Expression "& '$py' -m pip install -r requirements.txt"
           if ($LASTEXITCODE -ne 0) {
             # faster-whisper (ctranslate2) has no wheels on some Python versions (e.g. 3.14).
             # The RANKING pipeline never needs it, so fall back to the ranking-critical subset.
             Write-Host "::warning::full requirements failed; installing the ranking-critical subset (no faster-whisper)"
-            "$py" -m pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
+            Invoke-Expression "& '$py' -m pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
 
@@ -80,7 +80,7 @@ jobs:
           GMAIL_SENDER_EMAIL: ${{ secrets.GMAIL_SENDER_EMAIL }}
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
           ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
-          # --- ZERNIO CHANNEL SECRETS ADDED HERE ---
+          # --- ZERNIO CHANNEL SECRETS ---
           ZERNIO_API_KEY: ${{ secrets.zernio_api }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.zernio_youtube_id }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.zernio_instagram_id }}
@@ -120,9 +120,9 @@ jobs:
         run: |
           $py = Join-Path (Get-Location) ".venv\Scripts\python.exe"
           # Keep the laptop awake for the whole run (an idle sleep mid-run cancels the job).
-          $awake = Start-Process "$py" -ArgumentList "-c","import ctypes,time; ctypes.windll.kernel32.SetThreadExecutionState(0x80000001); time.sleep(86400)" -PassThru -WindowStyle Hidden
+          $awake = Start-Process $py -ArgumentList "-c","import ctypes,time; ctypes.windll.kernel32.SetThreadExecutionState(0x80000001); time.sleep(86400)" -PassThru -WindowStyle Hidden
           try {
-            "$py" tools/rank_autopost.py --privacy public --platforms youtube,email,zernio
+            Invoke-Expression "& '$py' tools/rank_autopost.py --privacy public --platforms youtube,email,zernio"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           } finally {
             Stop-Process -Id $awake.Id -Force -ErrorAction SilentlyContinue
