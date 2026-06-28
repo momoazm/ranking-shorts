@@ -250,13 +250,20 @@ def main():
         m, err = run_tool_safe("export_local.py", ["--video", FINAL, "--captions-meta", CAPMETA, "--title", title])
         result["delivery"]["export"] = {"error": err.splitlines()[0][:140]} if err else {"folder": m.get("folder")}
     if publishing and "youtube" in platforms:
+        # YouTube now publishes via Zernio too (same channel-OAuth-avoidance reasoning as
+        # Instagram) -- it also needs a PUBLIC url, not a local path.
         yt = (meta.get("youtube") or {})
-        m, err = run_tool_safe("upload_youtube.py", ["--video", FINAL, "--title", yt.get("title", title),
-                               "--description", yt.get("description", ""),
-                               "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
-                               "--privacy", args.privacy, "--confirm"])
-        result["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:140]} if err else {"url": m.get("url")}
-        result["status"] = "uploaded"
+        host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
+        if herr or not (host or {}).get("url"):
+            result["delivery"]["youtube"] = {"skipped": (herr or "host_public returned no url").splitlines()[0][:140]}
+        else:
+            m, err = run_tool_safe("upload_youtube.py", ["--video-url", host["url"], "--title", yt.get("title", title),
+                                   "--description", yt.get("description", ""),
+                                   "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
+                                   "--privacy", args.privacy, "--confirm"])
+            result["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:140]} if err else {"url": m.get("url")}
+            if not err:
+                result["status"] = "uploaded"
     if publishing and "instagram" in platforms:
         # IG can't take a local file -> host the mp4 at a PUBLIC url, then publish it as a Reel.
         ig = (meta.get("instagram") or {})
