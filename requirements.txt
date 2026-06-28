@@ -1,34 +1,36 @@
-# Minimal deps for the autonomous poster (Edge engine only — no Fish, no search/image APIs).
-
-# Env loading
+# Research (copied tools)
+tavily-python>=0.5
+exa-py>=1.7
+trafilatura>=1.12
+httpx>=0.27
 python-dotenv>=1.0
 
-# Script generation — Groq is the only LLM wired into the cloud loop (one secret).
-# (_llm's other providers import their SDKs lazily and are never reached when Groq succeeds.)
+# LLM script/playbook generation (free-tier fallback chain: Groq -> Cerebras -> Gemini -> Mistral -> OpenRouter)
 groq>=0.11
+google-generativeai>=0.8     # Gemini (script fallback + optional TTS fallback)
+openai>=1.40                 # OpenAI-compatible client for Cerebras / OpenRouter / Mistral endpoints
 
-# Voiceover: Edge-TTS (free, keyless) — the loop forces --engine edge, so Fish is never called.
+# Voiceover: Edge-TTS (free, keyless) + optional Fish Audio character voices (paid, FISH_AUDIO_API_KEY)
 edge-tts>=6.1
+fish-audio-sdk>=2024.1
 
-# Caption alignment (local, CPU, free; downloads a small Whisper model on first run, then cached)
+# Caption alignment (local, free; CPU-friendly, downloads a Whisper model on first run)
 faster-whisper>=1.0
 
-# ffmpeg fallback for local runs. On the cloud runner we install apt ffmpeg (libass) and
-# _media.get_ffmpeg() prefers that PATH binary; this is just a safety net.
+# Video assembly + background download (bundled ffmpeg binary, no system install on Windows)
 imageio-ffmpeg>=0.5
+yt-dlp>=2024.8
 
-# YouTube resumable upload with an existing OAuth token (no interactive auth in the cloud).
+# Branded thumbnail + report rendering (HTML -> PNG / PDF) and report templating
+playwright>=1.47
+jinja2>=3.1
+
+# Character-art cutout (flood-fill a white/checker background to transparent) for dialogue mode
+pillow>=10.0
+
+# YouTube upload (resumable, OAuth)
 google-api-python-client>=2.140
 google-auth>=2.30
+google-auth-oauthlib>=1.2
 google-auth-httplib2>=0.2
 requests>=2.31
-
-# HTTP client for Nano Banana (Gemini 2.5 Flash Image) REST calls + TikTok/Instagram/host_public.
-httpx>=0.27
-
-# Playbook research (OPTIONAL — build_playbook degrades to model priors if these/keys are absent).
-tavily-python>=0.5
-exa-py>=1.0
-
-# Ranking videos: search + download YouTube source clips (no API quota).
-yt-dlp>=2024.0

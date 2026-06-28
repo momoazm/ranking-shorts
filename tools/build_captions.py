@@ -22,8 +22,13 @@ import re
 
 from _common import emit, fail
 
-# Niche core — always present so even a bare run is well-tagged.
-CORE = ["shorts", "fyp", "foryou", "viral", "funny", "comedy", "memes", "brainrot"]
+# Niche core — always present so even a bare run is well-tagged. Mix of broad Shorts/Reels
+# discovery tags and the channel's actual niche (AI-voiced Family Guy "brainrot" comedy Shorts).
+CORE = [
+    "shorts", "youtubeshorts", "shortsfeed", "shortsvideo", "fyp", "foryou", "foryoupage",
+    "viral", "viralshorts", "trending", "funny", "comedy", "memes", "dankmemes",
+    "brainrot", "brainrotmemes", "aibrainrot", "ai", "aivoiceover", "relatable", "lol",
+]
 
 
 def load_json(path):
@@ -53,10 +58,24 @@ def cast_tags(story):
     """Character-aware hashtags, e.g. peter+stewie -> petervsstewie; tung/tralalero -> italianbrainrot."""
     names = [norm_tag(c.get("name", "")) for c in (story.get("characters") or [])]
     tags = list(names)
-    if {"peter", "stewie"} <= set(names):
-        tags += ["petervsstewie", "peterandstewie", "familyguy"]
-    if {"tung", "tralalero"} <= set(names):
-        tags += ["italianbrainrot", "tungtungtung", "tralalerotralala"]
+    nameset = set(names)
+    # Per-character canonical tags so the cast name in the story maps to how viewers search.
+    char_tags = {
+        "peter": ["petergriffin", "peter", "familyguy"],
+        "stewie": ["stewiegriffin", "stewie", "familyguy"],
+        "brian": ["briangriffin", "familyguy"],
+        "lois": ["loisgriffin", "familyguy"],
+        "tung": ["tungtungtung", "italianbrainrot"],
+        "tralalero": ["tralalerotralala", "italianbrainrot"],
+    }
+    for n in names:
+        tags += char_tags.get(n, [])
+    if {"peter", "stewie"} <= nameset:
+        tags += ["petervsstewie", "peterandstewie", "familyguymemes", "familyguyshorts"]
+    if "familyguy" in [t for v in char_tags.values() for t in v] and nameset & {"peter", "stewie", "brian", "lois"}:
+        tags += ["familyguyclips", "familyguyfunny"]
+    if {"tung", "tralalero"} <= nameset:
+        tags += ["italianbrainrot", "tralalerotralala", "brainrotanimals"]
     return tags
 
 

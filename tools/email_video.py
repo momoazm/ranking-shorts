@@ -2,10 +2,10 @@
 the mp4 attached — so you grab it on your phone and post to TikTok/Instagram by hand.
 
 This is the delivery step for the semi-manual workflow (no IG/TikTok API needed). It reuses the
-same Gmail OAuth as the newsletter/competitor projects.
+same Gmail OAuth as the newsletter project.
 
 AUTH: a Gmail OAuth token with the gmail.send scope. Point GMAIL_TOKEN_PATH at it (default
-"gmail_token.json"); locally you can reuse competitor/token.json. Sender = GMAIL_SENDER_EMAIL,
+"gmail_token.json"); locally you can reuse newsletter/token.json. Sender = GMAIL_SENDER_EMAIL,
 recipient defaults to GMAIL_TO or the sender (i.e. emails it to yourself).
 
 Gmail caps a message at ~25 MB; our Shorts are well under that. If a clip is bigger it still tries,
@@ -98,7 +98,7 @@ def main():
     to = args.to or os.environ.get("GMAIL_TO") or sender
     if not os.path.isfile(token_path):
         fail(f"Gmail token not found at {token_path}. Set GMAIL_TOKEN_PATH (e.g. to "
-             "competitor/token.json) or run a Gmail OAuth setup. Needs the gmail.send scope.")
+             "newsletter/token.json) or run a Gmail OAuth setup. Needs the gmail.send scope.")
         return
     if not to:
         fail("No recipient. Set GMAIL_TO or GMAIL_SENDER_EMAIL in API.env, or pass --to.")

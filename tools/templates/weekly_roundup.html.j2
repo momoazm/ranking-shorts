@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family={{ theme.fonts.display.google_font | replace(' ', '+') }}:wght@600;700&family={{ theme.fonts.body.google_font | replace(' ', '+') }}:wght@400;600;700&display=swap');
+
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: {{ theme.colors.navy }};
+    color: {{ theme.colors.text_on_dark }};
+    font-family: '{{ theme.fonts.body.google_font }}', {{ theme.fonts.body.fallback_stack }};
+    font-size: 12px;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+  }
+  .page { padding: 30px 36px 36px; }
+
+  /* ---- Header ---- */
+  .header { display: flex; align-items: center; gap: 14px; border-bottom: 2px solid {{ theme.colors.gold }}; padding-bottom: 14px; }
+  .header img { max-height: 44px; }
+  .header .titles { flex: 1; }
+  .kicker { color: {{ theme.colors.gold }}; font-size: 10px; letter-spacing: 2.5px; text-transform: uppercase; }
+  .header h1 {
+    font-family: '{{ theme.fonts.display.google_font }}', {{ theme.fonts.display.fallback_stack }};
+    color: {{ theme.colors.text_on_dark }}; font-size: 22px; margin: 3px 0 0;
+  }
+  .header .range { color: {{ theme.colors.sterling_silver }}; font-size: 11px; margin-top: 2px; }
+
+  h2 {
+    font-family: '{{ theme.fonts.display.google_font }}', {{ theme.fonts.display.fallback_stack }};
+    color: {{ theme.colors.gold }}; font-size: 15px; margin: 22px 0 10px;
+    letter-spacing: .3px;
+  }
+  .summary { background: {{ theme.colors.navy_light }}; border-left: 3px solid {{ theme.colors.gold }};
+    padding: 10px 14px; border-radius: 6px; margin-top: 14px; font-size: 12.5px; }
+
+  /* ---- Snapshot metric cards ---- */
+  .snapshot { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .metric { flex: 1 1 0; min-width: 90px; background: {{ theme.colors.navy_light }};
+    border: 1px solid {{ theme.colors.gold_dark }}; border-radius: 8px; padding: 10px 8px; text-align: center; }
+  .metric .value { font-size: 19px; font-weight: 700; color: {{ theme.colors.gold_light }}; font-family: '{{ theme.fonts.display.google_font }}', serif; }
+  .metric .label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: {{ theme.colors.sterling_silver }}; margin-top: 3px; }
+  .metric .sub { font-size: 9.5px; color: {{ theme.colors.text_on_dark }}; margin-top: 2px; }
+
+  /* ---- Highlights ---- */
+  .highlights { display: flex; gap: 10px; margin-top: 12px; }
+  .highlights .box { flex: 1; border-radius: 8px; padding: 9px 12px; font-size: 11.5px; }
+  .highlights .best { background: rgba(46,124,140,0.18); border: 1px solid {{ theme.colors.nile_teal }}; }
+  .highlights .worst { background: rgba(163,59,55,0.18); border: 1px solid {{ theme.colors.scarab_red }}; }
+  .highlights .tag { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
+  .highlights .best .tag { color: {{ theme.colors.nile_teal }}; }
+  .highlights .worst .tag { color: {{ theme.colors.scarab_red }}; }
+
+  /* ---- Video table ---- */
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 11px; }
+  th { text-align: left; color: {{ theme.colors.gold }}; font-size: 9.5px; text-transform: uppercase;
+    letter-spacing: 1px; padding: 6px 8px; border-bottom: 1px solid {{ theme.colors.gold_dark }}; }
+  td { padding: 7px 8px; border-bottom: 1px solid rgba(181,181,181,0.18); vertical-align: top; }
+  th.num, td.num { text-align: right; white-space: nowrap; }
+  td.title { color: {{ theme.colors.text_on_dark }}; }
+
+  /* ---- Charts ---- */
+  .charts { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+  .charts figure { flex: 1 1 45%; margin: 0; }
+  .charts img { width: 100%; border-radius: 8px; border: 1px solid {{ theme.colors.gold_dark }}; display: block; }
+  .charts figcaption { font-size: 10px; color: {{ theme.colors.sterling_silver }}; text-align: center; margin-top: 4px; }
+
+  /* ---- Comment insights ---- */
+  .insights p { margin: 0 0 8px; }
+  .themes { list-style: none; padding: 0; margin: 8px 0 0; }
+  .themes li { padding: 4px 0 4px 16px; position: relative; font-size: 11.5px; }
+  .themes li::before { content: "▸"; color: {{ theme.colors.gold }}; position: absolute; left: 0; }
+  .quote { border-left: 2px solid {{ theme.colors.gold }}; padding: 2px 0 2px 12px; margin: 8px 0;
+    font-style: italic; color: {{ theme.colors.text_on_dark }}; font-size: 11.5px; }
+  .quote .src { display: block; font-style: normal; font-size: 9.5px; color: {{ theme.colors.sterling_silver }}; margin-top: 2px; }
+
+  /* ---- SWOT grid ---- */
+  .swot { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; break-inside: avoid; }
+  .quad { border-radius: 8px; padding: 12px 14px; border-top: 3px solid; }
+  .quad h3 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;
+    font-family: '{{ theme.fonts.body.google_font }}', sans-serif; }
+  .quad ul { margin: 0; padding-left: 16px; }
+  .quad li { margin: 3px 0; font-size: 11px; }
+  .s { background: rgba(230,178,58,0.12);  border-color: {{ theme.colors.gold }}; }
+  .s h3 { color: {{ theme.colors.gold }}; }
+  .w { background: rgba(163,59,55,0.14);   border-color: {{ theme.colors.scarab_red }}; }
+  .w h3 { color: {{ theme.colors.scarab_red }}; }
+  .o { background: rgba(46,124,140,0.14);  border-color: {{ theme.colors.nile_teal }}; }
+  .o h3 { color: {{ theme.colors.nile_teal }}; }
+  .t { background: rgba(181,181,181,0.12); border-color: {{ theme.colors.sterling_silver }}; }
+  .t h3 { color: {{ theme.colors.sterling_silver }}; }
+
+  /* ---- Actions ---- */
+  .actions { counter-reset: step; list-style: none; padding: 0; margin: 6px 0 0; }
+  .actions li { counter-increment: step; position: relative; padding: 7px 0 7px 30px; font-size: 12px;
+    border-bottom: 1px solid rgba(181,181,181,0.15); }
+  .actions li::before { content: counter(step); position: absolute; left: 0; top: 6px;
+    width: 20px; height: 20px; background: {{ theme.colors.gold }}; color: {{ theme.colors.text_on_gold }};
+    border-radius: 50%; text-align: center; font-weight: 700; font-size: 11px; line-height: 20px; }
+
+  .footer { margin-top: 24px; padding-top: 10px; border-top: 1px solid {{ theme.colors.gold_dark }};
+    font-size: 9px; color: {{ theme.colors.sterling_silver }}; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="header">
+      {% if images.logo %}<img src="{{ images.logo }}" alt="{{ theme.name }}">{% endif %}
+      <div class="titles">
+        <div class="kicker">Weekly Roundup</div>
+        <h1>{{ content.channel }}</h1>
+        <div class="range">{{ content.date_range }}</div>
+      </div>
+    </div>
+
+    {% if content.summary %}<div class="summary">{{ content.summary }}</div>{% endif %}
+
+    {% if content.snapshot %}
+    <div class="snapshot">
+      {% for m in content.snapshot %}
+      <div class="metric">
+        <div class="value">{{ m.value }}</div>
+        <div class="label">{{ m.label }}</div>
+        {% if m.sub %}<div class="sub">{{ m.sub }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if content.highlights %}
+    <div class="highlights">
+      {% if content.highlights.best %}<div class="box best"><span class="tag">Top performer</span><br>{{ content.highlights.best }}</div>{% endif %}
+      {% if content.highlights.worst %}<div class="box worst"><span class="tag">Underperformer</span><br>{{ content.highlights.worst }}</div>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if content.videos %}
+    <h2>This week's videos</h2>
+    <table>
+      <tr>
+        <th>Title</th><th class="num">Views</th><th class="num">Retention</th>
+        <th class="num">Likes</th><th class="num">Comments</th>
+      </tr>
+      {% for v in content.videos %}
+      <tr>
+        <td class="title">{{ v.title }}</td>
+        <td class="num">{{ v.views }}</td>
+        <td class="num">{{ v.retention if v.retention is not none else '—' }}</td>
+        <td class="num">{{ v.likes if v.likes is not none else '—' }}</td>
+        <td class="num">{{ v.comments if v.comments is not none else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+
+    {% if content.charts %}
+    <div class="charts">
+      {% for ch in content.charts %}
+      {% if images[ch.cid] %}
+      <figure>
+        <img src="{{ images[ch.cid] }}" alt="">
+        {% if ch.caption %}<figcaption>{{ ch.caption }}</figcaption>{% endif %}
+      </figure>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if content.comment_insights %}
+    <h2>What the comments are saying</h2>
+    <div class="insights">
+      {% if content.comment_insights.sentiment %}<p>{{ content.comment_insights.sentiment }}</p>{% endif %}
+      {% if content.comment_insights.themes %}
+      <ul class="themes">
+        {% for t in content.comment_insights.themes %}<li>{{ t }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% for q in content.comment_insights.quotes or [] %}
+      <div class="quote">“{{ q.text }}”{% if q.video %}<span class="src">— on “{{ q.video }}”</span>{% endif %}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if content.swot %}
+    <h2>SWOT</h2>
+    <div class="swot">
+      <div class="quad s"><h3>Strengths</h3><ul>{% for x in content.swot.strengths %}<li>{{ x }}</li>{% endfor %}</ul></div>
+      <div class="quad w"><h3>Weaknesses</h3><ul>{% for x in content.swot.weaknesses %}<li>{{ x }}</li>{% endfor %}</ul></div>
+      <div class="quad o"><h3>Opportunities</h3><ul>{% for x in content.swot.opportunities %}<li>{{ x }}</li>{% endfor %}</ul></div>
+      <div class="quad t"><h3>Threats</h3><ul>{% for x in content.swot.threats %}<li>{{ x }}</li>{% endfor %}</ul></div>
+    </div>
+    {% endif %}
+
+    {% if content.actions %}
+    <h2>Do this next week</h2>
+    <ol class="actions">
+      {% for a in content.actions %}<li>{{ a }}</li>{% endfor %}
+    </ol>
+    {% endif %}
+
+    <div class="footer">MOMO · YouTube Weekly Roundup · generated {{ content.generated_on or content.date_range }}</div>
+  </div>
+</body>
+</html>

@@ -43,7 +43,7 @@ GENRE_SUBS = {
 DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
 
 
-def fetch_rss(subreddit, period, attempts=3):
+def fetch_rss(subreddit, period, attempts=4):
     """Return the raw RSS for a subreddit's top feed, retrying with backoff on 429."""
     url = f"https://www.reddit.com/r/{subreddit}/top/.rss?t={period}"
     last = None
@@ -54,7 +54,8 @@ def fetch_rss(subreddit, period, attempts=3):
         except Exception as e:
             last = e
             if "429" in str(e) and i < attempts - 1:
-                time.sleep(6 * (i + 1))   # back off and retry
+                backoff = 10 * (2 ** i)  # exponential: 10s, 20s, 40s
+                time.sleep(backoff)
                 continue
             raise last
 

@@ -9,9 +9,13 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-# All API keys/credentials live in a single shared API.env one level ABOVE this
-# project folder (the repo root), so every WAT project reads the same key file.
-SHARED_ENV = REPO_ROOT.parent / "API.env"
+# All API keys/credentials live in a single shared API.env at the repo root.
+# Walk up from the project folder to find it, so it works whether the project
+# sits one or more levels below the repo root.
+SHARED_ENV = next(
+    (p / "API.env" for p in REPO_ROOT.parents if (p / "API.env").is_file()),
+    REPO_ROOT.parent / "API.env",
+)
 
 
 def load_env():

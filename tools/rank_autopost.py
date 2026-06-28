@@ -126,14 +126,11 @@ def main():
     platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
     # Auto-enable Instagram when its credentials are configured. The cloud workflow's --platforms
     # line can't be edited without the 'workflow' OAuth scope, so instead of relying on it we detect
-    # IG creds (written to API.env from repo secrets) and add the platform here. Harmless when not
-    # publishing -- the instagram delivery branch below is gated on `publishing`.
+    # Zernio creds (written to API.env from repo secrets) and add the platform here. Harmless when
+    # not publishing -- the instagram delivery branch below is gated on `publishing`.
     load_env()
-    if "instagram" not in platforms and os.environ.get("IG_ACCESS_TOKEN") and os.environ.get("IG_USER_ID"):
+    if "instagram" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_INSTAGRAM_ID"):
         platforms.append("instagram")
-    # Auto-enable Zernio when its credentials are configured (for Instagram posting via Zernio)
-    if "zernio" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_API_URL"):
-        platforms.append("zernio")
     t0 = time.time()
     publishing = not args.no_upload
     if publishing:
@@ -270,28 +267,9 @@ def main():
         else:
             m, err = run_tool_safe("upload_instagram.py", ["--video-url", host["url"],
                                    "--caption", caption, "--confirm"])
-            result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:140]} if err else {"media_id": m.get("media_id")}
+            result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:140]} if err else {"media_id": m.get("post_id") or m.get("media_id")}
             if not err:
                 result["status"] = "uploaded"
-    if publishing and "zernio" in platforms:
-        # Zernio API for Instagram posting (via Zernio social media integration platform)
-        zernio_api_key = os.environ.get("ZERNIO_API_KEY")
-        zernio_api_url = os.environ.get("ZERNIO_API_URL")
-        if not zernio_api_key or not zernio_api_url:
-            result["delivery"]["zernio"] = {"skipped": "ZERNIO_API_KEY or ZERNIO_API_URL not configured"}
-        else:
-            zernio = (meta.get("zernio") or {})
-            caption = zernio.get("caption", title)
-            host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
-            if herr or not (host or {}).get("url"):
-                result["delivery"]["zernio"] = {"skipped": (herr or "host_public returned no url").splitlines()[0][:140]}
-            else:
-                m, err = run_tool_safe("upload_zernio.py", ["--video-url", host["url"],
-                                       "--caption", caption, "--api-key", zernio_api_key,
-                                       "--api-url", zernio_api_url, "--confirm"])
-                result["delivery"]["zernio"] = {"skipped": err.splitlines()[0][:140]} if err else {"post_id": m.get("post_id")}
-                if not err:
-                    result["status"] = "uploaded"
 
     if not args.keep_tmp:
         import shutil
