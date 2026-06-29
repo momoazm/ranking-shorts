@@ -203,6 +203,20 @@ def main():
     elif rerr:
         raise RuntimeError(rerr)
 
+    # 3.5) Refine the title based on what clips were actually selected (not the pre-made topic title)
+    # This makes the title specific/catchy and ensures the video is cohesive.
+    REFINED_TITLE_FILE = ".tmp/refined_title.json"
+    refined_title_data, title_err = run_tool_safe("refine_title.py", ["--ranked", RANKED, "--out", REFINED_TITLE_FILE])
+    refined_title = None
+    if not title_err and refined_title_data:
+        refined_title = refined_title_data.get("title", "").strip()
+        if refined_title:
+            topic["title"] = refined_title
+            topic["hook"] = refined_title_data.get("hook", topic.get("hook", refined_title))
+    else:
+        # Fall back to original topic title if refinement fails
+        print(f"::warning::Title refinement failed: {title_err or 'no data'}; using original title", file=sys.stderr)
+
     # 4) background music -> 5) build the video.
     # Default: ALWAYS mix in the committed background bed (assets/music/bg.mp3 -- the
     # user's chosen track, extracted from the reference Short). The per-line whoosh/boom
