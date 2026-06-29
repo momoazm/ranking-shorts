@@ -90,14 +90,21 @@ workflow: Instagram (ranking-shorts accounts) and YouTube (MOMO Shorts channel).
     update `projects/competitor-analysis/momo-profile.json` (especially `named_competitors`) so
     the next run starts smarter.
 
+13. **Commit (no push).** If `momo-profile.json` changed, commit it automatically — same as
+    Phase 1's no-gate reasoning (this is a data file, not a public-facing action), but **don't
+    push**: this file isn't read by any deploy/automation, so there's no "live for the next run"
+    reason to push immediately the way Phase 1's repo-config changes have. Push next time something
+    else in the repo needs pushing anyway, or if Moemen asks for it directly.
+
 ---
 
 ## Report back (both phases)
 
-13. Give Moemen a concise, bullet-point summary: what was compared on each platform, key findings,
+14. Give Moemen a concise, bullet-point summary: what was compared on each platform, key findings,
     exactly what changed in the repo (files + reasoning) for the Instagram phase, the YouTube
-    comparison's action plan, confirmation of the push (commit hash/branch), and confirmation the
-    `competitor/` folder was deleted. If anything was skipped or inconclusive, say so plainly.
+    comparison's action plan, confirmation of the push (commit hash/branch) for Phase 1 and the
+    commit (no push) for Phase 2, and confirmation the `competitor/` folder was deleted. If
+    anything was skipped or inconclusive, say so plainly.
 
 ## Notes / Lessons learned
 

@@ -16,7 +16,8 @@ anything**; it owns the canonical step sequence for both phases and a "Lessons l
   only).
 - **Phase 2 (YouTube):** reads [momo-profile.json](momo-profile.json) (MOMO's channel baseline),
   benchmarks against same-niche YouTube Shorts rivals, returns an in-chat gap analysis + action
-  plan. No publishing, no email — chat output only.
+  plan. No publishing, no email — chat output only. If the profile changed, it's committed
+  automatically (no gate) but **not pushed** — see Hard rules.
 
 ## Agents & invocation
 - **Agent:** `.claude/agents/update.md` (`model: sonnet`, `memory: project`) — does the actual
@@ -31,8 +32,12 @@ anything**; it owns the canonical step sequence for both phases and a "Lessons l
 ## Hard rules specific to this project
 - **Don't fabricate competitor data or metrics** on either platform — thin sourcing is expected
   for a small niche; say so rather than inventing numbers.
-- **Repo pushes (Phase 1) don't need the irreversible-action gate** — they're not public-facing —
-  but a drastic strategy pivot (not a tuning tweak) should still be flagged before pushing.
+- **Repo commits on either phase don't need the irreversible-action gate** — they're not
+  public-facing. **Phase 1 also pushes automatically** (its repo-config changes need to be live
+  for the next automation run); **Phase 2 commits but doesn't push** (`momo-profile.json` isn't
+  read by anything that needs it live immediately — push next time something else needs pushing,
+  or if Moemen asks directly). A drastic strategy pivot (not a tuning tweak) should still be
+  flagged before committing, on either phase.
 - **Deleting `competitor/` is a deliberate, scoped exception** to "don't delete — archive." Don't
   extend that exception to any other folder without Moemen saying so explicitly.
 - **Keep `momo-profile.json` current** — update it when a real competitor/metric/handle is
