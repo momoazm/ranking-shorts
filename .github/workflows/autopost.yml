@@ -81,9 +81,9 @@ jobs:
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
           ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
           # --- ZERNIO CHANNEL SECRETS ---
-          ZERNIO_API_KEY: ${{ secrets.zernio_api }}
-          ZERNIO_YOUTUBE_ID: ${{ secrets.zernio_youtube_id }}
-          ZERNIO_INSTAGRAM_ID: ${{ secrets.zernio_instagram_id }}
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
         run: |
           $root = Get-Location
           if (-not $env:GROQ_API_KEY)        { Write-Host "::error::GROQ_API_KEY secret is empty"; exit 1 }
@@ -112,9 +112,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
           # --- MAP TO LOCAL RUNTIME ENV FOR THE PYTHON SCRIPT ---
-          ZERNIO_API_KEY: ${{ secrets.zernio_api }}
-          ZERNIO_YOUTUBE_ID: ${{ secrets.zernio_youtube_id }}
-          ZERNIO_INSTAGRAM_ID: ${{ secrets.zernio_instagram_id }}
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
         # A #5->#1 ranking Short from funny Reddit clips (with their own audio) -- single trending
         # genre, leaderboard overlay, ducked music bed, NO SFX. Auto-posts to YouTube + Zernio (Instagram) + emails a copy.
         run: |
