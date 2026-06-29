@@ -8,6 +8,9 @@ description: Use when creating, optimizing, or auditing a skill OR a subagent in
 Creating and optimizing Claude Code **skills** and **subagents**. Use when building a new one,
 optimizing/auditing an existing one, deciding inline-skill vs subagent, or troubleshooting one.
 
+Deep reference (frontmatter fields, advanced patterns, argument passing, troubleshooting):
+`.claude/skill-builder/reference.md`.
+
 Official refs: skills → https://code.claude.com/docs/en/skills ·
 subagents → https://code.claude.com/docs/en/sub-agents
 
@@ -22,7 +25,7 @@ subagents → https://code.claude.com/docs/en/sub-agents
 | Runs in | the **current flow** (shares its context) | its **own context window** (isolated) |
 | Returns | continues the flow | a summary back to the main thread |
 | Best for | a **step inside/at the end of an automation** (e.g. email the report we just built) | a **self-contained job** whose noise (search results, render logs) should stay off the main thread |
-| Model | inherits the flow's model | own **task-suited model** (saves tokens) |
+| Model | **none** — runs inline, so it always uses the conversation's model; `model` in frontmatter is a no-op | **declare an explicit `model`** — own task-suited model (saves tokens) — see Model routing |
 | Lives in | `.claude/skills/<name>/SKILL.md` | `.claude/agents/<name>.md` |
 
 **Required for either:** YAML frontmatter with a **`name`** and a **`description`** (the only required
@@ -47,6 +50,7 @@ Ask with AskUserQuestion, **one round at a time**, until 95% confident. Skip rou
 2. **Inline skill or subagent?** — step-in-a-flow (skill) vs self-contained job (subagent). For a
    skill: user-only / auto-invocable / both; does it take arguments?
 3. **Process** — exact steps trigger→output; per step, does Claude act directly, run a script, or delegate?
+   For a subagent, this also fixes the **model** — pick the lightest that fits the work (see Model routing).
 4. **Inputs / Outputs / Dependencies** — inputs needed; what it produces and where (default `.tmp/`);
    APIs/scripts and which fallback chain; reference files/templates/brand assets.
 5. **Guardrails & Edge cases** — failure modes; hard boundaries; cost concerns; ordering; any
@@ -54,18 +58,21 @@ Ask with AskUserQuestion, **one round at a time**, until 95% confident. Skip rou
 6. **Confirm** — summarize back, then build only on approval:
    ```
    Type: inline skill | subagent · Goal: … · When to use: … · Args: …
-   Process: 1… 2… · Inputs/Outputs(+where)/Dependencies · Guardrails(+irreversible gate) · Model: …
+   Process: 1… 2… · Inputs/Outputs(+where)/Dependencies · Guardrails(+irreversible gate) · Model (subagent only): …
    ```
 
 ### Build an inline skill
 Create `.claude/skills/<name>/SKILL.md` with the **full instructions in the body**. Frontmatter:
-`name` (matches the folder), `description`; optional `argument-hint` (args), `model`, `allowed-tools`.
+`name` (matches the folder), `description`; optional `argument-hint` (args), `allowed-tools`.
+**No `model` field** — skills run inline in the current conversation, so they always use whatever
+model the conversation is already on; `model` only takes effect with `context: fork` (which this
+project doesn't use for skills).
 Body = Context → numbered steps → output format (templates, paths) → Notes. Use `$ARGUMENTS`/`$N` for
 input; keep under ~500 lines.
 
 ### Build a subagent
-Create `.claude/agents/<name>.md`. Frontmatter: `name`, `description`; optional `model` (see model
-routing in Conventions), `tools` (least privilege — read-only agents get no `Edit`/`Write`), `color`,
+Create `.claude/agents/<name>.md`. Frontmatter: `name`, `description`, **`model`** (always set one —
+see Model routing); optional `tools` (least privilege — read-only agents get no `Edit`/`Write`), `color`,
 `memory: project`. The **body is the agent's entire system prompt** — it does NOT receive CLAUDE.md,
 so make it self-contained (role, steps, fallback order, branding, gate). **One job per subagent.**
 
@@ -80,8 +87,9 @@ args (check `$ARGUMENTS` substitute + output paths) · edge cases (missing/empty
 Read the file first; fix issues before finishing.
 
 - **Frontmatter:** `name` correct; `description` has real trigger keywords, specific yet not
-  false-firing; `argument-hint` if a skill takes args; `model` is the lightest that works;
-  tools restricted (least privilege); skills have **no `context: fork`**; no unused fields.
+  false-firing; `argument-hint` if a skill takes args; subagents have **`model`** present and it's
+  the lightest that works; skills have **no `model`** (no-op without `context: fork`) and
+  **no `context: fork`**; tools restricted (least privilege); no unused fields.
 - **Content:** under ~500 lines; numbered workflow; output format + all paths specified;
   `$ARGUMENTS`/`$N` where it takes input; subagent body self-contained; Notes cover edge cases +
   irreversible gate; uses the right fallback chain, never hardcodes/prints secrets.
@@ -94,8 +102,12 @@ Read the file first; fix issues before finishing.
 
 Apply to every capability (don't restate these in each file — they live here):
 
-- **Model routing (token-saving):** `haiku` = mechanical (run a tool, look up, format),
-  `sonnet` = reasoning/creative, `opus` = rarely.
+- **Model routing (token-saving) — subagents only, every subagent declares an explicit `model`:**
+  `haiku` = mechanical (run a tool, look up, format); `sonnet` = reasoning/creative (research,
+  analysis, copywriting, design judgment); `opus` = rarely (only genuinely hard multi-step
+  reasoning). Pick the lightest tier that does the job — never leave a subagent's `model`
+  unset/inherited. **Skills never set `model`** — they run inline and inherit the conversation's
+  model; the field is a no-op without `context: fork`.
 - **API.env fallback chains** — best provider first, next on rate-limit/error, surface only
   whole-chain failures; never print/commit secrets:
   - search Firecrawl→Tavily→Exa · extract Tavily→trafilatura(+Groq)
@@ -107,11 +119,11 @@ Apply to every capability (don't restate these in each file — they live here):
 - **Document** each new capability in the CLAUDE.md index.
 
 ## Current Capabilities
-- **Inline skills:** `send-email`, `cross-post-video` (irreversible — gate first); `infographics`
-  (branded infographic from a video's key points, via AI image); `compare-youtube-channels`
-  (MOMO vs rivals, in-chat comparison; web research via Firecrawl→Tavily→Exa, no email/PDF).
-- **Subagents:** `research`, `extract-article`, `generate-image` (haiku); `trend-research`,
-  `generate-video`, `video-virality-pass` (sonnet).
+- **Inline skills:** `send-email` (irreversible Gmail send, gate first);
+  `infographics` (branded infographic from a video's key points, HTML→PNG, emailed);
+  `compare-youtube-channels` (MOMO vs rivals, in-chat comparison; web research via
+  Firecrawl→Tavily→Exa, no email/PDF).
+- **Subagents:** none defined yet.
 
 ## Important Notes
 - Always **read** an existing capability before editing it.

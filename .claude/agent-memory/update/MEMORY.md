@@ -1,0 +1,4 @@
+- [Competitor folder state](competitor-folder-state.md) — repo-root `competitor/` doesn't exist as of 2026-06-29; don't confuse it with archives/competitor (unrelated archived newsletter project)
+- [Instagram accounts tracked](instagram-accounts-tracked.md) — where MOMO's IG posting config actually lives across projects
+- [YouTube competitor set](youtube-competitor-set.md) — cited Social Blade numbers for FailArmy/WatchMojo/AFV as of 2026-06-29, and sourcing-thinness notes for small countdown channels
+- [MOMO format specifics](momo-format-specifics.md) — ranking shorts project's actual format (#5→#1 countdown, real clips w/ original audio, 58s cap, no SFX) used to ground gap analysis

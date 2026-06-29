@@ -1,0 +1,28 @@
+{
+  "_comment": "MOMO's baseline for the compare-youtube-channels skill. Niche is canonical per context/work.md (faceless ranking Shorts). Keep handles/metrics/named_competitors current as you learn them. YouTube channel stats are gated to scraping, so 'unknown' is honest — fill only what you can cite.",
+  "channel_name": "MOMO Shorts",
+  "one_liner": "Faceless YouTube Shorts — 'ranking' (Top-N ranked-list) videos",
+  "niche": "Faceless ranking / Top-N list Shorts (entertainment, fast-paced)",
+  "platforms": ["YouTube Shorts"],
+  "handles": {
+    "youtube": "@Moemen-i2f6l"
+  },
+  "content_types": ["Faceless Top-N ranked-list Shorts (vertical, short)"],
+  "posting_cadence": "unknown — to confirm",
+  "key_metrics": {
+    "subscribers": "unknown (small/new channel; YouTube stats gated to scraping)",
+    "avg_views": "unknown — to confirm",
+    "engagement_rate": "unknown"
+  },
+  "strengths": ["Automated, repeatable ranking-Short pipeline", "Consistent branded format"],
+  "known_weaknesses": ["Wants stronger hooks/retention, more viral picks, faster subscriber growth"],
+  "named_competitors": [
+    {"name": "FailArmy", "youtube": "@failarmy", "note": "Format benchmark for the fails genre; ruthless clip curation with the best moment front-loaded, not a Top-N countdown. 17.5M subs, ~4.96B total views, 981 videos, Shorts avg views ~87.2K, 2026 YTD uploads 71 Shorts vs 59 long-form (Social Blade / HypeAuditor / vidIQ, cited 2026-06-29)."},
+    {"name": "America's Funniest Home Videos (AFV)", "youtube": "@afv", "note": "Premium clip library, clean captions, family-safe shareability. Main channel 7.84M subs (YouTube featured-channels data, cited 2026-06-29); runs a dedicated Shorts spinoff '@AFVHits' (AFV Shorts) at 177K subs -- worth noting as a possible model for a MOMO Shorts-only sub-brand."},
+    {"name": "WatchMojo", "youtube": "@watchmojo", "note": "Closest large-channel format analog -- literal numbered Top-10 countdown, kinetic on-screen text, punchy pacing -- but it is long-form-first: 25.8M subs, 33.25K videos, 2026 YTD Shorts views 23.78M vs long-form 71.63M (258 Shorts vs 1.19K long-form uploads). Shorts are a minor channel, not the core product (vidIQ, cited 2026-06-29)."},
+    {"name": "BRIGHT SIDE", "youtube": "@brightsideofficial", "note": "44.6M subs, list/curiosity-style long-form content; Shorts are negligible (1 upload YTD 2026) -- confirms even big curiosity/list channels haven't cracked Shorts-first. Not a format twin, included for completeness (vidIQ, cited 2026-06-29)."},
+    {"name": "Polar Ranks", "youtube": "(handle not confirmed)", "note": "MOMO's actual scale peer and the best small-channel format match found so far -- viral-clip ranking/comparison Shorts (slap moments, fails, ankle breaks, crashes). UNVERIFIED/secondhand: ~587K subs, ~312M views/30-days, ~$1.2M revenue/30-days, ~2 years old, 'most videos crossing a million views' -- all stated inside a third-party niche-roundup video (\"I Found 10 Hidden YouTube Shorts Niches for 2026\" by @AImaskman, https://www.youtube.com/watch?v=A0Ea1cyRU98, cited 2026-06-29), not a primary analytics source. Re-verify via Social Blade/vidIQ directly next run before treating as solid."},
+    {"name": "Small/mid faceless Top-N countdown Shorts creators", "youtube": "(various, unconfirmed handles)", "note": "MOMO's broader scale-peer tier -- same #N countdown, vertical-first, no brand moat; live/die on hook + topic. Repeated targeted web searches (2026-06-29) for 'faceless Top-N/countdown Shorts channel' surfaced almost entirely generic 'how to start a faceless channel' advice/listicle content, not specific citable handles -- this sub-tier isn't well-indexed by web search (Polar Ranks above is the one exception found). Re-attempt discovery next run via direct YouTube Shorts-shelf browsing rather than web search. Win them on cold-open teaser, kinetic reveals, and curiosity-gap topics."}
+  ],
+  "goals": "Make the ranking Shorts more viral and higher-quality, then expand to TikTok/Instagram. 'Exceeding' rivals = better hooks, higher retention, more views per Short, faster subscriber growth."
+}

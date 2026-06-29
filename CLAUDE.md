@@ -56,24 +56,32 @@ the next**, and only report a failure when the *whole chain* is exhausted (don't
 
 ## Projects
 All workstreams live in `projects/`, each with a `README.md` (status) + its own rules `.md`
-(how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **website**.
-Each has finite "improve feature X" goals (e.g. add the trending
-song) as well as ongoing operation. **Read a project's rules file before working in it.** New
-workstreams get their own folder + README here.
+(how-to). Current: **ranking shorts** (core video engine), **clipping-auto**, **website**,
+**competitor-analysis** (Instagram + YouTube competitor benchmarking, triggered via `/improver`).
+Each has finite "improve feature X" goals (e.g. add the trending song) as well as ongoing
+operation. **Read a project's rules file before working in it.** New workstreams get their own
+folder + README here.
 
 ## Skills & Agents
-Two kinds of reusable capability: **inline skills** (`/send-email`, `/infographics`,
-`/compare-youtube-channels` — run within the current flow) and **subagents** (run isolated, on a
-task-suited model). **No subagents are currently defined** — add one via the guide below when a
-task is self-contained and heavy enough to warrant its own context.
+Two kinds of reusable capability: **inline skills** (`/send-email`, `/infographics` — run within
+the current flow) and **subagents** (run isolated, on a task-suited model; currently: `update`).
+**Subagents have no slash command by default and keep a short `description`** (1–2 sentences, no
+`<example>` blocks) — that's the standing rule for every new subagent. `update` is the one
+deliberate exception: it has a thin paired skill wrapper (`/improver`, `context: fork` +
+`agent: update`) so it's still typeable — see the `competitor-analysis` project. Don't add a
+wrapper to a new subagent unless explicitly asked for one.
 
 **Selecting one:** match the task against each skill/subagent's **`name` and `description` only** —
 that's enough to pick the right one. Read the **rest of its `.md` (the body/steps) only after
 choosing it**, when you're about to run it. Don't load every file's full body to decide.
 
-**How to build, invoke, and choose between them → `.claude/skill-builder/skills-and-agents.md`.** Read it before
-creating either. The short version: each needs a `name` + `description`; pick an inline skill for a
-step in a flow, a subagent for a self-contained job.
+**How to build, invoke, and choose between them:**
+- Inline skills → `.claude/skill-builder/skill-builder.md`
+- Subagents (incl. the opt-in slash-wrapper pattern) → `.claude/skill-builder/agent-builder.md`
+
+Read the relevant one before creating either. Short version: each needs a `name` + `description`;
+pick an inline skill for a step in a flow, a subagent for a self-contained job — and pair every
+subagent with a thin wrapper skill so it can still be called with `/name`.
 
 ## Decision Log
 Meaningful decisions go in `decisions/log.md` — **append-only**, never edit past entries.
