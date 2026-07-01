@@ -101,12 +101,18 @@ def main():
     listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
     schema = """Return ONE JSON object:
 {
-  "entries": [   // EXACTLY 5 items, ordered from rank 5 (first/worst) to rank 1 (last/best)
+  "entries": [   // EXACTLY 5 items, ordered rank 5 (shown FIRST -- the hook) to rank 1 (shown LAST -- the best payoff)
     {"rank": 5, "candidate_index": <int index from the list>, "label": "<short funny meme caption, 1-3 words>"},
     {"rank": 4, ...}, {"rank": 3, ...}, {"rank": 2, ...}, {"rank": 1, ...}
   ]
 }
-Pick the 5 candidates that best MATCH THE TOPIC and rank them by the criterion. IMPORTANT: prefer
+Pick the 5 candidates that best MATCH THE TOPIC. HOOK RULE (critical for retention -- a countdown
+lives or dies on its first 2 seconds): rank #5 is the FIRST clip the viewer sees after the cold-open
+teaser, so it MUST be the single most instantly eye-catching / high-action / "wait, WHAT?!" clip of
+the five -- the strongest opener, NOT the weakest. Rank #1 (shown last) stays the overall BEST payoff
+(the teaser promises it). Order the middle three (ranks #4 -> #2) by the criterion, ascending. So:
+pick the 5 best clips, put the best payoff at #1, put the most immediately gripping clip at #5, and
+rank the middle three by the criterion. IMPORTANT: prefer
 clips whose title shows the actual event the topic promises (for a "fails" topic pick real fails/
 accidents/mishaps -- someone falls, crashes, slips, things go wrong; avoid merely cute or calm clips
 unless nothing better exists). NEVER pick a clip whose title suggests death/injury, grief or tribute,

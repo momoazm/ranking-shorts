@@ -7,7 +7,7 @@ wants:
   * YouTube  : title (+#Shorts), description with the first few hashtags (YouTube surfaces the
                first 3 above the title), and a `tags` array (<=15, <=500 chars total).
   * TikTok   : one caption line + inline hashtags (~6-8; TikTok rewards a tight set).
-  * Instagram: caption + a hashtag block (up to 30, IG's hard cap for Reels).
+  * Instagram: caption + a TIGHT ~5-hashtag set (2026 Reels rewards a few relevant tags, not 30).
 
 Usage:
     python tools/build_captions.py --story .tmp/story.json [--playbook .tmp/playbook.json] \
@@ -22,12 +22,14 @@ import re
 
 from _common import emit, fail
 
-# Niche core — always present so even a bare run is well-tagged. Mix of broad Shorts/Reels
-# discovery tags and the channel's actual niche (AI-voiced Family Guy "brainrot" comedy Shorts).
+# Niche core — always present so even a bare run is well-tagged. Niche-correct tags FIRST
+# (faceless "ranking" Top-N countdown Shorts of funny clips / fails — see momo-actual-niche; the
+# old Family Guy/"brainrot" framing was dropped 2026-06-23), then broad short-form discovery tags.
+# Ordered niche-first so the per-platform caps below keep the relevant tags and drop the generics.
 CORE = [
-    "shorts", "youtubeshorts", "shortsfeed", "shortsvideo", "fyp", "foryou", "foryoupage",
-    "viral", "viralshorts", "trending", "funny", "comedy", "memes", "dankmemes",
-    "brainrot", "brainrotmemes", "aibrainrot", "ai", "aivoiceover", "relatable", "lol",
+    "ranking", "top5", "countdown", "funnyfails", "fails", "satisfying", "tierlist", "ranked",
+    "shorts", "youtubeshorts", "shortsfeed", "fyp", "foryou", "foryoupage",
+    "viral", "viralshorts", "trending", "funny", "comedy", "memes",
 ]
 
 
@@ -114,8 +116,10 @@ def main():
     tt_hashtags = dedupe(["fyp", "foryou"] + all_tags)[:8]
     tiktok_caption = f"{title} {hashtag_str(tt_hashtags)}".strip()
 
-    # Instagram Reels: caption + up to 30 hashtags.
-    ig_hashtags = dedupe(all_tags + ["reels", "reelsinstagram", "explore"])[:30]
+    # Instagram Reels: a TIGHT, niche-relevant set. Per the 2026 Reels ranking model, 3-5 relevant
+    # hashtags perform as well as 30 (IG classifies via caption text/audio/visuals now, not hashtag
+    # volume) -- so cap at 5 and keep the niche-first tags rather than padding with generics.
+    ig_hashtags = dedupe(all_tags + ["reels"])[:5]
     instagram_caption = f"{base_desc_clean}\n\n{hashtag_str(ig_hashtags)}".strip()
 
     result = {

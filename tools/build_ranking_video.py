@@ -161,7 +161,7 @@ def normalize(src, offset, dur, out, loop=0):
 GOLD = "&H0066D7FF&"   # ASS AABBGGRR -> bright gold (the active rank)
 
 
-def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text=""):
+def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text="", cta_dur=0.0, cta_text=""):
     head = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
         "[V4+ Styles]\n"
@@ -173,7 +173,10 @@ def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text=""):
         # Board: a COMPACT leaderboard down the left side -- top-anchored, fixed slots, #1 on top.
         "Style: Board,Arial,46,&H00FFFFFF,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,7,45,40,330,1\n"
         # Teaser: the cold-open hook -- big, centred, gold; only on screen during the teaser flash.
-        "Style: Teaser,Arial,90,&H0066D7FF&,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,7,4,5,80,80,0,1\n\n"
+        "Style: Teaser,Arial,90,&H0066D7FF&,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,7,4,5,80,80,0,1\n"
+        # CTA: a follow call-to-action end-card over the #1 payoff -- bold white, bottom-centre,
+        # lifted clear of the phone UI. VISUAL ONLY (no SFX, per the audio rule).
+        "Style: CTA,Arial,64,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,6,3,2,60,60,180,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
@@ -206,6 +209,16 @@ def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text=""):
         board = "\\N".join(lines)
         rows.append(f"Dialogue: 0,{ass_time(s['start'] + teaser_dur)},"
                     f"{ass_time(s['end'] + teaser_dur)},Board,,0,0,0,,{board}")
+    # Follow CTA end-card: a visual "follow" prompt over the #1 payoff on the final seconds.
+    # Clamped to the last (#1) clip so it never bleeds onto #2. Visual only -- no SFX (audio rule).
+    if cta_dur > 0 and cta_text and segments:
+        last_dur = segments[-1]["end"] - segments[-1]["start"]
+        eff = min(cta_dur, last_dur, total)
+        cs = max(0.0, total - eff)
+        rows.append(
+            f"Dialogue: 1,{ass_time(cs)},{ass_time(total)},CTA,,0,0,0,,"
+            # fade in + a quick scale-down pop so the follow prompt punches on the payoff.
+            "{\\fad(150,0)\\fscx120\\fscy120\\t(0,250,\\fscx100\\fscy100)}" + esc(cta_text)[:26])
     return head + "\n".join(rows) + "\n"
 
 
@@ -238,6 +251,13 @@ def main():
     ap.add_argument("--teaser-dur", type=float, default=1.2, help="Teaser length in seconds.")
     ap.add_argument("--teaser-text", default="WAIT FOR #1",
                     help="On-screen hook shown over the teaser flash.")
+    ap.add_argument("--cta", dest="cta", action="store_true", default=True,
+                    help="Visual follow CTA end-card over the #1 payoff (default ON; no SFX, "
+                         "per the audio rule -- purely on-screen text).")
+    ap.add_argument("--no-cta", dest="cta", action="store_false",
+                    help="Disable the follow CTA end-card.")
+    ap.add_argument("--cta-dur", type=float, default=2.5, help="CTA end-card length in seconds.")
+    ap.add_argument("--cta-text", default="FOLLOW FOR #1 DAILY", help="Follow CTA on-screen text.")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -329,7 +349,8 @@ def main():
     ass_path = os.path.join(TMPDIR, "overlay.ass")
     with open(ass_path, "w", encoding="utf-8") as f:
         f.write(build_overlay_ass(segments, title, total, teaser_dur,
-                                  args.teaser_text if teaser_dur > 0 else ""))
+                                  args.teaser_text if teaser_dur > 0 else "",
+                                  args.cta_dur if args.cta else 0.0, args.cta_text))
     ass_rel = os.path.relpath(ass_path, os.getcwd()).replace("\\", "/")
 
     # Intro swoosh removed (user rule, 2026-06-23): NO intro swoosh by default. It is only
