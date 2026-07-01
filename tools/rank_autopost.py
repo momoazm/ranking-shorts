@@ -15,6 +15,7 @@ Usage:
 import argparse
 import json
 import os
+import random
 import subprocess
 import sys
 import time
@@ -141,9 +142,9 @@ def main():
         daily_increment()
 
     # 1) figure out the genre (forced, or let the model pick) -> 2) for worldcup, PROBE which angle
-    # (fan/match) is actually sourceable BEFORE committing to a title -- fan clips are far scarcer
-    # than match clips on Reddit, so locking the angle blind (the old flow) kept silently dropping
-    # the World Cup theme because the chosen angle often turned out unsourceable after the fact.
+    # (fan/match/streamer) is actually sourceable BEFORE committing to a title -- supply per angle
+    # varies a lot on Reddit, so locking the angle blind (the old flow) kept silently dropping the
+    # World Cup theme because the chosen angle often turned out unsourceable after the fact.
     if args.force_genre == "worldcup":
         topic = {"genre": "worldcup"}   # defer the actual title/angle LLM call until angle is known
     elif args.force_genre:
@@ -155,18 +156,41 @@ def main():
     fallback_reason = None
 
     if topic.get("genre") == "worldcup":
-        _f, ferr = run_tool_safe("find_ranking_clips.py", ["--genre", "worldcup", "--max", "30", "--out", CANDS])
+        # Three angles now. fan/match share ONE football source pool; "streamer" (iShowSpeed/FaZe/
+        # Marlon etc. at the World Cup) has its OWN pool -- those clips aren't on the football feeds.
+        # Randomize which pool we try first so streamer videos get a fair share across runs instead of
+        # the abundant match angle always winning. Each probe leaves CANDS holding its own pool, so on
+        # the break CANDS already matches the chosen angle for the ranking step below.
+        groups = [("football", ["match", "fan"]), ("streamer", ["streamer"])]
+        random.shuffle(groups)   # match stays before fan within the football group (more abundant)
         chosen_angle = None
-        if not ferr:
-            for cand_angle in ("match", "fan"):   # match is the reliably abundant angle -- try it first
+        for pool, cand_angles in groups:
+            if pool == "streamer":
+                # Streamer clips come from YouTube search (on-theme + well-titled). Only viable on the
+                # self-hosted home runner; if YouTube is blocked/empty, fall back to the Reddit
+                # streamer subs before giving up on the angle.
+                _f, ferr = run_tool_safe("find_streamer_clips.py", ["--max", "30", "--out", CANDS])
+                if ferr:
+                    _f, ferr = run_tool_safe("find_ranking_clips.py",
+                                             ["--genre", "worldcup", "--angle", "streamer", "--max", "30", "--out", CANDS])
+            else:
+                _f, ferr = run_tool_safe("find_ranking_clips.py",
+                                         ["--genre", "worldcup", "--max", "30", "--out", CANDS])
+            if ferr:
+                continue   # this pool didn't source -- try the other group
+            for cand_angle in cand_angles:
                 probe, perr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--classify-angle", cand_angle])
                 if not perr and probe.get("count", 0) >= 5:
                     chosen_angle = cand_angle
                     break
-            if not chosen_angle:
-                # neither pure angle clears 5, but find_ranking_clips already guarantees >=5 total
-                # candidates exist -- stay on-theme with a "mixed" World Cup video instead of
-                # abandoning the theme entirely; that's a much smaller compromise than going generic.
+            if chosen_angle:
+                break
+        if not chosen_angle:
+            # No pure angle cleared 5 -> stay on-theme with a "mixed" World Cup video (needs only >=5
+            # total candidates, which find_ranking_clips guarantees). Re-source the football pool fresh
+            # so CANDS definitely holds it for the ranking step, whichever group ran last above.
+            _f, ferr = run_tool_safe("find_ranking_clips.py", ["--genre", "worldcup", "--max", "30", "--out", CANDS])
+            if not ferr:
                 chosen_angle = "mixed"
         if chosen_angle:
             topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "worldcup",

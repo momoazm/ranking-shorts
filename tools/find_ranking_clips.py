@@ -40,6 +40,12 @@ GENRE_SUBS = {
     # alongside funny clips, which the rank_clips.py safety instruction can't reliably screen out.
     "worldcup": ["WorldCup", "footballhighlights", "footy"],
 }
+
+# The worldcup "streamer" angle (iShowSpeed / FaZe / Marlon etc. at the World Cup) is NOT on the
+# football feeds -- those clips live on livestream-clip subs. Sourced only when
+# `--genre worldcup --angle streamer` is passed. r/LivestreamFail leads (huge, reliably v.redd.it-
+# hosted, covers every big streamer's WC moments); the creator subs are supply fallbacks.
+WORLDCUP_STREAMER_SUBS = ["LivestreamFail", "ishowspeed", "livestreamfails", "FaZeClan"]
 DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
 
 
@@ -97,6 +103,10 @@ def main():
     ap.add_argument("--genre", default=None, choices=list(GENRE_SUBS),
                     help="Pick subreddits for this genre (fails/cats/babies/dogs)")
     ap.add_argument("--subreddits", default=None, help="Comma-separated subreddits (overrides --genre)")
+    ap.add_argument("--angle", default=None,
+                    help="For --genre worldcup: 'streamer' pulls from livestream-clip subs "
+                         "(iShowSpeed/FaZe/livestream fails) instead of the football feeds. "
+                         "fan/match/mixed/unset all use the football feeds.")
     ap.add_argument("--period", default=None, choices=["day", "week", "month", "year", "all"],
                     help="Reddit top period (default: random week/month/year for variety)")
     ap.add_argument("--max", type=int, default=20, help="Max candidates to return")
@@ -112,6 +122,8 @@ def main():
     load_env()
     if args.subreddits:
         subs = [s.strip() for s in args.subreddits.split(",") if s.strip()]
+    elif args.genre == "worldcup" and args.angle == "streamer":
+        subs = list(WORLDCUP_STREAMER_SUBS)
     elif args.genre:
         subs = list(GENRE_SUBS[args.genre])
     else:

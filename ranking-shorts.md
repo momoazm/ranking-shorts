@@ -30,7 +30,11 @@ rank_topic → find_ranking_clips → rank_clips → build_ranking_video → bui
 
 - **`rank_topic.py`** — auto-picks a trending ranking topic/niche.
 - **`find_ranking_clips.py`** — pulls candidate clips from Reddit RSS (one feed request per run;
-  funny/wholesome subreddits per genre). yt-dlp downloads each post.
+  funny/wholesome subreddits per genre). yt-dlp downloads each post. While the 2026 World Cup is
+  live the pipeline is forced to the `worldcup` genre, which has **three angles** — `fan`
+  (crowd/stands), `match` (on-pitch action), and `streamer` (iShowSpeed / FaZe / Marlon etc. at the
+  World Cup, sourced from livestream-clip subs via `--angle streamer`). `rank_autopost.py`
+  randomizes which angle it tries each run, so all three rotate; falls back to `mixed` then `fails`.
 - **`rank_clips.py`** — the LLM ranks the best ~5 candidates and writes a short funny label per rank.
 - **`build_ranking_video.py`** — trims, fits to 9:16 over blurred fill, mixes original audio + music
   bed, burns the countdown/leaderboard overlay, assembles `.tmp/final.mp4`.

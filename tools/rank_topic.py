@@ -17,18 +17,21 @@ from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
 GENRES = ["fails", "cats", "babies", "dogs", "worldcup"]
-WORLDCUP_ANGLES = ["fan", "match"]   # the two LOCKABLE angles -- random.choice picks between these
+WORLDCUP_ANGLES = ["fan", "match", "streamer"]   # the LOCKABLE angles -- random.choice picks one
 WORLDCUP_ANGLE_CHOICES = WORLDCUP_ANGLES + ["mixed"]   # "mixed" = last-resort, no angle lock at all
 
 SCHEMA = """Return ONE JSON object with exactly these keys:
 {
   "genre": string,         // EXACTLY one of: fails, cats, babies, dogs, worldcup -- pick the MOST TRENDING/viral right now.
                            //   "worldcup" = World Cup clips, committed to ONE single angle (see "angle" below).
-  "angle": string,         // ONLY when genre is "worldcup": EXACTLY "fan" or "match" -- pick ONE, never mix:
+  "angle": string,         // ONLY when genre is "worldcup": EXACTLY "fan", "match", or "streamer" -- pick ONE, never mix:
                            //   - "fan": crowd/supporters only -- chants, celebrations, reactions in the stands.
                            //     No players, no match footage, no mascots/animals/unrelated novelty clips.
                            //   - "match": on-pitch action only -- goals, saves, skills, fouls, ref calls/VAR.
                            //     No crowd shots, no mascots/animals/unrelated novelty clips.
+                           //   - "streamer": famous streamers/creators (iShowSpeed, FaZe Clan, Marlon, etc.)
+                           //     reacting to / attending / playing football at the World Cup. No pure pro
+                           //     match footage, no generic crowd shots, no unrelated gaming/IRL clips.
                            //   For every other genre, leave this "" (empty string).
   "title": string,         // A CURIOSITY-GAP / emotional countdown title, English, <=70 chars. It must
                            //   still read as a Top-5 ranking but open a loop or promise a payoff -- do
@@ -38,8 +41,9 @@ SCHEMA = """Return ONE JSON object with exactly these keys:
                            //   - escalation: "These Dog Fails Get Worse Every Single Time"
                            //   - dare/relatable: "Top 5 Fails You Can't Watch Without Laughing"
                            //   When genre is "worldcup", the title must clearly reflect the chosen angle
-                           //   (e.g. "Top 5 Wildest World Cup Fan Reactions" or "Top 5 Most Insane World
-                           //   Cup Goals") -- never a title that implies both fans AND match action.
+                           //   (e.g. "Top 5 Wildest World Cup Fan Reactions", "Top 5 Most Insane World
+                           //   Cup Goals", or "Top 5 Streamer Meltdowns At The World Cup") -- never a
+                           //   title that mixes angles (e.g. fans AND match action).
   "criterion": string,     // what we're ranking by (e.g. "how hard it makes you laugh")
   "hook": string           // a 1-sentence opener for the description, written as a curiosity gap
 }
@@ -86,7 +90,7 @@ def main():
                           "doesn't commit to either (e.g. \"Top 5 Wildest World Cup Moments\").\n")
         else:
             angle_lock = (f"ANGLE IS FIXED to '{forced_angle}' for this run -- commit the title/criterion "
-                          f"fully to that single angle (no mixing fan + match content).\n")
+                          f"fully to that single angle (never mix fan / match / streamer content).\n")
     prompt = (f"{pb}{genre_lock}{angle_lock}NICHE STEER (optional): {args.niche or '(you choose the best topic)'}\n\n{SCHEMA}")
     try:
         out = llm_complete(prompt, system="You are a viral faceless-Shorts strategist who designs "
