@@ -5,9 +5,10 @@ name: ranking-shorts
 # datacenter IPs, so the download must happen from a residential IP -- same reason clipping-auto is
 # self-hosted. Steps use PowerShell (Windows PowerShell 5.1), not bash.
 on:
-  schedule:
-    - cron: "0 */4 * * *"      # every 4 hours -> 6 uploads/day (under YouTube's 10k/day quota)
-  workflow_dispatch: {}         # manual "Run workflow" button for testing
+  # Schedule removed: runs are now triggered on demand from the MOMO site button
+  # (Vercel /api/runner -> workflow_dispatch). The local runner-helper starts the
+  # self-hosted runner (C:\actions-runner-ranking) only when a job is queued.
+  workflow_dispatch: {}
 
 # NOTE: no `concurrency` group on purpose -- each slot should run independently (see git history).
 
