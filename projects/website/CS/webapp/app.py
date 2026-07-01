@@ -45,8 +45,11 @@ def _load_local_env():
         return
     here = Path(__file__).resolve()
     cs_root = here.parent.parent            # .../CS
-    shared = cs_root.parent / "API.env"     # repo-root shared keys
-    if shared.exists():
+    # The shared API.env lives at the repo root, which may be several levels
+    # above CS/ (e.g. .../claude code/API.env, not projects/website/API.env).
+    # Walk up and load the nearest one — same resolution as tools/_common.py.
+    shared = next((p / "API.env" for p in cs_root.parents if (p / "API.env").is_file()), None)
+    if shared:
         load_dotenv(shared)
     local = cs_root / ".env"
     if local.exists():

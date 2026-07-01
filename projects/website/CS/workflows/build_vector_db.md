@@ -70,4 +70,12 @@ Every tool prints exactly one JSON object to stdout (exit 0), or `{"error": ...}
   Gemini Developer API (single API key) — text, image, video, audio, PDF all map into
   one 3072-dim space, so no Vertex AI or caption step is needed. Confirmed from
   https://ai.google.dev/gemini-api/docs/embeddings.
+- _(2026-07-01)_ **Bug fixed:** `webapp/app.py` resolved the shared keys file as
+  `CS/../API.env` (`projects/website/API.env`), which doesn't exist — the real `API.env`
+  is at the repo root, several levels up. Locally this left `GEMINI_API_KEY` unset, so every
+  question failed with "GEMINI_API_KEY is not set" (and `api.py`, which imports `app.py`,
+  inherited it — the whole website backend was broken in local dev). Fixed `_load_local_env`
+  to walk up parents for the nearest `API.env`, matching `tools/_common.py`. Verified end to
+  end: ingest 3 text files → ask 4 questions → correct grounded answers, and an out-of-DB
+  question correctly returns "I don't have that information."
 - _(add notes here as you hit real rate limits, file-size quirks, or SDK changes)_
