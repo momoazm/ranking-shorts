@@ -8,7 +8,7 @@
     "youtube": "@Moemen-i2f6l"
   },
   "content_types": ["Faceless Top-N ranked-list Shorts (vertical, short)"],
-  "posting_cadence": "unknown — to confirm",
+  "posting_cadence": "no fixed schedule — rank_autopost.py runs on-demand (manual trigger), not a cron/daily cadence (confirmed from projects/ranking shorts/ranking-shorts.md, 2026-07-01). This is itself a gap vs. the 10M-views/90-day YPP Shorts threshold, which effectively requires daily+ volume.",
   "key_metrics": {
     "subscribers": "unknown (small/new channel; YouTube stats gated to scraping)",
     "avg_views": "unknown — to confirm",
@@ -24,5 +24,5 @@
     {"name": "Polar Ranks", "youtube": "(handle not confirmed)", "note": "MOMO's actual scale peer and the best small-channel format match found so far -- viral-clip ranking/comparison Shorts (slap moments, fails, ankle breaks, crashes). UNVERIFIED/secondhand: ~587K subs, ~312M views/30-days, ~$1.2M revenue/30-days, ~2 years old, 'most videos crossing a million views' -- all stated inside a third-party niche-roundup video (\"I Found 10 Hidden YouTube Shorts Niches for 2026\" by @AImaskman, https://www.youtube.com/watch?v=A0Ea1cyRU98, cited 2026-06-29), not a primary analytics source. Re-verify via Social Blade/vidIQ directly next run before treating as solid."},
     {"name": "Small/mid faceless Top-N countdown Shorts creators", "youtube": "(various, unconfirmed handles)", "note": "MOMO's broader scale-peer tier -- same #N countdown, vertical-first, no brand moat; live/die on hook + topic. Repeated targeted web searches (2026-06-29) for 'faceless Top-N/countdown Shorts channel' surfaced almost entirely generic 'how to start a faceless channel' advice/listicle content, not specific citable handles -- this sub-tier isn't well-indexed by web search (Polar Ranks above is the one exception found). Re-attempt discovery next run via direct YouTube Shorts-shelf browsing rather than web search. Win them on cold-open teaser, kinetic reveals, and curiosity-gap topics."}
   ],
-  "goals": "Make the ranking Shorts more viral and higher-quality, then expand to TikTok/Instagram. 'Exceeding' rivals = better hooks, higher retention, more views per Short, faster subscriber growth."
+  "goals": "Make the ranking Shorts more viral and higher-quality, then expand to TikTok/Instagram. 'Exceeding' rivals = better hooks, higher retention, more views per Short, faster subscriber growth. Binding monetization constraint (confirmed 2026-07-01): YPP Shorts path needs 1,000 subs + 10M public Shorts views in a trailing 90 days (source: https://miraflow.ai/blog/youtube-shorts-watch-time-2026-how-much-you-need). Community consensus (r/NewTubers, anecdotal) is this is realistically hit via a small number of viral breakout Shorts, not steady low-view daily posting -- prioritize hook/topic virality and posting volume together, not either alone."
 }
