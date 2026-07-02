@@ -120,10 +120,15 @@ Apply to every skill (don't restate these in each file — they live here):
 
 ## Current Capabilities
 - **Inline skills:** `send-email` (irreversible Gmail send, gate first);
-  `infographics` (branded infographic from a video's key points, HTML→PNG, emailed).
-- **Subagent slash wrappers** (`context: fork`, opt-in — see agent-builder.md): `improver`
-  (no description; forks into the `update` subagent; runs the `competitor-analysis` project's
-  combined IG + YouTube workflow).
+  `infographics` (branded infographic from a video's key points, HTML→PNG, emailed);
+  `playwright-cli` (drive a real browser — scrape/interact/screenshot/session-reuse; public
+  actions gated; leans on the Playwright SOP + follower-race tools as reference);
+  `ingest` (run the Momo-brain Ingest op — sNNN source node, typed edges, index + log);
+  `wrap` (session close-out — decision log, `/ingest`, README statuses, commit without push,
+  session summary).
+- **Subagent slash wrappers** (`context: fork`, opt-in — see agent-builder.md): none currently.
+  `update` (the `competitor-analysis` subagent) has no wrapper — invoke via natural language or
+  `@agent-update`.
 
 ## Important Notes
 - Always **read** an existing skill before editing it.

@@ -75,3 +75,36 @@ Created source [[s012-rag-fix-gumball-selftest]] and entity [[website-selftest-s
 [[gumball-companions]]. Fixed the [[cs-rag]] env-path bug in `app.py` (broke [[momo-website]]
 backend locally), added auto-populating Gumball mascots to the site (not deployed — preview
 first), and shipped a backend self-test skill. Test data wiped; index back to 0 vectors.
+
+## [2026-07-01] ingest | Follower-race → Instagram + Playwright + race polish + site button
+Created source [[s013-follower-race-instagram-playwright]]; enriched [[follower-race]] with
+Instagram/Playwright edges. Connected follower-race to IG end to end: **Zernio posts** from the
+cloud runner, **comment-replies + follower-list auto-sync run locally** via [[playwright-cli]] on
+a one-time saved IG session (`ig_login.py`). New local tools `reply_placements.py` (place replies)
+and `sync_followers.py` (followers modal → usernames+pfps → racer count). Polished race.html
+(leaderboard, finish zoom+flash, winner banner, snappier podium; determinism held) and added a
+"Run follower race" button to [[momo-website]]. Nothing posted/pushed — awaiting Moemen's go.
+
+## [2026-07-01] ingest | /playwright-cli inline skill
+Built the **`/playwright-cli`** inline skill (`.claude/skills/playwright-cli/`) — the action layer
+over the [[playwright-cli]] SOP (pick cheapest tool → save/reuse session → one JSON object → gate
+public actions), pointing at [[follower-race]]'s tools as reference implementations. Registered in
+root CLAUDE.md + skill-builder capabilities; enriched the [[playwright-cli]] concept with the
+`exposed as` / `powers` edges. Also: demo race video emailed to Moemen for review (not posted).
+
+## [2026-07-02] ingest | follower-race reply = top-level @mention
+Rewrote [[follower-race]]'s `reply_placements.py` `post_reply()` to post a **top-level @mention
+comment** (`@username You finished 2nd place! 🥈`) instead of a threaded per-comment reply —
+headless IG threaded-reply silently dropped posts / landed top-level anyway and throttled
+`the_followers_racer`. Pushed (f9fd4cc), still `--confirm`-gated. [[momo-website]] "Run follower
+race" button verified live on the multi-page site (pipelines.html + runner.py). See
+[[s014-follower-race-toplevel-mention-reply]] (supersedes the threaded approach in [[s013-follower-race-instagram-playwright]]).
+
+## [2026-07-02] ingest | CLAUDE.md overhaul + 4 core capabilities
+Root `CLAUDE.md` rewritten so **this brain is the canonical catalog** — project/skill lists are no
+longer restated there (they had drifted); navigate `index.md` → node → path. Built the
+most-sessions capability set: [[researcher-agent]] (sonnet, isolated web research → cited brief),
+[[runner-agent]] (haiku, tools run → parsed JSON only, irreversible scripts blocked),
+[[ingest-skill]] (`/ingest`, this op as a skill) and [[wrap-skill]] (`/wrap`, session close-out).
+Decision logged 2026-07-02; see [[s015-claudemd-overhaul-core-capabilities]]. Subagents load at
+session start — restart before first `researcher`/`runner` use.

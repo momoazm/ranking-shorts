@@ -157,8 +157,12 @@ Apply to every subagent (don't restate these in each file — they live here):
 ## Current Capabilities
 - **Subagents:** `update` (`sonnet`, `memory: project`) — runs the `competitor-analysis` project's
   combined Instagram-benchmarking + YouTube-channel-comparison workflow (the actual steps live in
-  `projects/competitor-analysis/workflows/competitor_analysis.md`, not in the agent body). This one
-  has an opt-in slash wrapper: `/improver` (`.claude/skills/improver/SKILL.md`, no description).
+  `projects/competitor-analysis/workflows/competitor_analysis.md`, not in the agent body);
+  `researcher` (`sonnet`) — isolated web research on the search/extract fallback chains,
+  returns a compact cited brief; `runner` (`haiku`) — runs a project's deterministic tools
+  (venv python, one-JSON-object contract) and returns only the parsed result + errors, with a
+  hard block on irreversible/public scripts. None have slash wrappers — invoke via natural
+  language or `@agent-<name>`.
 
 ## Important Notes
 - Always **read** an existing subagent before editing it.

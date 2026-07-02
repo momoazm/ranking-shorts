@@ -1,6 +1,6 @@
 ---
 type: index
-updated: 2026-07-01
+updated: 2026-07-02
 ---
 
 # Momo Brain — Index / Map
@@ -27,6 +27,10 @@ view** in Obsidian for the live map.
 - [[competitor-analysis]] — combined IG + YouTube competitor-benchmarking workflow, `update` subagent
 - [[infographics-skill]] — branded HTML→PNG infographic, emailed (inline skill)
 - [[send-email-skill]] — Gmail send step for flows (inline skill, confirm-before-send)
+- [[ingest-skill]] — `/ingest`: this brain's Ingest op as a one-command skill
+- [[wrap-skill]] — `/wrap`: session close-out (decisions → ingest → READMEs → commit, no push)
+- [[researcher-agent]] — isolated web research subagent (sonnet), returns a cited brief
+- [[runner-agent]] — runs project tools in isolation (haiku), returns parsed result only
 
 ## Concepts
 - [[wat-framework]] — Workflows / Agents / Tools build split *(stub)*
@@ -51,6 +55,9 @@ view** in Obsidian for the live map.
 - [[s010-playwright-cli]] — Playwright CLI installed globally, shared, token-frugal over MCP (2026-07-01)
 - [[s011-monetization-reach-fixes]] — YT+IG monetization pass; 3 reach fixes shipped to ranking-shorts (2026-07-01)
 - [[s012-rag-fix-gumball-selftest]] — RAG env-path bug fixed + gumball companions + website-selftest skill (2026-07-01)
+- [[s013-follower-race-instagram-playwright]] — follower-race → IG (Zernio post + Playwright replies/follower-sync), race polish, site button (2026-07-01)
+- [[s014-follower-race-toplevel-mention-reply]] — follower-race reply switched to reliable top-level @mention (threaded reply too flaky headless) (2026-07-02)
+- [[s015-claudemd-overhaul-core-capabilities]] — CLAUDE.md points to this brain as canonical catalog; +researcher/runner agents, /ingest + /wrap skills (2026-07-02)
 
 ## Comparisons
 - *(none yet)*
