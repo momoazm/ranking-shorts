@@ -3,7 +3,7 @@ type: source
 tags: [momo]
 updated: 2026-07-02
 ---
-# s016 — fable-workstyle rule + git backlog sweep
+# s017 — fable-workstyle rule + git backlog sweep
 
 Added [[fable-workstyle]] (`.claude/rules/fable-workstyle.md`, listed in root CLAUDE.md house
 rules) so Opus sessions keep Fable's operating discipline once Fable goes usage-credits-only.

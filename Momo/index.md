@@ -23,6 +23,7 @@ view** in Obsidian for the live map.
 - [[frontend-design-skill]] — anti-AI-slop frontend craft skill (website)
 - [[video-to-website-skill]] — video → scroll-driven site skill (website)
 - [[website-selftest-skill]] — backend health-check skill (RAG round-trip + `/api/*`)
+- [[site-update-skill]] — build→verify→push flow + architecture map for the MOMO site
 - [[gumball-companions]] — auto-populating Gumball mascots on the site *(stub)*
 - [[competitor-analysis]] — combined IG + YouTube competitor-benchmarking workflow, `update` subagent
 - [[infographics-skill]] — branded HTML→PNG infographic, emailed (inline skill)
@@ -59,7 +60,8 @@ view** in Obsidian for the live map.
 - [[s013-follower-race-instagram-playwright]] — follower-race → IG (Zernio post + Playwright replies/follower-sync), race polish, site button (2026-07-01)
 - [[s014-follower-race-toplevel-mention-reply]] — follower-race reply switched to reliable top-level @mention (threaded reply too flaky headless) (2026-07-02)
 - [[s015-claudemd-overhaul-core-capabilities]] — CLAUDE.md points to this brain as canonical catalog; +researcher/runner agents, /ingest + /wrap skills (2026-07-02)
-- [[s016-fable-workstyle-and-backlog-sweep]] — fable-workstyle house rule (Fable discipline on any model) + whole git backlog swept into tracked commits (2026-07-02)
+- [[s016-site-redesign-study-hub]] — momo-website → 5 pages, Gumball-only mascot, 9618 study hub; always-push rule for websites (2026-07-02)
+- [[s017-fable-workstyle-and-backlog-sweep]] — fable-workstyle house rule (Fable discipline on any model) + whole git backlog swept into tracked commits (2026-07-02)
 
 ## Comparisons
 - *(none yet)*

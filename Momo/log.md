@@ -115,4 +115,4 @@ discipline (execute-don't-ask, outcome-first, verify-before-done, token frugalit
 [[researcher-agent]]/[[runner-agent]]) made model-agnostic for the Opus era. Swept the entire
 uncommitted backlog into git (vault nodes, .claude skills/docs, [[follower-race]] + 3d-web
 gitlinks, runner-helper, [[website]] restructure, competitor/ research) so searches hit one
-coherent tracked tree. See [[s016-fable-workstyle-and-backlog-sweep]].
+coherent tracked tree. See [[s017-fable-workstyle-and-backlog-sweep]].
