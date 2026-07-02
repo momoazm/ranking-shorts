@@ -26,3 +26,11 @@ rule rather than inventing a fake "Top-N competitor" with numbers.
 re-scrape if the data is >1 run old (numbers shift slowly for legacy channels) or Moemen asks for
 fresh pulls. Keep trying to find concrete small-channel handles each run since that's the more
 directly competitive tier — but don't block the report on it.
+
+**Reconfirmed 2026-07-01:** re-ran multiple targeted searches ("Polar Ranks Social Blade",
+"faceless top 5 countdown Shorts channel viral", "countdown shorts channel case study") — still no
+citable handles for the small/mid scale-peer tier, including re-verifying "Polar Ranks" itself
+(Social Blade has several unrelated "Polar..." channels, none matching the third-party roundup's
+description). Don't keep burning searches on the exact same query phrasing each run — it's
+consistently unindexed. Next attempt should try a genuinely different method (e.g. browsing
+YouTube's Shorts shelf directly, or asking Moemen if he has channels he's already noticed).
