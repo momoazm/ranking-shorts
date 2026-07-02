@@ -22,3 +22,9 @@ GWS/
 CLAUDE.local.md
 .claude/settings.local.json
 node_modules/
+
+# Project MCP config (contains the 21st.dev key) — keep local
+.mcp.json
+
+# Obsidian workspace cache (per-machine UI state, constant churn)
+Momo/.obsidian/
