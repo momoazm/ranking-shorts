@@ -116,3 +116,18 @@ discipline (execute-don't-ask, outcome-first, verify-before-done, token frugalit
 uncommitted backlog into git (vault nodes, .claude skills/docs, [[follower-race]] + 3d-web
 gitlinks, runner-helper, [[website]] restructure, competitor/ research) so searches hit one
 coherent tracked tree. See [[s017-fable-workstyle-and-backlog-sweep]].
+
+## [2026-07-02] ingest | Site redesign: 5 pages, Gumball-only, 9618 study hub, always-push
+[[momo-website]] rebuilt as a 5-page site with a client-side 9618 **Study hub** and only the
+animated Gumball mascot ([[gumball-companions]] superseded) — see [[s016-site-redesign-study-hub]].
+New [[site-update-skill]] owns the build→verify→push flow. Rule change: website changes are now
+**always pushed** once verified (supersedes preview-before-push for sites only). Live via
+momoazm/CS `b44eebb`; 2 decisions appended to `decisions/log.md`.
+
+## [2026-07-02] ingest | Follower-race posts autonomously; improver = monetization-first, all channels
+[[follower-race]]'s review gate cleared on Moemen's go — cloud runs now build **and publish** to
+IG (was silently stopping at `awaiting_review`); real blocker was also fixed: catbox/0x0 refuse
+Actions IPs, so [[s018-follower-race-live-posting-improver-monetization]] adds tmpfiles/uguu hosts.
+Caption gains the follow-loop CTA + 5 hashtags. The improver ([[competitor-analysis]] SOP +
+[[update]] agent) now covers all 5 channel surfaces with an explicit Monetization lens; profile
+gains `owned_channels`. 1 decision appended to `decisions/log.md`.

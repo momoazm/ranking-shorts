@@ -17,14 +17,14 @@ view** in Obsidian for the live map.
 - [[clipping-auto]] — daily MrBeast-clip → Shorts pipeline
 - [[follower-race]] — Instagram marble-race automation
 - [[website]] — MOMO frontend (Vercel)
-- [[momo-website]] — "Knowledge Oracle" site (front-end to the RAG) + My Calendar feature
+- [[momo-website]] — 5-page MOMO site: Oracle (RAG), 9618 Study hub, Calendar, Pipelines
 - [[cs-rag]] — MOMO multimodal RAG / vector DB (Gemini embeddings + Pinecone)
 - [[pureblend]] — PURE BLEND scroll-driven 3D blender landing page (standalone repo)
 - [[frontend-design-skill]] — anti-AI-slop frontend craft skill (website)
 - [[video-to-website-skill]] — video → scroll-driven site skill (website)
 - [[website-selftest-skill]] — backend health-check skill (RAG round-trip + `/api/*`)
 - [[site-update-skill]] — build→verify→push flow + architecture map for the MOMO site
-- [[gumball-companions]] — auto-populating Gumball mascots on the site *(stub)*
+- [[gumball-companions]] — old 4-character auto-mascots *(stub — superseded by [[s016-site-redesign-study-hub]]: Gumball only)*
 - [[competitor-analysis]] — combined IG + YouTube competitor-benchmarking workflow, `update` subagent
 - [[infographics-skill]] — branded HTML→PNG infographic, emailed (inline skill)
 - [[send-email-skill]] — Gmail send step for flows (inline skill, confirm-before-send)
@@ -62,6 +62,7 @@ view** in Obsidian for the live map.
 - [[s015-claudemd-overhaul-core-capabilities]] — CLAUDE.md points to this brain as canonical catalog; +researcher/runner agents, /ingest + /wrap skills (2026-07-02)
 - [[s016-site-redesign-study-hub]] — momo-website → 5 pages, Gumball-only mascot, 9618 study hub; always-push rule for websites (2026-07-02)
 - [[s017-fable-workstyle-and-backlog-sweep]] — fable-workstyle house rule (Fable discipline on any model) + whole git backlog swept into tracked commits (2026-07-02)
+- [[s018-follower-race-live-posting-improver-monetization]] — follower-race gate cleared → autonomous IG posting; improver = monetization-first, all 5 channel surfaces (2026-07-02)
 
 ## Comparisons
 - *(none yet)*

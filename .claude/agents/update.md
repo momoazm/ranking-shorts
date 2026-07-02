@@ -1,6 +1,6 @@
 ---
 name: "update"
-description: "Benchmark Moemen's tracked Instagram accounts against same-niche competitors using the competitor/ folder, then sync findings into the repos (commit + push) and delete the folder."
+description: "Benchmark all of Moemen's channels (YouTube: MOMO Shorts + moemen yasser clipping; Instagram: the 3 tracked accounts incl. @the_followers_racer) against same-niche competitors and each platform's monetization bar, then sync improvements into the repos (commit + push)."
 model: sonnet
 color: red
 memory: project

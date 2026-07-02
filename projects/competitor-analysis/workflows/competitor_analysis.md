@@ -2,7 +2,30 @@
 
 Canonical step-by-step for the `competitor-analysis` project. Triggered via the `update` subagent
 (natural language or `@agent-update` — no slash wrapper). Covers **two platforms** in one
-workflow: Instagram (ranking-shorts accounts) and YouTube (MOMO Shorts channel).
+workflow, across **all of Moemen's channels**: Instagram (`@rank_ingshorts`, clipping-auto's
+second account, `@the_followers_racer`) and YouTube (the MOMO Shorts ranking channel **and** the
+"moemen yasser" clipping channel).
+
+## Monetization lens (apply to BOTH phases — this is the point of the exercise)
+
+Every comparison and every action item is weighted against the platform's monetization bar, not
+generic "quality" advice:
+
+- **YouTube (YPP Shorts path):** 1,000 subs + **10M public Shorts views in a trailing 90 days**
+  (fan-funding tier: 500 subs + 3M/90d). Community-confirmed reality: the bar is hit by a few
+  breakout-viral Shorts, not a steady low-view floor — so prioritize **hook strength + topic
+  virality + volume together**. (Sources cited in agent memory `youtube-monetization-framing`.)
+- **Instagram:** no fixed public threshold — monetization (bonuses/gifts/brandability) tracks
+  **reach + follower growth**, so weight follows-per-view and shares, not raw likes.
+- **The per-video levers that move retention** (what the Shorts/Reels feeds actually rank on):
+  hook in the first 0–2s, a pattern break every 1–3s, a loop-worthy payoff ending (video replays
+  cleanly), legible captions, ≤5 niche-true hashtags, and an explicit follow CTA. Score every
+  channel on these; map each gap to the pipeline file that controls it:
+  - ranking-shorts → `tools/rank_clips.py` (hook order), `tools/build_captions.py` (tags),
+    `tools/build_ranking_video.py` (end-card/loop)
+  - clipping-auto → `tools/select_clips.py` (hook/payoff selection), `tools/generate_hashtags.py`,
+    `config/caption_styles.json`
+  - follower-race → `run_daily.py` (caption/CTA), `sim/race.html` (pacing/finale)
 
 > Read this file before running the workflow. The `update` subagent (`.claude/agents/update.md`)
 > points here rather than restating these steps — keep this file as the single source of truth and
@@ -19,8 +42,10 @@ workflow: Instagram (ranking-shorts accounts) and YouTube (MOMO Shorts channel).
      (CSV, JSON, screenshots, markdown notes, etc.) and don't assume a fixed schema.
 
 2. **Identify Moemen's 3 Instagram accounts to compare.**
-   - Check `context/`, project READMEs, and `.claude` memory (e.g. `ranking-shorts-instagram.md`)
-     for the 3 tracked IG accounts (e.g. `@rank_ingshorts` and others on `clipping-auto`).
+   - The tracked set: **`@rank_ingshorts`** (ranking-shorts), the **second account on
+     `clipping-auto`** (same Meta System User token, different `IG_USER_ID`), and
+     **`@the_followers_racer`** (follower-race). Cross-check `context/`, project READMEs, and
+     `.claude` memory (e.g. `ranking-shorts-instagram.md`) in case the set changed.
    - If you can't confidently identify all 3, ask Moemen to confirm rather than guessing.
 
 3. **Run the comparison.**
@@ -54,11 +79,14 @@ workflow: Instagram (ranking-shorts accounts) and YouTube (MOMO Shorts channel).
 
 ---
 
-## Phase 2 — YouTube: compare MOMO's channel against rivals
+## Phase 2 — YouTube: compare MOMO's channels against rivals
 
 7. **Load the baseline.** Read `projects/competitor-analysis/momo-profile.json`. Resolve niche,
-   handle, known metrics, stated goals, and `named_competitors`. If the run is scoped to specific
-   channels (a focus argument), treat those as the comparison set and skip discovery (step 8).
+   handles, known metrics, stated goals, and `named_competitors` — the profile covers **both
+   owned YouTube channels** (MOMO Shorts ranking channel + the "moemen yasser" clipping channel;
+   see `owned_channels`); benchmark each against its own niche's rivals. If the run is scoped to
+   specific channels (a focus argument), treat those as the comparison set and skip discovery
+   (step 8).
 
 8. **Discover competitors** (skip if channels were named). Search for the top channels in MOMO's
    niche (faceless "ranking" Top-N Shorts), e.g. `"best faceless ranking Shorts channels YouTube"`,
@@ -79,7 +107,8 @@ workflow: Instagram (ranking-shorts accounts) and YouTube (MOMO Shorts channel).
     actually drive ranking-Short performance: hook (first 1–2s), list structure & pacing, on-screen
     text/captions, thumbnail & title, audio, topic selection, cadence & consistency. For every
     dimension a rival leads, record the gap, the evidence (source), and a concrete move for MOMO to
-    match then exceed it.
+    match then exceed it. **Weight everything per the Monetization lens above** — an action that
+    doesn't plausibly move views/90d, retention, or follows is a footnote, not a recommendation.
 
 11. **Write the YouTube comparison in chat** (Markdown), in this order: bottom line (2–3 biggest
     opportunities, stated as actions) → competitor set table (`Channel | Subs | Avg views | Cadence

@@ -1,5 +1,9 @@
 {
   "_comment": "MOMO's baseline for the compare-youtube-channels skill. Niche is canonical per context/work.md (faceless ranking Shorts). Keep handles/metrics/named_competitors current as you learn them. YouTube channel stats are gated to scraping, so 'unknown' is honest — fill only what you can cite.",
+  "owned_channels": [
+    {"name": "MOMO Shorts", "youtube": "@Moemen-i2f6l", "project": "projects/ranking shorts", "niche": "faceless ranking / Top-N list Shorts", "note": "primary channel — the rest of this profile describes it"},
+    {"name": "moemen yasser", "youtube": "(handle unconfirmed — confirm from clipping-auto's token/channel next run)", "project": "projects/clipping-auto", "niche": "creator-clip Shorts (auto-clipped MrBeast videos, word-highlight captions)", "note": "benchmark against top clipping accounts, not the ranking-Shorts set"}
+  ],
   "channel_name": "MOMO Shorts",
   "one_liner": "Faceless YouTube Shorts — 'ranking' (Top-N ranked-list) videos",
   "niche": "Faceless ranking / Top-N list Shorts (entertainment, fast-paced)",

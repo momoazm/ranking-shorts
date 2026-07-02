@@ -22,9 +22,11 @@ Rules: [README.md](../../projects/follower-race/README.md).
 A newer/standalone format distinct from the ranking-Shorts engine — interactive, follower-driven
 engagement content for Instagram.
 
-## Live on Instagram (2026-07-01, [[s013]])
-- **posts to** IG **via** Zernio from the cloud runner; **replies to commenters** with their
-  finish place **via** [[playwright-cli]] locally (saved IG session — no reply API exists).
+## Live on Instagram (2026-07-01, [[s013]]; autonomous since 2026-07-02, [[s018-follower-race-live-posting-improver-monetization]])
+- **posts to** IG **via** Zernio from the cloud runner — **manual review gate CLEARED**: every
+  run builds + publishes directly (no review email); caption = follow-loop CTA + 5 niche hashtags.
+- **replies to commenters** with their finish place **via** [[playwright-cli]] locally
+  (saved IG session — no reply API exists).
 - **follower list auto-synced** (`sync_followers.py`) from the logged-in followers modal → its
   length **is** the racer count; pfps cached for real-photo marbles.
 - viral polish: leaderboard HUD, finish zoom + flash, winner banner, snappier podium.
