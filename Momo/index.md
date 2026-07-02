@@ -41,6 +41,7 @@ view** in Obsidian for the live map.
 - [[agent-teams]] — multi-instance Claude Code coordination, explicit-request-only
 - [[21st-dev-magic]] — required 21st.dev Magic on every website build
 - [[playwright-cli]] — shared browser-automation CLI (chosen over MCP to save tokens)
+- [[fable-workstyle]] — model-agnostic operating discipline rule (Fable behavior on Opus)
 
 ## Sources
 - [[s001-claude-code-workspace]] — seed ingest of the whole repo (2026-06-28)
@@ -58,6 +59,7 @@ view** in Obsidian for the live map.
 - [[s013-follower-race-instagram-playwright]] — follower-race → IG (Zernio post + Playwright replies/follower-sync), race polish, site button (2026-07-01)
 - [[s014-follower-race-toplevel-mention-reply]] — follower-race reply switched to reliable top-level @mention (threaded reply too flaky headless) (2026-07-02)
 - [[s015-claudemd-overhaul-core-capabilities]] — CLAUDE.md points to this brain as canonical catalog; +researcher/runner agents, /ingest + /wrap skills (2026-07-02)
+- [[s016-fable-workstyle-and-backlog-sweep]] — fable-workstyle house rule (Fable discipline on any model) + whole git backlog swept into tracked commits (2026-07-02)
 
 ## Comparisons
 - *(none yet)*
