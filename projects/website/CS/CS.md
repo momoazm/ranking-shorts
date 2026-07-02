@@ -3,6 +3,12 @@
 This is a **WAT project** (Workflows, Agents, Tools) — see the repo-root `CLAUDE.md`
 for the framework philosophy. This file covers what's specific to `CS/`.
 
+> **This folder is the RAG CLI + webapp only — NOT the deployed website.** The live MOMO
+> site deploys from the **`momoazm/CS`** repo (clone at `c:/Users/monar/Downloads/CS-deploy`):
+> edit `website/index.html` + `api/*.py` there and push. The old stale site copy that used to
+> sit here (`index.html`, `api/`, `vercel.json`) was archived to
+> `archives/website-CS-stale-frontend/` on 2026-07-01. See the `website-deploy-setup` memory.
+
 ## What this project does
 
 A **multimodal vector database**: embed text, images, and video with Google's

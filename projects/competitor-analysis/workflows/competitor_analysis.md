@@ -1,7 +1,7 @@
 # Competitor Analysis — Workflow SOP
 
-Canonical step-by-step for the `competitor-analysis` project. Triggered via `/improver` (the
-project's skill wrapper, which forks into the `update` subagent). Covers **two platforms** in one
+Canonical step-by-step for the `competitor-analysis` project. Triggered via the `update` subagent
+(natural language or `@agent-update` — no slash wrapper). Covers **two platforms** in one
 workflow: Instagram (ranking-shorts accounts) and YouTube (MOMO Shorts channel).
 
 > Read this file before running the workflow. The `update` subagent (`.claude/agents/update.md`)

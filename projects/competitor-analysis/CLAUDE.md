@@ -22,12 +22,10 @@ anything**; it owns the canonical step sequence for both phases and a "Lessons l
 ## Agents & invocation
 - **Agent:** `.claude/agents/update.md` (`model: sonnet`, `memory: project`) — does the actual
   work, orchestrated by reading this project's workflow SOP rather than duplicating it.
-- **Slash entry point:** `.claude/skills/improver/SKILL.md` (`context: fork` → `agent: update`).
-  Run `/improver` to kick off the full combined workflow. (Named `improver`, not `update` — the
-  original `/update` skill didn't trigger for the user; renamed and re-verified. See
+- **No slash wrapper.** Invoke via natural language ("use the update subagent to benchmark
+  competitors") or `@agent-update`, per the platform's normal subagent invocation rules. (The
+  project briefly had a `/improver` skill wrapper for this; removed 2026-06-29 — see
   `decisions/log.md`.)
-- Natural language ("use the update subagent to benchmark competitors") and `@agent-update` also
-  work, per the platform's normal subagent invocation rules.
 
 ## Hard rules specific to this project
 - **Don't fabricate competitor data or metrics** on either platform — thin sourcing is expected

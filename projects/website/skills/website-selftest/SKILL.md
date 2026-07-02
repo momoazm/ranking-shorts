@@ -57,3 +57,7 @@ section has an `ok` boolean plus a `detail`/`error` explaining any failure.
 - _(2026-07-01)_ Created after a real bug: `webapp/app.py` resolved the shared
   `API.env` to the wrong path, so every question failed with "GEMINI_API_KEY is not
   set" locally. A backend self-test catches that class of regression instantly.
+- _(2026-07-02)_ The site is now **multi-page** (index/oracle/study/calendar/pipelines) and
+  `CS/webapp/api.py` mounts the whole `website/` dir. The deploy clone is
+  `C:\Users\monar\Downloads\CS-deploy` — if you serve locally to test `/api/*`, serve from
+  there so you're testing what actually ships. Frontend flow lives in the `site-update` skill.

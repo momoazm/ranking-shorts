@@ -110,6 +110,33 @@
       z-index:60; pointer-events:none; transition:opacity .25s ease, transform .25s ease; box-shadow:0 10px 30px -8px rgba(0,0,0,.7); }
     .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
 
+    /* animated badge buttons (Run my pipelines) — rotating conic-gradient border, MOMO gold.
+       Craft adapted from 21st.dev be-ui-animated-badge (@starc007). */
+    @property --abadge-angle { syntax:'<angle>'; inherits:false; initial-value:0deg; }
+    .abadge { position:relative; display:inline-flex; align-items:center; gap:.55rem;
+      font-family:'Poppins',sans-serif; font-weight:600; font-size:.85rem; color:#F2E9D8;
+      padding:.62rem 1.25rem; border:2px solid transparent; border-radius:999px; cursor:pointer;
+      background:
+        linear-gradient(#0B1828,#0B1828) padding-box,
+        conic-gradient(from var(--abadge-angle), #ECD27E, #D4AF37 25%, #9C7C28 50%, #D4AF37 75%, #ECD27E) border-box;
+      animation:abadge-rotate 4s linear infinite;
+      transition:transform .15s ease, filter .15s ease; }
+    .abadge:hover:not(:disabled) { transform:translateY(-2px); filter:brightness(1.08); }
+    .abadge:active:not(:disabled) { transform:translateY(0); }
+    .abadge:focus-visible { outline:2px solid #ECD27E; outline-offset:2px; }
+    .abadge:disabled { cursor:not-allowed; }
+    @keyframes abadge-rotate { to { --abadge-angle:360deg; } }
+    .abadge-dot { width:8px; height:8px; border-radius:50%; background:#ECD27E; box-shadow:0 0 8px #D4AF37; flex-shrink:0; }
+    /* running */
+    .abadge.is-running { animation-duration:1.3s; }
+    .abadge.is-running .abadge-dot { background:#7CE0B0; box-shadow:0 0 9px #28C07E; animation:abadge-pulse 1s ease-in-out infinite; }
+    @keyframes abadge-pulse { 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.45; transform:scale(.65);} }
+    /* busy / locked-out */
+    .abadge.is-disabled { animation:none; color:#6f879a;
+      background:linear-gradient(#0A1422,#0A1422) padding-box, linear-gradient(#243645,#243645) border-box; }
+    .abadge.is-disabled .abadge-dot { background:#5f7588; box-shadow:none; animation:none; }
+    @media (prefers-reduced-motion: reduce){ .abadge{ animation:none !important; } }
+
     /* hero character (Gumball) */
     .hero-char { position:absolute; top:0; right:0; bottom:0; width:50%; max-width:380px; z-index:0; overflow:hidden; border-radius:0 16px 16px 0; pointer-events:none; }
     .hero-char svg { position:absolute; right:-12%; bottom:-8%; height:122%; width:auto; }
@@ -272,6 +299,43 @@
             <button id="calRefresh" class="btn btn-ghost text-xs">Refresh</button>
           </div>
           <div id="calList"><p class="mono text-xs text-muted">Unlock to load your events.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== RUN MY PIPELINES (private) ===== -->
+    <section id="runSec" class="card p-6 mt-6">
+      <h2 class="section mb-1">Run my pipelines <span class="mono text-[.6rem] text-muted normal-case tracking-normal">· private</span></h2>
+      <p class="text-sm text-muted mb-4">Trigger a video pipeline on demand — it spins up your runner, makes one video, then shuts the runner down. A badge is disabled while its pipeline is already running.</p>
+
+      <div id="runMsg" class="mono text-xs text-gold-l mt-2" style="min-height:1rem;"></div>
+
+      <!-- panel -->
+      <div id="runTool" class="mt-5 grid gap-5" style="grid-template-columns:1fr 1fr;">
+        <!-- ranking -->
+        <div class="card-2 p-5" data-repo="ranking">
+          <div class="flex items-center justify-between mb-1">
+            <div class="eyebrow">Ranking Shorts</div>
+            <span class="run-last mono text-[.6rem] text-muted"></span>
+          </div>
+          <p class="text-xs text-muted mb-4">A #5→#1 ranking Short → YouTube + Instagram.</p>
+          <button class="abadge" data-run="ranking" type="button">
+            <span class="abadge-dot"></span><span class="abadge-label">Run ranking short</span>
+          </button>
+        </div>
+        <!-- clipping -->
+        <div class="card-2 p-5" data-repo="clipping">
+          <div class="flex items-center justify-between mb-1">
+            <div class="eyebrow">MrBeast Clipping</div>
+            <span class="run-last mono text-[.6rem] text-muted"></span>
+          </div>
+          <p class="text-xs text-muted mb-3">Daily clips → YouTube + Instagram.</p>
+          <label class="flex items-center gap-2 mono text-[.62rem] text-muted mb-3 cursor-pointer select-none">
+            <input type="checkbox" id="clipDry" style="accent-color:#D4AF37;" /> dry run (build clips, don't upload)
+          </label>
+          <button class="abadge" data-run="clipping" type="button">
+            <span class="abadge-dot"></span><span class="abadge-label">Run clipping</span>
+          </button>
         </div>
       </div>
     </section>
@@ -698,6 +762,84 @@
     $('#calSave').addEventListener('click', save);
     $('#calCancel').addEventListener('click', resetForm);
     $('#calRefresh').addEventListener('click', load);
+  })();
+  </script>
+
+  <!-- ===== Run my pipelines (private) — talks to /api/runner ===== -->
+  <script>
+  (function(){
+    const $ = s => document.querySelector(s);
+    const API = (location.protocol.startsWith('http') ? location.origin : '') + '/api/runner';
+    const REPOS = ['ranking', 'clipping'];
+    const BASE_LABEL = { ranking:'Run ranking short', clipping:'Run clipping' };
+    const timers = {};
+
+    function setMsg(t, isErr){ const m=$('#runMsg'); m.textContent=t||''; m.style.color = isErr ? '#D26B66' : '#ECD27E'; }
+    const badge  = repo => document.querySelector('.abadge[data-run="'+repo+'"]');
+    const lastEl = repo => document.querySelector('[data-repo="'+repo+'"] .run-last');
+
+    async function apiGet(repo){
+      const r = await fetch(API+'?repo='+encodeURIComponent(repo), { cache:'no-store' });
+      let j; try { j = await r.json(); } catch(_){ j = { error:'Bad server response ('+r.status+')' }; }
+      if (!r.ok || j.error) throw new Error(j.error || ('HTTP '+r.status));
+      return j;
+    }
+    async function apiPost(body){
+      const r = await fetch(API, { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(body) });
+      let j; try { j = await r.json(); } catch(_){ j = { error:'Bad server response ('+r.status+')' }; }
+      if (!r.ok || j.error) throw new Error(j.error || ('HTTP '+r.status));
+      return j;
+    }
+
+    function fmtAgo(iso){
+      if (!iso) return '';
+      const s = (Date.now() - new Date(iso)) / 1000;
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s/60)+'m ago';
+      if (s < 86400) return Math.floor(s/3600)+'h ago';
+      return Math.floor(s/86400)+'d ago';
+    }
+
+    function render(repo, st){
+      const b = badge(repo), lbl = b.querySelector('.abadge-label'), el = lastEl(repo);
+      b.classList.remove('is-running','is-disabled');
+      if (st.running){ b.classList.add('is-running'); b.disabled = true; lbl.textContent = 'Running…'; }
+      else { b.disabled = false; lbl.textContent = BASE_LABEL[repo]; }
+      const last = st.last;
+      if (st.running){ el.textContent = 'running now…'; el.style.color = '#ECD27E'; }
+      else if (last){
+        const concl = last.conclusion || last.status || '—';
+        el.textContent = 'last: ' + concl + (last.created_at ? ' · '+fmtAgo(last.created_at) : '');
+        el.style.color = (concl === 'failure') ? '#D26B66' : '#8AA0B2';
+      } else el.textContent = '';
+    }
+
+    async function refresh(repo){
+      try {
+        const st = await apiGet(repo);
+        render(repo, st);
+        clearTimeout(timers[repo]);
+        if (st.running) timers[repo] = setTimeout(() => refresh(repo), 10000);  // poll while running
+      } catch(e){ setMsg(e.message, true); }
+    }
+
+    async function run(repo){
+      const b = badge(repo);
+      if (b.disabled) return;
+      b.disabled = true; setMsg('Dispatching '+repo+'…');
+      try {
+        const body = { repo };
+        if (repo === 'clipping' && $('#clipDry') && $('#clipDry').checked) body.dry_run = true;
+        await apiPost(body);
+        setMsg(repo + ' started — your runner will spin up and make the video.');
+        render(repo, { running:true, last:null });
+        clearTimeout(timers[repo]); timers[repo] = setTimeout(() => refresh(repo), 6000);
+      } catch(e){ setMsg(e.message, true); b.disabled = false; }
+    }
+
+    document.querySelectorAll('.abadge[data-run]').forEach(b => b.addEventListener('click', () => run(b.dataset.run)));
+    REPOS.forEach(refresh);
   })();
   </script>
 </body>
