@@ -39,6 +39,9 @@ def main():
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
+    proxy = os.environ.get("YTDLP_PROXY")   # datacenter-IP runners: route via WARP/residential proxy
+    if proxy:
+        opts["proxy"] = proxy
 
     try:
         from yt_dlp import YoutubeDL

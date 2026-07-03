@@ -56,6 +56,9 @@ def main():
         "no_warnings": True,
         "overwrites": True,
     }
+    proxy = os.environ.get("YTDLP_PROXY")   # datacenter-IP runners: route via WARP/residential proxy
+    if proxy:
+        opts["proxy"] = proxy
 
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:

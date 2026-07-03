@@ -162,15 +162,22 @@ def main():
         # the abundant match angle always winning. Each probe leaves CANDS holding its own pool, so on
         # the break CANDS already matches the chosen angle for the ranking step below.
         groups = [("football", ["match", "fan"]), ("streamer", ["streamer"])]
+        # On GitHub-hosted (datacenter-IP) runners Reddit's v.redd.it CDN 403-blocks every
+        # download path (probed 2026-07-03: plain IP, WARP proxy, direct DASH files -- all
+        # blocked; only YouTube works, via YTDLP_PROXY/WARP). NO_REDDIT_SOURCES=1 restricts
+        # sourcing to the YouTube streamer pool so cloud runs never pick clips they can't
+        # actually download. Unset it (or set a residential YTDLP_PROXY) to restore Reddit.
+        no_reddit = os.environ.get("NO_REDDIT_SOURCES") == "1"
+        if no_reddit:
+            groups = [g for g in groups if g[0] == "streamer"]
         random.shuffle(groups)   # match stays before fan within the football group (more abundant)
         chosen_angle = None
         for pool, cand_angles in groups:
             if pool == "streamer":
-                # Streamer clips come from YouTube search (on-theme + well-titled). Only viable on the
-                # self-hosted home runner; if YouTube is blocked/empty, fall back to the Reddit
-                # streamer subs before giving up on the angle.
+                # Streamer clips come from YouTube search (on-theme + well-titled). If YouTube is
+                # blocked/empty, fall back to the Reddit streamer subs before giving up on the angle.
                 _f, ferr = run_tool_safe("find_streamer_clips.py", ["--max", "30", "--out", CANDS])
-                if ferr:
+                if ferr and not no_reddit:
                     _f, ferr = run_tool_safe("find_ranking_clips.py",
                                              ["--genre", "worldcup", "--angle", "streamer", "--max", "30", "--out", CANDS])
             else:
@@ -185,10 +192,12 @@ def main():
                     break
             if chosen_angle:
                 break
-        if not chosen_angle:
+        if not chosen_angle and not no_reddit:
             # No pure angle cleared 5 -> stay on-theme with a "mixed" World Cup video (needs only >=5
             # total candidates, which find_ranking_clips guarantees). Re-source the football pool fresh
             # so CANDS definitely holds it for the ranking step, whichever group ran last above.
+            # (Skipped under NO_REDDIT_SOURCES -- this pool downloads from v.redd.it, which the
+            # cloud runner can't reach; better to fail loudly than build a video with 0 clips.)
             _f, ferr = run_tool_safe("find_ranking_clips.py", ["--genre", "worldcup", "--max", "30", "--out", CANDS])
             if not ferr:
                 chosen_angle = "mixed"
@@ -209,14 +218,21 @@ def main():
         elif ferr:
             raise RuntimeError(ferr)
 
+    # The generic-"fails" rescue pool is Reddit-sourced; under NO_REDDIT_SOURCES those
+    # downloads are guaranteed 403s, so fail the run loudly instead of building a dud pool.
+    no_reddit_rescue = os.environ.get("NO_REDDIT_SOURCES") == "1"
+
     if fallback_reason:
+        if no_reddit_rescue:
+            raise RuntimeError(f"{fallback_reason} (and the Reddit 'fails' rescue pool is "
+                               "disabled by NO_REDDIT_SOURCES on this runner)")
         # couldn't source/fit the requested theme -> regenerate a generic "fails" topic to match
         print(f"::warning::{fallback_reason}", file=sys.stderr)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
 
     _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
-    if rerr and topic.get("genre") != "fails":
+    if rerr and topic.get("genre") != "fails" and not no_reddit_rescue:
         # last-resort safety net (e.g. re-classification flake right after the probe confirmed
         # enough candidates) -- drop the theme for this run rather than crash
         fallback_reason = fallback_reason or f"rank_clips({requested_genre}): {rerr}"

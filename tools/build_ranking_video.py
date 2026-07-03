@@ -52,6 +52,13 @@ def _ydl_opts(out_base, fmt, player_client=None):
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
+    # Cloud runners have datacenter IPs that YouTube bot-checks; route yt-dlp (and only
+    # yt-dlp) through a proxy when one is provided (e.g. WARP's local SOCKS on the
+    # GitHub-hosted runner, or a residential proxy URL). ffmpeg can't speak SOCKS, so
+    # never combine this with ffmpeg-side downloading (range/section cuts).
+    proxy = os.environ.get("YTDLP_PROXY")
+    if proxy:
+        opts["proxy"] = proxy
     return opts
 
 

@@ -1,34 +1,68 @@
 name: ranking-shorts
 
-# Builds & posts a #5->#1 RANKING Short (funny clips pulled from Reddit video posts, WITH their
-# own audio) on a SELF-HOSTED runner (your PC). Reddit's v.redd.it CDN 403-blocks GitHub's cloud
-# datacenter IPs, so the download must happen from a residential IP -- same reason clipping-auto is
-# self-hosted. Steps use PowerShell (Windows PowerShell 5.1), not bash.
+# Builds & posts a #5->#1 RANKING Short on a GitHub-hosted Ubuntu runner -- no laptop /
+# self-hosted runner needed.
+#
+# Sourcing on cloud IPs (probed 2026-07-03):
+#   - YouTube: bot-checks datacenter IPs, but works through Cloudflare WARP's free local
+#     SOCKS proxy (YTDLP_PROXY below).
+#   - Reddit (v.redd.it): 403-blocks EVERY cloud path (plain IP, WARP, direct DASH files),
+#     so NO_REDDIT_SOURCES=1 restricts sourcing to the YouTube "streamer" pool. Adding a
+#     paid residential proxy later = set YTDLP_PROXY to its URL and drop NO_REDDIT_SOURCES.
+#
+# Exact-time posting: GitHub cron can drift 5-30+ min, so each cron fires ~40 min EARLY
+# and the "Hold until slot" step sleeps until the exact slot minute.
+
 on:
-  # Schedule removed: runs are now triggered on demand from the MOMO site button
-  # (Vercel /api/runner -> workflow_dispatch). The local runner-helper starts the
-  # self-hosted runner (C:\actions-runner-ranking) only when a job is queued.
-  workflow_dispatch: {}
+  schedule:
+    # Fires at :50 the hour before each slot; the hold step releases at exactly
+    # 02:30 / 11:30 / 14:30 / 17:30 / 20:30 / 23:30 UTC -> 6 uploads/day hitting the
+    # US morning / lunch / afternoon / evening windows (UTC-4 in July).
+    - cron: "50 1,10,13,16,19,22 * * *"
+  workflow_dispatch:      # manual "Run workflow" button (from the MOMO site) -- runs immediately
+    inputs:
+      no_upload:
+        description: "Test run (build the Short but do NOT publish anywhere)"
+        type: boolean
+        default: false
 
 # NOTE: no `concurrency` group on purpose -- each slot should run independently (see git history).
 
 permissions:
-  contents: read
-
-defaults:
-  run:
-    shell: powershell
+  contents: write   # weekly keepalive commit (public repos lose schedules after 60 idle days)
 
 jobs:
   post:
-    runs-on: self-hosted
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-        with:
-          clean: false   # keep .venv / state between runs for speed + no-repeat memory
 
-      # Persist the used-clip history across runs so the same Reddit clips aren't repeated.
+      - name: Hold until the exact slot time (scheduled runs only)
+        if: github.event_name == 'schedule'
+        run: |
+          python3 - <<'EOF'
+          # GitHub cron fires early on purpose (and drifts); pin the real start to the slot.
+          import datetime, time
+          SLOTS_UTC = ["02:30", "11:30", "14:30", "17:30", "20:30", "23:30"]
+          now = datetime.datetime.now(datetime.timezone.utc)
+          waits = []
+          for s in SLOTS_UTC:
+              h, m = map(int, s.split(":"))
+              t = now.replace(hour=h, minute=m, second=0, microsecond=0)
+              for d in (0, 1):
+                  delta = (t + datetime.timedelta(days=d) - now).total_seconds()
+                  if 0 <= delta <= 55 * 60:
+                      waits.append(delta)
+          if waits:
+              w = min(waits)
+              print(f"Sleeping {w:.0f}s until the exact slot...")
+              time.sleep(w)
+          else:
+              print("Cron fired past the slot; running immediately.")
+          EOF
+
+      # Persist the used-clip history across runs so the same clips aren't repeated.
       - name: Restore used-clip history
         uses: actions/cache@v4
         with:
@@ -37,32 +71,40 @@ jobs:
           restore-keys: |
             used-clips-
 
-      - name: Python venv + deps
-        run: |
-          if (-not (Test-Path ".venv")) { python -m venv .venv }
-          $py = Join-Path (Get-Location) ".venv\Scripts\python.exe"
-          Invoke-Expression "& '$py' -m pip install --upgrade pip"
-          Invoke-Expression "& '$py' -m pip install -r requirements.txt"
-          if ($LASTEXITCODE -ne 0) {
-            # faster-whisper (ctranslate2) has no wheels on some Python versions (e.g. 3.14).
-            # The RANKING pipeline never needs it, so fall back to the ranking-critical subset.
-            Write-Host "::warning::full requirements failed; installing the ranking-critical subset (no faster-whisper)"
-            Invoke-Expression "& '$py' -m pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp"
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-          }
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
 
-      - name: Ensure full ffmpeg on PATH
-        # Need a real ffmpeg (libass for the burned leaderboard overlay). Prefer a PATH binary,
-        # else the winget Gyan build, else fail loudly.
+      - name: System deps (ffmpeg w/ libass for the burned leaderboard overlay)
         run: |
-          $ff = (Get-Command ffmpeg -ErrorAction SilentlyContinue).Source
-          if (-not $ff) {
-            $c = Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter ffmpeg.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($c) { $ff = $c.FullName }
-          }
-          if (-not $ff) { Write-Host "::error::ffmpeg not found. Install it: winget install Gyan.FFmpeg"; exit 1 }
-          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path $ff)
-          Write-Host "Using ffmpeg: $ff"
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-liberation
+
+      - name: Python deps
+        run: |
+          pip install --upgrade pip
+          if ! pip install -r requirements.txt; then
+            # faster-whisper (ctranslate2) has no wheels on some Python versions.
+            # The RANKING pipeline never needs it, so fall back to the ranking-critical subset.
+            echo "::warning::full requirements failed; installing the ranking-critical subset (no faster-whisper)"
+            pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
+          fi
+          # YouTube breaks old yt-dlp builds constantly; force the latest every run.
+          pip install --upgrade yt-dlp
+
+      - name: Start Cloudflare WARP (SOCKS proxy for yt-dlp egress)
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq cloudflare-warp
+          for i in 1 2 3 4; do
+            warp-cli --accept-tos registration new && break || sleep 15
+          done
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos connect
+          sleep 5
+          warp-cli --accept-tos status
 
       - name: Reconstruct secrets (never committed)
         env:
@@ -81,53 +123,49 @@ jobs:
           GMAIL_SENDER_EMAIL: ${{ secrets.GMAIL_SENDER_EMAIL }}
           GMAIL_TO: ${{ secrets.GMAIL_TO }}
           ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
-          # --- ZERNIO CHANNEL SECRETS ---
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
         run: |
-          $root = Get-Location
-          if (-not $env:GROQ_API_KEY)        { Write-Host "::error::GROQ_API_KEY secret is empty"; exit 1 }
-          if (-not $env:YOUTUBE_TOKEN_JSON)  { Write-Host "::error::YOUTUBE_TOKEN_JSON secret is empty"; exit 1 }
-          [System.IO.File]::WriteAllText("$root\token.json", $env:YOUTUBE_TOKEN_JSON)
-          if ($env:GMAIL_TOKEN_JSON) { [System.IO.File]::WriteAllText("$root\gmail_token.json", $env:GMAIL_TOKEN_JSON) }
-          # No cookies.txt on this residential runner -- Reddit (and YouTube) serve it without auth,
-          # and a stale cookies.txt would push yt-dlp onto a gated client. Remove any leftover.
-          if (Test-Path "$root\cookies.txt") { Remove-Item "$root\cookies.txt" -Force }
-          # Build API.env from whichever secrets are present.
-          $lines = @("GMAIL_TOKEN_PATH=gmail_token.json")
-          foreach ($k in @("GROQ_API_KEY","GEMINI_API_KEY","TAVILY_API_KEY","EXA_API_KEY",
-                           "TIKTOK_ACCESS_TOKEN","TIKTOK_REFRESH_TOKEN","TIKTOK_CLIENT_KEY","TIKTOK_CLIENT_SECRET",
-                           "IG_USER_ID","IG_ACCESS_TOKEN","GMAIL_SENDER_EMAIL","GMAIL_TO",
-                           "ZERNIO_API_URL",
-                           # --- ADDED TO API.env WRITING PROCESS ---
-                           "ZERNIO_API_KEY","ZERNIO_YOUTUBE_ID","ZERNIO_INSTAGRAM_ID")) {
-            $v = [Environment]::GetEnvironmentVariable($k)
-            if ($v) { $lines += "$k=$v" }
-          }
-          [System.IO.File]::WriteAllText("$root\API.env", ($lines -join "`n") + "`n")
+          python3 - <<'EOF'
+          import os
+          if not os.environ.get("GROQ_API_KEY"):
+              raise SystemExit("::error::GROQ_API_KEY secret is empty")
+          if not os.environ.get("YOUTUBE_TOKEN_JSON"):
+              raise SystemExit("::error::YOUTUBE_TOKEN_JSON secret is empty")
+          with open("token.json", "w", encoding="utf-8") as f:
+              f.write(os.environ["YOUTUBE_TOKEN_JSON"])
+          if os.environ.get("GMAIL_TOKEN_JSON"):
+              with open("gmail_token.json", "w", encoding="utf-8") as f:
+                  f.write(os.environ["GMAIL_TOKEN_JSON"])
+          keys = ["GROQ_API_KEY", "GEMINI_API_KEY", "TAVILY_API_KEY", "EXA_API_KEY",
+                  "TIKTOK_ACCESS_TOKEN", "TIKTOK_REFRESH_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET",
+                  "IG_USER_ID", "IG_ACCESS_TOKEN", "GMAIL_SENDER_EMAIL", "GMAIL_TO",
+                  "ZERNIO_API_URL", "ZERNIO_API_KEY", "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID"]
+          lines = ["GMAIL_TOKEN_PATH=gmail_token.json"]
+          lines += [f"{k}={os.environ[k]}" for k in keys if os.environ.get(k)]
+          with open("API.env", "w", encoding="utf-8") as f:
+              f.write("\n".join(lines) + "\n")
+          EOF
+          # A stale cookies.txt would push yt-dlp onto a gated client; remove any leftover.
+          rm -f cookies.txt
 
       - name: Build + publish one Ranking Short
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}    # injected directly too, so the LLM never depends on the file
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
-          # --- MAP TO LOCAL RUNTIME ENV FOR THE PYTHON SCRIPT ---
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
-        # A #5->#1 ranking Short from funny Reddit clips (with their own audio) -- single trending
-        # genre, leaderboard overlay, ducked music bed, NO SFX. Auto-posts to YouTube + Zernio (Instagram) + emails a copy.
+          # Cloud sourcing constraints -- see the header comment.
+          YTDLP_PROXY: socks5://127.0.0.1:40000
+          NO_REDDIT_SOURCES: "1"
+          IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
-          $py = Join-Path (Get-Location) ".venv\Scripts\python.exe"
-          # Keep the laptop awake for the whole run (an idle sleep mid-run cancels the job).
-          $awake = Start-Process $py -ArgumentList "-c","import ctypes,time; ctypes.windll.kernel32.SetThreadExecutionState(0x80000001); time.sleep(86400)" -PassThru -WindowStyle Hidden
-          try {
-            Invoke-Expression "& '$py' tools/rank_autopost.py --privacy public --platforms youtube,email,zernio"
-            if ($LASTEXITCODE -ne 0) { exit 1 }
-          } finally {
-            Stop-Process -Id $awake.Id -Force -ErrorAction SilentlyContinue
-          }
+          ARGS=(--privacy public --platforms youtube,email,zernio)
+          if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
+          python tools/rank_autopost.py "${ARGS[@]}"
 
       - name: Upload final.mp4 artifact (for inspection)
         if: always()
@@ -146,3 +184,25 @@ jobs:
           path: exports/
           if-no-files-found: ignore
           retention-days: 7
+
+  # GitHub disables cron on repos with no commits for 60 days; this weekly touch keeps
+  # the schedule alive (the main job never commits -- state lives in actions/cache).
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v5
+      - name: Weekly heartbeat commit (Mondays, first slot only)
+        run: |
+          if [ "$(date -u +%u)" != "1" ] || [ "$(date -u +%H)" != "01" ]; then
+            echo "Not the Monday 01:50 slot; skipping."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          date -u +"%Y-%m-%dT%H:%MZ" > .github/.heartbeat
+          git add .github/.heartbeat
+          git commit -m "chore: schedule keepalive [skip ci]"
+          git pull --rebase origin main || true
+          git push

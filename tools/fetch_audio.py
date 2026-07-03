@@ -39,6 +39,9 @@ def download_ytdlp(url, tmp_base):
         "ffmpeg_location": get_ffmpeg(),
         "noplaylist": True, "quiet": True, "no_warnings": True, "overwrites": True,
     }
+    proxy = os.environ.get("YTDLP_PROXY")   # datacenter-IP runners: route via WARP/residential proxy
+    if proxy:
+        opts["proxy"] = proxy
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         req = info.get("requested_downloads")

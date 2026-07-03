@@ -57,6 +57,9 @@ def search(query, n):
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
+    proxy = os.environ.get("YTDLP_PROXY")   # datacenter-IP runners: route via WARP/residential proxy
+    if proxy:
+        opts["proxy"] = proxy
     with YoutubeDL(opts) as ydl:
         info = ydl.extract_info(f"ytsearch{n}:{query}", download=False)
     return info.get("entries") or []
