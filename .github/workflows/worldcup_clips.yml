@@ -86,8 +86,18 @@ jobs:
           done
           warp-cli --accept-tos mode proxy
           warp-cli --accept-tos connect
-          sleep 5
+          # Poll until WARP is actually Connected -- a fixed sleep is too flaky (status can still
+          # be "Connecting" after 5s, which makes every proxied yt-dlp search fail instantly).
+          for i in $(seq 1 40); do
+            if warp-cli --accept-tos status | grep -q "Connected"; then echo "WARP connected"; break; fi
+            sleep 3
+          done
           warp-cli --accept-tos status
+          # Hard gate: confirm real egress through the SOCKS proxy before continuing.
+          if ! curl -s --max-time 25 --proxy socks5h://127.0.0.1:40000 https://ifconfig.me; then
+            echo "::error::WARP proxy egress check failed -- yt-dlp would be bot-blocked"; exit 1
+          fi
+          echo
 
       - name: Reconstruct secrets (never committed)
         env:

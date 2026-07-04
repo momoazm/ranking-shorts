@@ -164,7 +164,10 @@ def main():
         return
     cands = (find or {}).get("candidates", [])
     if not cands:
+        # Surface the finder's per-query errors so a proxy/bot-check failure is distinguishable
+        # from a genuinely empty window.
         emit({"status": "nothing_new", "note": (find or {}).get("note", "no fresh clips"),
+              "search_errors": (find or {}).get("errors", []),
               "elapsed_sec": round(time.time() - t0, 1)})
         return
 
