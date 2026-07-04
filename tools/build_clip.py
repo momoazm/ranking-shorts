@@ -41,18 +41,29 @@ def clean_title(raw):
 
     'Cristiano Ronaldo Goal | Portugal 2-1 Croatia | FIFA World Cup 2026(TM)'
       -> 'Cristiano Ronaldo Goal - Portugal 2-1 Croatia'
+    'Lionel Messi Goal vs Cape Verde During Argentina vs Cape Verde Fifa World Cup 2026 Match'
+      -> 'Lionel Messi Goal vs Cape Verde'
     """
-    t = raw
-    for junk in ("FIFA World Cup 2026", "World Cup 2026", "FIFA World Cup", "Highlights",
-                 "™", "®", "|", "#shorts", "#Shorts", "( 4K )", "4K"):
-        t = t.replace(junk, " ")
-    t = re.sub(r"\s+", " ", t).strip(" -|–—")
-    # Collapse "A - B - C" leftovers to at most two segments so the card stays readable.
-    parts = [p.strip() for p in re.split(r"[|–—-]{1,2}", t) if p.strip()]
-    if len(parts) > 2:
-        parts = parts[:2]
-    out = " - ".join(parts) if parts else t
-    return out[:70]
+    t = raw.replace("™", " ").replace("®", " ")
+    # Case-insensitive removal of FIFA/World-Cup boilerplate + junk phrases.
+    for pat in (r"fifa\s+world\s+cup\s*20\d\d", r"world\s+cup\s*20\d\d", r"fifa\s+world\s+cup",
+                r"full\s+match", r"highlights?", r"#\w+", r"\(\s*4k\s*\)", r"\b4k\b", r"\bhd\b"):
+        t = re.sub(pat, " ", t, flags=re.IGNORECASE)
+    # Split on separators; also break on a padded "During"/"vs ... vs" duplication so a repeated
+    # "X vs Y During X vs Y" collapses to its first, most descriptive segment.
+    t = re.sub(r"\s+during\s+", " | ", t, flags=re.IGNORECASE)
+    parts = [re.sub(r"\s+", " ", p).strip(" -–—") for p in re.split(r"[|–—]|\s-\s", t)]
+    parts = [p for p in parts if p]
+    # Prefer the first segment; add a second only if the first is short and the second adds a score.
+    out = parts[0] if parts else re.sub(r"\s+", " ", t).strip()
+    if parts and len(out) < 32 and len(parts) > 1 and re.search(r"\d", parts[1]):
+        out = f"{out} - {parts[1]}"
+    # Strip trailing filler words left dangling by the removals.
+    out = re.sub(r"\b(match|game|video|clip|moment)\s*$", "", out, flags=re.IGNORECASE).strip(" -")
+    # Word-boundary truncation so we never cut mid-word.
+    if len(out) > 62:
+        out = out[:62].rsplit(" ", 1)[0]
+    return out.strip()
 
 
 def build_overlay_ass(title, handle, total, out_path):

@@ -5,10 +5,31 @@
 > — `tools/_common.py` resolves `REPO_ROOT` as `tools/`'s parent, so `brand/`, `assets/`, `state/`,
 > and `.tmp/` resolve correctly from here. API keys load from the shared `API.env` at the repo root.
 
+## Channel identity: momoclips
+Both formats below post to the **same channel**, being rebranded to **`@momoclips`** on YouTube
+and **Instagram** (Moemen renames the handles on-platform — Claude can't via API; update the
+`--handle`/refs here once done). The Zernio IDs and YouTube OAuth token don't change with a handle
+rename.
+
 ## What this project does
 
-Produces finished **vertical (1080×1920) faceless ranking Shorts** for MOMO's YouTube channel
-(`@Moemen-i2f6l`) and uploads them as **unlisted/public drafts only after explicit approval**.
+Two formats on the momoclips channel:
+
+**A) Single World-Cup clips (`clip_autopost.py`) — current focus (2026-07-04).** Every ~20 min a
+cloud job polls YouTube for a FRESH World-Cup moment (Messi/Ronaldo/big-nation **goals**,
+**iShowSpeed**, viral clips), builds ONE branded vertical Short from it, and posts to YouTube +
+Instagram. "Only trigger when something happened" = dedup (`state/used_clips.json`) + an
+upload-date=Today search, so a run posts only when a genuinely new clip exists.
+Pipeline: `find_worldcup_clips → build_clip → host_public → upload_youtube/upload_instagram`.
+⚠ Official goal footage is heavily Content-ID-claimed; posting it is Moemen's **accepted** risk
+(decision log 2026-07-04). Go-live is gated: the `worldcup_clips.yml` 20-min cron ships COMMENTED
+OUT until the handles are renamed and a sample is approved (see that file's header).
+
+**B) `#5 → #1` ranking countdowns (`rank_autopost.py`)** — the original format (below). Still
+present; single-clips are the active World-Cup play.
+
+Produces finished **vertical (1080×1920) faceless Shorts** and uploads them as
+**unlisted/public drafts only after explicit approval**.
 
 **One format: the `#5 → #1` countdown.** Each video stitches together short, real funny clips
 (fails, cats, dogs, kids, etc.) into a countdown:
@@ -81,7 +102,7 @@ there is no unlisted/draft privacy like YouTube; the only safe pre-test is the t
   navy `#0B1622`, cream `#F2E9D8`, Cinzel/Poppins) and `brand/logo.png`. Never re-derive
   colors/fonts.
 - **Never upload without explicit confirmation** at the gate. Show title, description, tags,
-  resolved privacy, target channel (`@Moemen-i2f6l`), duration, byte size, and have me eyeball
+  resolved privacy, target channel (`@momoclips`), duration, byte size, and have me eyeball
   `.tmp/final.mp4` (overlay in sync, audio clean, no visible looping artifacts).
   `upload_youtube.py` / `upload_tiktok.py` / `upload_instagram.py` are the **only irreversible
   steps.**

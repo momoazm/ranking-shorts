@@ -30,6 +30,7 @@ from datetime import date
 from pathlib import Path
 
 from _common import emit, load_env
+from build_clip import clean_title   # shared title tidy so card + posted text match
 
 ROOT = Path(__file__).resolve().parent.parent
 TMP = ROOT / ".tmp"
@@ -114,9 +115,9 @@ def build_meta(cand, handle):
     raw = cand.get("title", "").strip()
     cat = cand.get("category", "popular")
     emoji, base_tags = CATEGORY_META.get(cat, CATEGORY_META["popular"])
-    card = raw  # build_clip cleans it (strips FIFA/trademark boilerplate, caps length)
+    card = clean_title(raw)   # same tidy build_clip burns, so card + posted text agree
     # Posted title: short, emoji, a couple of hashtags. Keep well under YouTube's 100-char limit.
-    yt_title = f"{card[:70]} {emoji} #Shorts".strip()
+    yt_title = f"{card} {emoji} #Shorts".strip()
     tags = base_tags + [w for w in
                         "".join(c if c.isalnum() else " " for c in raw.lower()).split()
                         if len(w) > 3][:6]
