@@ -171,22 +171,29 @@ def main():
               "elapsed_sec": round(time.time() - t0, 1)})
         return
 
-    cand = cands[0]
-    card, yt_title, description, ig_caption, tags = build_meta(cand, args.handle)
+    # 2) build the branded Short. Try candidates in order until one builds: an individual clip
+    # can 403 on its video data (geo/format-locked streams on some uploads) even though search
+    # + WARP work, so a single bad clip must not waste the whole poll. Each attempted source is
+    # marked used (pass or fail) so it's never retried on the next poll.
+    cand = card = yt_title = description = ig_caption = tags = build = None
+    attempts = []
+    for c in cands[: max(1, min(5, len(cands)))]:
+        _card, _yt, _desc, _cap, _tags = build_meta(c, args.handle)
+        build_args = ["--url", c["url"], "--title", _card, "--handle", args.handle, "--out", FINAL]
+        if args.music:
+            build_args += ["--music", args.music]
+        b, berr = run_tool_safe("build_clip.py", build_args)
+        record_used(c["id"])
+        if not berr:
+            cand, card, yt_title, description, ig_caption, tags, build = c, _card, _yt, _desc, _cap, _tags, b
+            break
+        attempts.append({"id": c["id"], "error": berr.splitlines()[0][:160]})
+        print(f"::warning::build_clip failed for {c['id']}: {berr.splitlines()[0][:160]}", file=sys.stderr)
 
-    # 2) build the branded vertical Short from the single source clip.
-    build_args = ["--url", cand["url"], "--title", card, "--handle", args.handle, "--out", FINAL]
-    if args.music:
-        build_args += ["--music", args.music]
-    build, berr = run_tool_safe("build_clip.py", build_args)
-    if berr:
-        # Mark this source used so a clip that fails to BUILD isn't retried every 20 min forever.
-        record_used(cand["id"])
-        emit({"status": "build_failed", "candidate": cand, "error": berr.splitlines()[0][:200]})
+    if build is None:
+        emit({"status": "all_builds_failed", "tried": len(attempts), "attempts": attempts,
+              "elapsed_sec": round(time.time() - t0, 1)})
         return
-
-    # Built OK -> never rebuild this source again (dedup), whatever happens at upload.
-    record_used(cand["id"])
 
     result = {"status": "built", "candidate": cand, "title": yt_title, "card": card,
               "final": FINAL, "byte_size": build.get("byte_size"),

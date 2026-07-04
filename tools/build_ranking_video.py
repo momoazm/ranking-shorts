@@ -66,8 +66,13 @@ def _ydl_opts(out_base, fmt, player_client=None):
 # the android attempt is a YouTube fallback for blocked/datacenter IPs (the youtube player_client is
 # simply ignored by other extractors like Reddit).
 _DL_ATTEMPTS = [
+    # Progressive (single combined) formats FIRST: through the WARP SOCKS proxy on cloud
+    # runners, adaptive DASH fragment URLs frequently 403 ("unable to download video data"),
+    # while progressive/avc1 streams download reliably. Fall back to DASH + other clients.
+    (None, "b[height<=720][ext=mp4]/b[height<=720]/b"),
+    (["android"], "b[height<=720]/b/best"),
+    (["ios"], "b/best"),
     (None, "bv*[height<=720]+ba/b[height<=720]/b/best"),
-    (["android"], "best"),
 ]
 
 
