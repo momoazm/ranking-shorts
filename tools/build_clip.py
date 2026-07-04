@@ -101,7 +101,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True, help="Source YouTube (or direct media) URL")
     ap.add_argument("--title", required=True, help="Overlay/card title (already punchy)")
-    ap.add_argument("--handle", default="@momoclips", help="Watermark handle")
+    ap.add_argument("--handle", default="@itsmomoclips", help="Watermark handle")
     ap.add_argument("--max-secs", type=float, default=58.0, help="Hard cap (<60s Shorts length)")
     ap.add_argument("--music", default=None, help="Optional music bed path (default: keep original audio only)")
     ap.add_argument("--music-volume", type=float, default=0.12)

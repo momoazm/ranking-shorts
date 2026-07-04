@@ -7,16 +7,17 @@ name: momoclips - World Cup single clips
 # happened" behaviour. Runs on GitHub-hosted ubuntu; yt-dlp routes through WARP (YouTube
 # bot-checks datacenter IPs). See tools/clip_autopost.py.
 #
-# ⚠ GO-LIVE IS GATED. The 20-min schedule below is COMMENTED OUT on purpose. Before enabling:
-#   1. Rename both handles to @momoclips (YouTube Studio + Instagram) -- Claude can't do that.
-#   2. Run once via "Run workflow" with privacy=unlisted, eyeball the Short, then privacy=public.
-#   3. Uncomment the `schedule:` block to let it auto-post every 20 min.
+# LIVE (2026-07-04): the 20-min schedule is ENABLED -- it auto-posts every 20 min when a fresh
+# clip is found (dedup + daily cap MAX_DAILY_CLIPS=8 keep it from flooding). Scheduled runs post
+# YouTube = UNLISTED by default (set inputs.privacy or the fallback below to 'public' to go public);
+# Instagram has no unlisted, so IG Reels ARE public on every live run.
 # Copyright: official goal footage is heavily Content-ID-claimed; posting it is an accepted risk
-# (decision log 2026-07-04).
+# (decision log 2026-07-04). To PAUSE: re-comment the schedule, or disable the workflow in the
+# GitHub Actions UI.
 
 on:
-  # schedule:
-  #   - cron: "*/20 * * * *"     # UNCOMMENT to go live (every 20 min). Fires only after go-live steps above.
+  schedule:
+    - cron: "*/20 * * * *"     # every 20 min; posts only when a genuinely new clip is found
   workflow_dispatch:
     inputs:
       privacy:

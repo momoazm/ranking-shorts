@@ -133,7 +133,7 @@ def main():
     ap.add_argument("--platforms", default="youtube,instagram,email")
     ap.add_argument("--privacy", default="unlisted", choices=["public", "unlisted", "private"],
                     help="YouTube privacy (default unlisted -- flip to public when you're ready to go live)")
-    ap.add_argument("--handle", default="@momoclips")
+    ap.add_argument("--handle", default="@itsmomoclips")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_CLIPS", "8")),
                     help="Daily post cap so a busy match day doesn't flood the channel")
     ap.add_argument("--window", default="today", choices=["today", "week"])
