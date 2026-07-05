@@ -30,6 +30,7 @@ from datetime import date
 from pathlib import Path
 
 from _common import emit, load_env
+from _llm import llm_complete, parse_json
 from build_clip import clean_title   # shared title tidy so card + posted text match
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -110,6 +111,35 @@ CATEGORY_META = {
 }
 
 
+def screen_candidates(cands):
+    """LLM relevance gate: keep only candidates whose title clearly describes ACTUAL World-Cup
+    footage in English. The finder's keyword search can't tell a real goal clip from a news
+    studio talking about goals (a Hindi Zee News record-discussion segment got posted on
+    2026-07-05) -- this is the semantic check the deterministic title filter can't do.
+    On a whole-chain LLM failure returns cands unchanged (the deterministic filter already ran;
+    better to post a probably-fine clip than to silently stop posting)."""
+    listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
+    prompt = (
+        f"CANDIDATES:\n{listing}\n\n"
+        'Return ONE JSON object: {"matches": [<int indices>]}\n'
+        "Return the indices of every candidate whose title clearly describes ACTUAL FOOTAGE of a "
+        "World Cup moment: a goal, save, skill, celebration, streamer/fan reaction, or viral "
+        "on-the-ground moment. EXCLUDE: news reports and news-channel segments, studio "
+        "discussion/analysis, record/stat comparisons, previews, predictions, interviews, press "
+        "conferences, podcasts, and anything whose title is not primarily in English. "
+        "Output JSON only.")
+    try:
+        out = llm_complete(prompt, system="You screen clip titles for a strict content filter. Strict JSON.",
+                           json_mode=True, temperature=0.2)
+        idxs = sorted({i for i in parse_json(out["text"]).get("matches", [])
+                       if isinstance(i, int) and 0 <= i < len(cands)})
+    except Exception as e:
+        print(f"::warning::candidate screen failed ({str(e)[:120]}); using unscreened candidates",
+              file=sys.stderr)
+        return cands
+    return [cands[i] for i in idxs]
+
+
 def build_meta(cand, handle):
     """Make the burned card title + the YouTube/IG posted text from a candidate."""
     raw = cand.get("title", "").strip()
@@ -168,6 +198,15 @@ def main():
         # from a genuinely empty window.
         emit({"status": "nothing_new", "note": (find or {}).get("note", "no fresh clips"),
               "search_errors": (find or {}).get("errors", []),
+              "elapsed_sec": round(time.time() - t0, 1)})
+        return
+
+    # 1.5) semantic relevance screen -- footage only, English only. "None survived" is a valid
+    # quiet-poll outcome, same as an empty search window.
+    found_n = len(cands)
+    cands = screen_candidates(cands)
+    if not cands:
+        emit({"status": "nothing_new", "note": f"all {found_n} candidates rejected by relevance screen",
               "elapsed_sec": round(time.time() - t0, 1)})
         return
 

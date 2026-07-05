@@ -11,6 +11,7 @@ Prints JSON: {"title": "...", "hook": "...", "refined": true, "provider": "groq"
 """
 import argparse
 import json
+import re
 
 from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
@@ -70,7 +71,9 @@ Output JSON only."""
         fail(f"Title refinement failed: {e}")
         return
 
-    refined_title = data.get("title", "").strip()[:50]
+    # Titles must open with a letter/digit -- LLMs like leading emoji/quotes, and a stripped
+    # boilerplate prefix once left a title starting with ":" (2026-07-05).
+    refined_title = re.sub(r"^[^0-9A-Za-z]+", "", data.get("title", "").strip())[:50].strip()
     refined_hook = data.get("hook", "").strip()[:200]
     reasoning = data.get("reasoning", "").strip()
 

@@ -49,3 +49,47 @@ def emit(data):
 def fail(message, **extra):
     emit({"error": message, **extra})
     sys.exit(1)
+
+
+# --- English-audience title screen (shared by the clip finders) -------------------------------
+# The channel is English-language: a Hindi Zee News segment slipped through on 2026-07-05
+# because its title carried English keywords ("Messi ... World Cup Goals Record ... ZEENews").
+# Two deterministic checks, applied BEFORE any LLM sees the candidates:
+#   1. Script check -- any Devanagari/Arabic/CJK/etc. characters in the title.
+#   2. Keyword check -- news/talk-show/analysis markers and romanized Hindi/Urdu stopwords;
+#      these are studio talking-head videos, never the raw footage the channel posts.
+import re as _re
+
+_NON_LATIN = _re.compile(
+    "[Ѐ-ӿ"            # Cyrillic
+    "֐-׿"             # Hebrew
+    "؀-ۿݐ-ݿ"  # Arabic (incl. Urdu)
+    "ऀ-෿"             # Devanagari, Bengali, Gurmukhi, Gujarati, Oriya, Tamil,
+                                # Telugu, Kannada, Malayalam, Sinhala
+    "฀-๿"             # Thai
+    "ᄀ-ᇿ가-힯"  # Hangul
+    "぀-ヿ㐀-鿿"  # Japanese kana + CJK
+    "]")
+
+_TALK_OR_FOREIGN = _re.compile(
+    r"\b(news|zee|zeenews|aaj\s*tak|abp|ndtv|republic|india\s*tv|dd\s+sports|breaking|"
+    r"preview|prediction|predictions|analysis|debate|podcast|interview|press\s+conference|"
+    r"explained|record|rankings?|stats?|comparison|"
+    r"hindi|urdu|tamil|telugu|malayalam|bangla|bengali|marathi|punjabi|bhojpuri|"
+    r"ka|ki|ke|ko|hai|kya|kaun|nahi|wala|dekho|mein|aur)\b",
+    _re.IGNORECASE)
+
+
+def title_ok(title):
+    """True if a candidate's title looks like English-language actual-footage content.
+
+    Rejects non-Latin-script titles and news/analysis/talking-head markers. Deliberately
+    conservative: a false reject just skips one candidate; a false accept posts an
+    off-audience video to the channel.
+    """
+    t = title or ""
+    if _NON_LATIN.search(t):
+        return False
+    if _TALK_OR_FOREIGN.search(t):
+        return False
+    return True

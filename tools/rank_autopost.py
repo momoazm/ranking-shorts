@@ -192,12 +192,22 @@ def main():
                     break
             if chosen_angle:
                 break
+        if not chosen_angle and no_reddit:
+            # Cloud rescue: the streamer pool starved (it did twice on 2026-07-05 -> 2 failed
+            # runs, 2 missed uploads). Reddit is unreachable here, but the single-clip finder's
+            # YouTube pool (goals / streamers / viral moments, week window, news+language
+            # filtered) downloads fine through WARP -- use it for a "mixed" World Cup countdown.
+            _f, ferr = run_tool_safe("find_worldcup_clips.py",
+                                     ["--window", "week", "--max", "30", "--max-dur", "240",
+                                      "--history", HISTORY, "--out", CANDS])
+            if not ferr and (_f or {}).get("count", 0) >= 5:
+                chosen_angle = "mixed"
+            elif not ferr:
+                ferr = f"YouTube mixed rescue pool too thin ({(_f or {}).get('count', 0)} candidates, need >=5)"
         if not chosen_angle and not no_reddit:
             # No pure angle cleared 5 -> stay on-theme with a "mixed" World Cup video (needs only >=5
             # total candidates, which find_ranking_clips guarantees). Re-source the football pool fresh
             # so CANDS definitely holds it for the ranking step, whichever group ran last above.
-            # (Skipped under NO_REDDIT_SOURCES -- this pool downloads from v.redd.it, which the
-            # cloud runner can't reach; better to fail loudly than build a video with 0 clips.)
             _f, ferr = run_tool_safe("find_ranking_clips.py", ["--genre", "worldcup", "--max", "30", "--out", CANDS])
             if not ferr:
                 chosen_angle = "mixed"
@@ -205,7 +215,7 @@ def main():
             topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "worldcup",
                                                 "--force-angle", chosen_angle, "--out", TOPIC])
         else:
-            fallback_reason = f"worldcup: {ferr}"
+            fallback_reason = f"worldcup: {ferr or 'no angle could source >=5 clips'}"
     else:
         find_args = ["--out", CANDS]
         if args.search:

@@ -30,7 +30,7 @@ import os
 import random
 import urllib.parse
 
-from _common import REPO_ROOT, load_env, emit, fail
+from _common import REPO_ROOT, load_env, emit, fail, title_ok
 
 # YouTube search "sp" filter tokens (URL-encoded). "Upload date: Today" is what surfaces
 # just-happened content -- probed 2026-07-04: it returned same-day match uploads where a
@@ -137,6 +137,11 @@ def main():
             dur = en.get("duration")
             title = (en.get("title") or "").strip()
             if not vid or not title or vid in seen or vid in used:
+                continue
+            # English-audience screen: drop non-Latin-script titles and news/analysis/talk
+            # markers (a Hindi Zee News studio segment got posted on 2026-07-05 -- its title
+            # carried English keywords, so keyword search alone can't be trusted).
+            if not title_ok(title):
                 continue
             # Require a KNOWN, short duration: unknown usually means a live stream, and a long
             # VOD would download the whole file. Both must be excluded before the build step.

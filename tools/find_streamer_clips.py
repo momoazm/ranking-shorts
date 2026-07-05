@@ -24,7 +24,7 @@ import json
 import os
 import random
 
-from _common import REPO_ROOT, load_env, emit, fail
+from _common import REPO_ROOT, load_env, emit, fail, title_ok
 
 # WC-streamer search queries. EDIT THIS LIST to change who we target. Kept World-Cup-scoped so
 # results stay on-theme and descriptively titled (the ranker filters by title). The generic last
@@ -101,6 +101,10 @@ def main():
             dur = en.get("duration")
             title = (en.get("title") or "").strip()
             if not vid or not title or vid in seen or vid in used:
+                continue
+            # English-audience screen (shared with find_worldcup_clips): drop non-Latin-script
+            # titles and news/analysis/talk markers before they ever reach the ranker.
+            if not title_ok(title):
                 continue
             # Require a KNOWN, short duration: unknown usually means a live stream, and a long VOD
             # would download the whole file. Both must be excluded before the build step.

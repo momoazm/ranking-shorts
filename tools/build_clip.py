@@ -53,6 +53,10 @@ def clean_title(raw):
     # "X vs Y During X vs Y" collapses to its first, most descriptive segment.
     t = re.sub(r"\s+during\s+", " | ", t, flags=re.IGNORECASE)
     parts = [re.sub(r"\s+", " ", p).strip(" -–—") for p in re.split(r"[|–—]|\s-\s", t)]
+    # Removing boilerplate can leave its trailing separator dangling at the FRONT of a part
+    # ("FIFA World Cup 2026: Messi..." -> ": Messi..." -- posted with a leading colon on
+    # 2026-07-05). Titles must start with a letter or digit.
+    parts = [re.sub(r"^[^0-9A-Za-z]+", "", p).strip() for p in parts]
     parts = [p for p in parts if p]
     # Prefer the first segment; add a second only if the first is short and the second adds a score.
     out = parts[0] if parts else re.sub(r"\s+", " ", t).strip()
@@ -63,7 +67,8 @@ def clean_title(raw):
     # Word-boundary truncation so we never cut mid-word.
     if len(out) > 62:
         out = out[:62].rsplit(" ", 1)[0]
-    return out.strip()
+    # Belt-and-suspenders: never return a title that opens with punctuation/symbols.
+    return re.sub(r"^[^0-9A-Za-z]+", "", out).strip(" -–—:;|.,!?")
 
 
 def build_overlay_ass(title, handle, total, out_path):
