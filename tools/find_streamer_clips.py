@@ -1,8 +1,11 @@
-"""Find candidate WORLD-CUP STREAMER clips (iShowSpeed / FaZe / Marlon etc.) via YouTube search.
+"""Find candidate WORLD-CUP STREAMER clips (FaZe / Marlon etc.) via YouTube search.
+
+NO iShowSpeed (user rule 2026-07-06) -- queries dropped here and `_common.title_ok`
+hard-blocks him by title in every finder.
 
 Why YouTube instead of Reddit for this angle: the streamer subs (r/LivestreamFail ...) are
 drama-heavy and mostly NOT World-Cup related, and their post titles are too vague for the ranker's
-title-based relevance/safety filter to work. A YouTube search ("iShowSpeed World Cup") returns
+title-based relevance/safety filter to work. A YouTube search ("FaZe World Cup") returns
 clips that are actually on-theme AND descriptively titled, so rank_clips.py's `streamer` classifier
 can reliably confirm World-Cup relevance and screen out anything off-topic/unsafe.
 
@@ -30,8 +33,7 @@ from _common import REPO_ROOT, load_env, emit, fail, title_ok
 # results stay on-theme and descriptively titled (the ranker filters by title). The generic last
 # query covers streamers not named here so a thin roster never starves supply.
 STREAMER_QUERIES = [
-    "iShowSpeed World Cup football",
-    "iShowSpeed World Cup reaction",
+    # No iShowSpeed (user rule 2026-07-06).
     "FaZe World Cup football reaction",
     "Marlon streamer World Cup watchalong",
     "streamer reacts World Cup goal",

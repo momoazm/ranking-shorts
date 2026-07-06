@@ -12,6 +12,9 @@ name: ranking-shorts
 #
 # Exact-time posting: GitHub cron can drift 5-30+ min, so each cron fires ~40 min EARLY
 # and the "Hold until slot" step sleeps until the exact slot minute.
+#
+# 2026-07-06: file touched to re-register the cron -- ALL scheduled runs on this account
+# silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
 
 on:
   schedule:

@@ -41,11 +41,11 @@ GENRE_SUBS = {
     "worldcup": ["WorldCup", "footballhighlights", "footy"],
 }
 
-# The worldcup "streamer" angle (iShowSpeed / FaZe / Marlon etc. at the World Cup) is NOT on the
+# The worldcup "streamer" angle (FaZe / Marlon etc. -- NO iShowSpeed, user rule 2026-07-06) is NOT on the
 # football feeds -- those clips live on livestream-clip subs. Sourced only when
 # `--genre worldcup --angle streamer` is passed. r/LivestreamFail leads (huge, reliably v.redd.it-
 # hosted, covers every big streamer's WC moments); the creator subs are supply fallbacks.
-WORLDCUP_STREAMER_SUBS = ["LivestreamFail", "ishowspeed", "livestreamfails", "FaZeClan"]
+WORLDCUP_STREAMER_SUBS = ["LivestreamFail", "livestreamfails", "FaZeClan"]  # no iShowSpeed (user rule 2026-07-06)
 DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
 
 
@@ -105,7 +105,7 @@ def main():
     ap.add_argument("--subreddits", default=None, help="Comma-separated subreddits (overrides --genre)")
     ap.add_argument("--angle", default=None,
                     help="For --genre worldcup: 'streamer' pulls from livestream-clip subs "
-                         "(iShowSpeed/FaZe/livestream fails) instead of the football feeds. "
+                         "(FaZe/livestream fails; no iShowSpeed) instead of the football feeds. "
                          "fan/match/mixed/unset all use the football feeds.")
     ap.add_argument("--period", default=None, choices=["day", "week", "month", "year", "all"],
                     help="Reddit top period (default: random week/month/year for variety)")

@@ -29,7 +29,7 @@ SCHEMA = """Return ONE JSON object with exactly these keys:
                            //     No players, no match footage, no mascots/animals/unrelated novelty clips.
                            //   - "match": on-pitch action only -- goals, saves, skills, fouls, ref calls/VAR.
                            //     No crowd shots, no mascots/animals/unrelated novelty clips.
-                           //   - "streamer": famous streamers/creators (iShowSpeed, FaZe Clan, Marlon, etc.)
+                           //   - "streamer": famous streamers/creators (FaZe Clan, Marlon, etc. -- never iShowSpeed)
                            //     reacting to / attending / playing football at the World Cup. No pure pro
                            //     match footage, no generic crowd shots, no unrelated gaming/IRL clips.
                            //   For every other genre, leave this "" (empty string).

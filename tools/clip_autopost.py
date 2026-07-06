@@ -106,7 +106,7 @@ def daily_increment():
 # only, never in the burned card (libass/Arial can't render colour emoji).
 CATEGORY_META = {
     "goal":     ("\U0001F6A8⚽\U0001F525", ["WorldCup2026", "football", "goal", "shorts"]),
-    "streamer": ("\U0001F62E\U0001F525",       ["iShowSpeed", "WorldCup2026", "shorts"]),
+    "streamer": ("\U0001F62E\U0001F525",       ["streamer", "WorldCup2026", "shorts"]),
     "popular":  ("\U0001F525",                 ["WorldCup2026", "viral", "football", "shorts"]),
 }
 
@@ -122,12 +122,14 @@ def screen_candidates(cands):
     prompt = (
         f"CANDIDATES:\n{listing}\n\n"
         'Return ONE JSON object: {"matches": [<int indices>]}\n'
-        "Return the indices of every candidate whose title clearly describes ACTUAL FOOTAGE of a "
-        "World Cup moment: a goal, save, skill, celebration, streamer/fan reaction, or viral "
-        "on-the-ground moment. EXCLUDE: news reports and news-channel segments, studio "
-        "discussion/analysis, record/stat comparisons, previews, predictions, interviews, press "
-        "conferences, podcasts, and anything whose title is not primarily in English. "
-        "Output JSON only.")
+        "Return the indices of every candidate whose title clearly describes ACTUAL FOOTAGE of "
+        "ONE SINGLE specific World Cup moment: a goal, save, skill, celebration, streamer/fan "
+        "reaction, or viral on-the-ground moment. EXCLUDE: ranked lists and Top-N countdowns, "
+        "'most/best X in history' or all-time stat/record pieces, player-vs-player comparisons, "
+        "compilations and montages, news reports and news-channel segments, studio "
+        "discussion/analysis, previews, predictions, interviews, press conferences, podcasts, "
+        "anything featuring the streamer iShowSpeed, and anything whose title is not primarily "
+        "in English. Output JSON only.")
     try:
         out = llm_complete(prompt, system="You screen clip titles for a strict content filter. Strict JSON.",
                            json_mode=True, temperature=0.2)

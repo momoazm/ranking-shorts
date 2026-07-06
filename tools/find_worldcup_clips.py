@@ -15,7 +15,7 @@ sorted newest-first, which is what makes fresh goals/clips surface within minute
 
 Categories (each candidate is tagged so the title/caption can match its vibe):
   goal      -- Messi / Ronaldo / big-nation goals (official footage; copyright risk accepted)
-  streamer  -- iShowSpeed & other creators at / reacting to the World Cup
+  streamer  -- creators at / reacting to the World Cup (NO iShowSpeed -- user rule 2026-07-06)
   popular   -- viral / best-moment World-Cup clips
 
 Usage:
@@ -53,9 +53,9 @@ QUERIES = {
         "Portugal goal World Cup 2026",
     ],
     "streamer": [
-        "iShowSpeed World Cup 2026",
-        "iShowSpeed World Cup reaction",
+        # No iShowSpeed (user rule 2026-07-06) -- _common.title_ok also hard-blocks him by title.
         "streamer reacts World Cup 2026 goal",
+        "fan reaction World Cup 2026 goal",
     ],
     "popular": [
         "World Cup 2026 viral moment",

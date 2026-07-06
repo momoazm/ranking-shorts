@@ -1,7 +1,7 @@
 name: momoclips - World Cup single clips
 
 # Polls YouTube every ~20 min for a FRESH World-Cup moment (Messi/Ronaldo/big-nation goals,
-# iShowSpeed, viral clips), builds ONE branded vertical Short from it, and posts to YouTube +
+# viral clips -- NO iShowSpeed, user rule 2026-07-06), builds ONE branded vertical Short from it, and posts to YouTube +
 # Instagram (@momoclips). Dedup (state/used_clips.json) means the same clip is never reposted;
 # if nothing new is found the run posts nothing -- that's the "trigger only when something
 # happened" behaviour. Runs on GitHub-hosted ubuntu; yt-dlp routes through WARP (YouTube

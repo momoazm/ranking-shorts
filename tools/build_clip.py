@@ -1,7 +1,7 @@
 """Build ONE branded vertical Short from a single source clip (momoclips pipeline).
 
 Distinct from build_ranking_video.py (which stitches a #5->#1 countdown): this takes ONE
-World-Cup moment -- a goal, an iShowSpeed reaction, a viral clip -- and turns it into a
+World-Cup moment -- a goal, a fan/streamer reaction, a viral clip -- and turns it into a
 finished 1080x1920 Short: the whole frame fit into 9:16 over a blurred fill (no crop-zoom),
 original clip audio kept (the commentary/crowd IS the appeal -- no SFX, per the project's
 audio rule), with a compact on-brand title card and an @momoclips watermark burned on.

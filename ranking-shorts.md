@@ -17,7 +17,7 @@ Two formats on the momoclips channel:
 
 **A) Single World-Cup clips (`clip_autopost.py`) — current focus (2026-07-04).** Every ~20 min a
 cloud job polls YouTube for a FRESH World-Cup moment (Messi/Ronaldo/big-nation **goals**,
-**iShowSpeed**, viral clips), builds ONE branded vertical Short from it, and posts to YouTube +
+viral clips -- **no iShowSpeed** (user rule 2026-07-06)), builds ONE branded vertical Short from it, and posts to YouTube +
 Instagram. "Only trigger when something happened" = dedup (`state/used_clips.json`) + an
 upload-date=Today search, so a run posts only when a genuinely new clip exists.
 Pipeline: `find_worldcup_clips → build_clip → host_public → upload_youtube/upload_instagram`.
@@ -53,7 +53,7 @@ rank_topic → find_ranking_clips → rank_clips → build_ranking_video → bui
 - **`find_ranking_clips.py`** — pulls candidate clips from Reddit RSS (one feed request per run;
   funny/wholesome subreddits per genre). yt-dlp downloads each post. While the 2026 World Cup is
   live the pipeline is forced to the `worldcup` genre, which has **three angles** — `fan`
-  (crowd/stands), `match` (on-pitch action), and `streamer` (iShowSpeed / FaZe / Marlon etc. at the
+  (crowd/stands), `match` (on-pitch action), and `streamer` (FaZe / Marlon etc. -- no iShowSpeed -- at the
   World Cup, sourced from livestream-clip subs via `--angle streamer`). `rank_autopost.py`
   randomizes which angle it tries each run, so all three rotate; falls back to `mixed` then `fails`.
 - **`rank_clips.py`** — the LLM ranks the best ~5 candidates and writes a short funny label per rank.

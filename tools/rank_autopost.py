@@ -156,7 +156,7 @@ def main():
     fallback_reason = None
 
     if topic.get("genre") == "worldcup":
-        # Three angles now. fan/match share ONE football source pool; "streamer" (iShowSpeed/FaZe/
+        # Three angles now. fan/match share ONE football source pool; "streamer" (FaZe/
         # Marlon etc. at the World Cup) has its OWN pool -- those clips aren't on the football feeds.
         # Randomize which pool we try first so streamer videos get a fair share across runs instead of
         # the abundant match angle always winning. Each probe leaves CANDS holding its own pool, so on

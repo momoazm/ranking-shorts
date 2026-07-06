@@ -19,7 +19,7 @@ ANGLE_DESC = {
            "showing on-pitch match action, mascots, animals, or unrelated novelty clips.",
     "match": "on-pitch match action only -- goals, saves, skills, fouls, ref calls/VAR. Exclude "
              "anything showing crowd/fan shots, mascots, animals, or unrelated novelty clips.",
-    "streamer": "famous streamers/creators (e.g. iShowSpeed, FaZe Clan, Marlon, Adin) reacting to, "
+    "streamer": "famous streamers/creators (e.g. FaZe Clan, Marlon, Adin -- NEVER iShowSpeed) reacting to, "
                 "attending, or playing football at/around the World Cup -- their live reactions, "
                 "celebrations, or IRL moments tied to football or the tournament. Exclude pure pro "
                 "match footage with no streamer, generic crowd shots with no streamer, and any "

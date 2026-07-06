@@ -79,6 +79,19 @@ _TALK_OR_FOREIGN = _re.compile(
     r"ka|ki|ke|ko|hai|kya|kaun|nahi|wala|dekho|mein|aur)\b",
     _re.IGNORECASE)
 
+# Ranked-list / stat-list / compilation markers: the single-clip pipeline posts ONE specific
+# moment, and the countdown pipeline builds its own ranking -- neither should ever source a
+# video that is itself a Top-N / "most X in history" / compilation piece ("Most Goal Scorer's
+# in FIFA World Cup history" got posted 2026-07-05).
+_LISTY = _re.compile(
+    r"top\s*\d+|\branked\b|tier\s*list|all[\s-]*time|in\s+(?:fifa\s+)?(?:world\s+cup\s+)?history|"
+    r"most\s+(?:\w+\s+){0,2}(?:goals?|scorers?|trophies|titles|assists)|"
+    r"compilation|montage|\bquiz\b|\btrivia\b",
+    _re.IGNORECASE)
+
+# Blocked subjects (user rule 2026-07-06): no iShowSpeed content on the channel.
+_BLOCKED_SUBJECTS = _re.compile(r"i\s*show\s*speed|ishowspeed|\bspeedy?\s+(?:at|reacts?|watch)", _re.IGNORECASE)
+
 
 def title_ok(title):
     """True if a candidate's title looks like English-language actual-footage content.
@@ -91,5 +104,9 @@ def title_ok(title):
     if _NON_LATIN.search(t):
         return False
     if _TALK_OR_FOREIGN.search(t):
+        return False
+    if _LISTY.search(t):
+        return False
+    if _BLOCKED_SUBJECTS.search(t):
         return False
     return True
