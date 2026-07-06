@@ -9,8 +9,8 @@ name: momoclips - World Cup single clips
 #
 # LIVE (2026-07-04): the 20-min schedule is ENABLED -- it auto-posts every 20 min when a fresh
 # clip is found (dedup + daily cap MAX_DAILY_CLIPS=8 keep it from flooding). Scheduled runs post
-# YouTube = UNLISTED by default (set inputs.privacy or the fallback below to 'public' to go public);
-# Instagram has no unlisted, so IG Reels ARE public on every live run.
+# YouTube = PUBLIC by default (Moemen's go-ahead 2026-07-05); Instagram has no unlisted, so IG
+# Reels are public on every live run anyway.
 # Copyright: official goal footage is heavily Content-ID-claimed; posting it is an accepted risk
 # (decision log 2026-07-04). To PAUSE: re-comment the schedule, or disable the workflow in the
 # GitHub Actions UI.
@@ -23,8 +23,8 @@ on:
       privacy:
         description: "YouTube privacy for this run"
         type: choice
-        options: [unlisted, public, private]
-        default: unlisted
+        options: [public, unlisted, private]
+        default: public
       no_upload:
         description: "Build only, post nothing (safest test)"
         type: boolean
@@ -143,8 +143,9 @@ jobs:
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
           YTDLP_PROXY: socks5://127.0.0.1:40000
-          # Scheduled runs (no inputs) default to unlisted + today window + real upload.
-          IN_PRIVACY: ${{ inputs.privacy || 'unlisted' }}
+          # Scheduled runs (no inputs) default to PUBLIC (Moemen's go-ahead 2026-07-05,
+          # after the English/footage screen shipped) + today window + real upload.
+          IN_PRIVACY: ${{ inputs.privacy || 'public' }}
           IN_WINDOW: ${{ inputs.window || 'today' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
