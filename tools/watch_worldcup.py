@@ -89,10 +89,34 @@ class Watcher:
         self.actions = []                     # run log for the exit summary
         self.speed_not_live_until = 0.0
         self.was_live = set()                 # match ids seen in-progress THIS run (vs catch-up)
+        self.last_ig_time = 0.0               # for spacing Instagram publishes
 
     # ---- posting ------------------------------------------------------------------
     def can_post(self):
         return self.st["posts"] < self.args.max_posts
+
+    def _upload_instagram(self, url, ig_caption):
+        """Publish to Instagram, PACED + retried. On 2026-07-07, 5 goal Shorts posted seconds
+        apart all got Zernio `status=failed` while a 6th built ~40s later succeeded -- Instagram
+        action-block/throttle on burst posting, not a daily cap. So: keep >=IG_MIN_SPACING between
+        publishes, and retry a failed one with backoff (a fresh Zernio post = fresh IG container).
+        Returns (data, err); err is None on success."""
+        wait = self.args.ig_spacing - (time.time() - self.last_ig_time)
+        if self.last_ig_time and wait > 0:
+            time.sleep(wait)
+        backoff = 30
+        m = None
+        err = None
+        for attempt in range(self.args.ig_retries + 1):
+            m, err = run_tool_safe("upload_instagram.py",
+                                   ["--video-url", url, "--caption", ig_caption, "--confirm"])
+            self.last_ig_time = time.time()
+            if not err:
+                return m, None
+            if attempt < self.args.ig_retries:
+                time.sleep(backoff)
+                backoff *= 3
+        return m, err
 
     def post(self, final_rel, card, category, what):
         """host_public -> YouTube + Instagram + email, mirroring clip_autopost's delivery."""
@@ -115,9 +139,17 @@ class Watcher:
                                 "--privacy", self.args.privacy, "--confirm"])
         a["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
         ok = ok or not err
-        m, err = run_tool_safe("upload_instagram.py",
-                               ["--video-url", url, "--caption", ig_caption, "--confirm"])
-        a["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:160]} if err else {"id": m.get("post_id") or m.get("media_id")}
+        m, err = self._upload_instagram(url, ig_caption)
+        if err:
+            ig = {"skipped": err.splitlines()[0][:160]}
+            # run_tool_safe returns the full parsed JSON on failure -- keep Instagram's own
+            # reason (platform_status) so a future failure is diagnosable without re-running.
+            detail = (m or {}).get("platform_status")
+            if detail:
+                ig["platform_status"] = detail
+            a["delivery"]["instagram"] = ig
+        else:
+            a["delivery"]["instagram"] = {"id": m.get("post_id") or m.get("media_id")}
         ok = ok or not err
         run_tool_safe("email_video.py", ["--video", final_rel, "--subject", f"momoclips live: {card}"])
         if ok:
@@ -358,6 +390,10 @@ def main():
     ap.add_argument("--max-minutes", type=float, default=320.0, help="Hard job-length cap")
     ap.add_argument("--max-posts", type=int, default=14, help="Daily cap across ALL live formats")
     ap.add_argument("--no-speed", action="store_true", help="Skip iShowSpeed reaction capture")
+    ap.add_argument("--ig-spacing", type=float, default=60.0,
+                    help="Min seconds between Instagram publishes (burst posting gets throttled)")
+    ap.add_argument("--ig-retries", type=int, default=2,
+                    help="Extra Instagram attempts after the first, with 30s->90s backoff")
     ap.add_argument("--once", action="store_true", help="Single poll cycle (testing)")
     ap.add_argument("--date", default=None, help="YYYYMMDD scoreboard date (catch-up on a past day)")
     ap.add_argument("--match", default=None, help="Only process this ESPN event id (targeted catch-up)")

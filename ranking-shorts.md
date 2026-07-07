@@ -30,7 +30,10 @@ live/imminent the job stays up for the whole match, polling ESPN every ~75s and 
   compilation** (`build_compilation.py` re-stitches that scorer's goal SOURCES — kept
   pre-watermark in `.tmp/wc/` — into one <58s Short).
 Idempotent via `state/worldcup_watch.json` (Actions cache, same cache family as the poller);
-`--max-posts 14`/day across all live formats.
+`--max-posts 14`/day across all live formats. **Instagram publishes are PACED** (`--ig-spacing 60`s
+min gap + `--ig-retries 2` with 30s→90s backoff): on 2026-07-07 five goal Shorts posted seconds
+apart all got Zernio `status=failed` (Instagram burst-throttle) while a 6th built ~40s later
+succeeded — pacing/retry fixes that. IG failures now record `platform_status` in the run summary.
 
 **A) Single World-Cup clips (`clip_autopost.py`).** Every ~20 min a cloud job polls YouTube for a
 FRESH World-Cup moment — now **viral/fan/streamer content only** (`--categories popular,streamer`):
