@@ -108,6 +108,14 @@ def main():
     ap.add_argument("--max", type=int, default=8, help="Max candidates to return (orchestrator posts the top one)")
     ap.add_argument("--categories", default="goal,streamer,popular",
                     help="Comma list restricting which categories to search (e.g. 'streamer,popular').")
+    ap.add_argument("--query", action="append", default=None,
+                    help="TARGETED mode (repeatable): search exactly these queries instead of the "
+                         "category presets -- used by watch_worldcup.py to hunt one specific goal "
+                         "('<scorer> goal <home> vs <away>') the moment the live feed reports it.")
+    ap.add_argument("--require", default=None,
+                    help="Targeted mode: comma list of words; a candidate title must contain ALL "
+                         "of them (case/accent-insensitive), e.g. the scorer's last name + 'goal'. "
+                         "Keeps a targeted search from drifting to unrelated fresh uploads.")
     ap.add_argument("--window", default="today", choices=["today", "week"],
                     help="Upload-date window: 'today' (freshest, default) or 'week' (wider supply).")
     ap.add_argument("--history", default="state/used_clips.json",
@@ -120,10 +128,21 @@ def main():
     wanted = [c.strip() for c in args.categories.split(",") if c.strip()]
     sp = SP_TODAY if args.window == "today" else SP_WEEK
 
-    # Build a flat, shuffled (query, category) list so no single category monopolises supply and
-    # the same query doesn't always lead. Categories stay balanced across runs.
-    plan = [(q, cat) for cat in wanted for q in QUERIES.get(cat, [])]
-    random.shuffle(plan)
+    if args.query:
+        # Targeted mode: the caller knows exactly what happened (live-feed goal event) and wants
+        # the freshest upload of THAT moment. Tag results with the first wanted category.
+        plan = [(q, wanted[0] if wanted else "goal") for q in args.query]
+    else:
+        # Build a flat, shuffled (query, category) list so no single category monopolises supply
+        # and the same query doesn't always lead. Categories stay balanced across runs.
+        plan = [(q, cat) for cat in wanted for q in QUERIES.get(cat, [])]
+        random.shuffle(plan)
+
+    def _fold(s):
+        import unicodedata
+        return "".join(c for c in unicodedata.normalize("NFKD", s)
+                       if not unicodedata.combining(c)).lower()
+    require = [_fold(w.strip()) for w in (args.require or "").split(",") if w.strip()]
 
     ordered, seen, errors = [], set(), []   # ordered = freshest-first candidates, deduped
     for q, cat in plan:
@@ -142,6 +161,10 @@ def main():
             # markers (a Hindi Zee News studio segment got posted on 2026-07-05 -- its title
             # carried English keywords, so keyword search alone can't be trusted).
             if not title_ok(title):
+                continue
+            # Targeted mode: every required word must appear (accent-insensitive) so a search
+            # for "Bellingham goal England vs Mexico" can't return some other fresh upload.
+            if require and any(w not in _fold(title) for w in require):
                 continue
             # Require a KNOWN, short duration: unknown usually means a live stream, and a long
             # VOD would download the whole file. Both must be excluded before the build step.

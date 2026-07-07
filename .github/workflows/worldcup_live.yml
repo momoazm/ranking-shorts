@@ -1,24 +1,19 @@
-name: momoclips - World Cup single clips
+name: momoclips - World Cup LIVE watcher
 
-# Polls YouTube every ~20 min for a FRESH World-Cup moment (viral clips / fan+streamer
-# reactions -- goals moved to the LIVE watcher worldcup_live.yml on 2026-07-06, and no
-# third-party iShowSpeed uploads), builds ONE branded vertical Short from it, and posts to YouTube +
-# Instagram (@momoclips). Dedup (state/used_clips.json) means the same clip is never reposted;
-# if nothing new is found the run posts nothing -- that's the "trigger only when something
-# happened" behaviour. Runs on GitHub-hosted ubuntu; yt-dlp routes through WARP (YouTube
-# bot-checks datacenter IPs). See tools/clip_autopost.py.
-#
-# LIVE (2026-07-04): the 20-min schedule is ENABLED -- it auto-posts every 20 min when a fresh
-# clip is found (dedup + daily cap MAX_DAILY_CLIPS=8 keep it from flooding). Scheduled runs post
-# YouTube = PUBLIC by default (Moemen's go-ahead 2026-07-05); Instagram has no unlisted, so IG
-# Reels are public on every live run anyway.
-# Copyright: official goal footage is heavily Content-ID-claimed; posting it is an accepted risk
-# (decision log 2026-07-04). To PAUSE: re-comment the schedule, or disable the workflow in the
-# GitHub Actions UI.
+# EVENT-DRIVEN World-Cup coverage (Moemen's spec 2026-07-06). Every 15 min a ~30s GATE step
+# asks ESPN's free scoreboard JSON "is a match live or kicking off within ~25 min?". If not,
+# the job ends there (no pip/ffmpeg/WARP cost). If yes, the full environment is set up and
+# tools/watch_worldcup.py runs for the whole match window, polling ESPN every ~75s:
+#   GOAL      -> post that goal's clip (targeted YouTube hunt) + iShowSpeed's live reaction
+#                (our own capture of his stream -- clip_speed_reaction.py)
+#   FULL TIME -> star-player performance recap + brace/hat-trick goal compilation
+# Posts are PUBLIC by default (channel went public 2026-07-05). state/worldcup_watch.json
+# (cached, shared with the 20-min poller's cache) makes everything idempotent across runs.
+# To PAUSE: disable this workflow in the Actions UI.
 
 on:
   schedule:
-    - cron: "*/20 * * * *"     # every 20 min; posts only when a genuinely new clip is found
+    - cron: "*/15 * * * *"    # cheap gate; the heavy path only runs while a match is on
   workflow_dispatch:
     inputs:
       privacy:
@@ -30,33 +25,42 @@ on:
         description: "Build only, post nothing (safest test)"
         type: boolean
         default: false
-      window:
-        description: "Upload-date window to search"
-        type: choice
-        options: [today, week]
-        default: today
-      categories:
-        description: "Categories to search (scheduled runs use popular,streamer -- goals belong to the LIVE watcher)"
-        type: string
-        default: "popular,streamer"
+      no_speed:
+        description: "Skip the iShowSpeed livestream capture"
+        type: boolean
+        default: false
 
-# One run at a time; don't cancel a run that may be mid-upload.
+# One watcher at a time; never cancel one that may be mid-upload. A cron tick that fires
+# while a watcher is running just queues one pending run, which fast-exits afterwards.
 concurrency:
-  group: worldcup-clips
+  group: worldcup-live
   cancel-in-progress: false
 
 permissions:
   contents: write
 
 jobs:
-  clip:
+  watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v5
 
-      # Persist the posted-clip history across runs so the same clip is never reposted.
+      # ~30s, stdlib-only: decide whether anything is worth watching before paying for setup.
+      # Manual dispatches always proceed (that's how a no-upload test runs on a quiet day).
+      - name: Gate - is a match live or imminent?
+        id: gate
+        run: |
+          GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25)
+          echo "$GATE"
+          WATCH=$(echo "$GATE" | jq -r .watch)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then WATCH=true; fi
+          echo "watch=$WATCH" >> "$GITHUB_OUTPUT"
+
+      # Shared with worldcup_clips.yml's cache family: used_clips.json (cross-pipeline dedup)
+      # + worldcup_watch.json (this watcher's per-goal idempotency).
       - name: Restore posted-clip history
+        if: steps.gate.outputs.watch == 'true'
         uses: actions/cache@v4
         with:
           path: state
@@ -65,16 +69,19 @@ jobs:
             momoclips-used-
 
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.watch == 'true'
         with:
           python-version: "3.12"
           cache: pip
 
       - name: System deps (ffmpeg w/ libass for the burned title card)
+        if: steps.gate.outputs.watch == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-liberation
 
       - name: Python deps
+        if: steps.gate.outputs.watch == 'true'
         run: |
           pip install --upgrade pip
           if ! pip install -r requirements.txt; then
@@ -83,6 +90,7 @@ jobs:
           pip install --upgrade yt-dlp
 
       - name: Start Cloudflare WARP (SOCKS proxy for yt-dlp egress)
+        if: steps.gate.outputs.watch == 'true'
         run: |
           curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
@@ -92,20 +100,19 @@ jobs:
           done
           warp-cli --accept-tos mode proxy
           warp-cli --accept-tos connect
-          # Poll until WARP is actually Connected -- a fixed sleep is too flaky (status can still
-          # be "Connecting" after 5s, which makes every proxied yt-dlp search fail instantly).
+          # Poll until WARP is actually Connected -- a fixed sleep races (see worldcup_clips.yml).
           for i in $(seq 1 40); do
             if warp-cli --accept-tos status | grep -q "Connected"; then echo "WARP connected"; break; fi
             sleep 3
           done
           warp-cli --accept-tos status
-          # Hard gate: confirm real egress through the SOCKS proxy before continuing.
           if ! curl -s --max-time 25 --proxy socks5h://127.0.0.1:40000 https://ifconfig.me; then
             echo "::error::WARP proxy egress check failed -- yt-dlp would be bot-blocked"; exit 1
           fi
           echo
 
       - name: Reconstruct secrets (never committed)
+        if: steps.gate.outputs.watch == 'true'
         env:
           YOUTUBE_TOKEN_JSON: ${{ secrets.YOUTUBE_TOKEN_JSON }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -139,7 +146,8 @@ jobs:
           EOF
           rm -f cookies.txt
 
-      - name: Poll + post one fresh World Cup clip
+      - name: Watch the match window (goals / Speed / end-of-game)
+        if: steps.gate.outputs.watch == 'true'
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -148,26 +156,23 @@ jobs:
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
           YTDLP_PROXY: socks5://127.0.0.1:40000
-          # Scheduled runs (no inputs) default to PUBLIC (Moemen's go-ahead 2026-07-05,
-          # after the English/footage screen shipped) + today window + real upload.
           IN_PRIVACY: ${{ inputs.privacy || 'public' }}
-          IN_WINDOW: ${{ inputs.window || 'today' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
-          # Goals are owned by the LIVE watcher (worldcup_live.yml) since 2026-07-06: it posts
-          # each goal minutes after it happens from the ESPN event feed. Keeping "goal" here too
-          # would post the SAME goal twice from two different uploads (dedup is per video id).
-          IN_CATEGORIES: ${{ inputs.categories || 'popular,streamer' }}
+          IN_NO_SPEED: ${{ inputs.no_speed }}
         run: |
-          ARGS=(--privacy "$IN_PRIVACY" --window "$IN_WINDOW" --categories "$IN_CATEGORIES" --platforms youtube,instagram,email)
+          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 320)
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
-          echo "clip_autopost.py ${ARGS[*]}"
-          python tools/clip_autopost.py "${ARGS[@]}"
+          if [ "$IN_NO_SPEED" == "true" ]; then ARGS+=(--no-speed); fi
+          echo "watch_worldcup.py ${ARGS[*]}"
+          python tools/watch_worldcup.py "${ARGS[@]}"
 
-      - name: Upload built Short artifact (inspection)
-        if: always()
+      - name: Upload built videos (inspection)
+        if: always() && steps.gate.outputs.watch == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: momoclip
-          path: .tmp/final.mp4
+          name: worldcup-live-media
+          path: |
+            .tmp/final.mp4
+            .tmp/wc/*.mp4
           if-no-files-found: ignore
           retention-days: 7

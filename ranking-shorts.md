@@ -13,17 +13,34 @@ rename.
 
 ## What this project does
 
-Two formats on the momoclips channel:
+Three formats on the momoclips channel:
 
-**A) Single World-Cup clips (`clip_autopost.py`) — current focus (2026-07-04).** Every ~20 min a
-cloud job polls YouTube for a FRESH World-Cup moment (Messi/Ronaldo/big-nation **goals**,
-viral clips -- **no iShowSpeed** (user rule 2026-07-06)), builds ONE branded vertical Short from it, and posts to YouTube +
-Instagram. "Only trigger when something happened" = dedup (`state/used_clips.json`) + an
-upload-date=Today search, so a run posts only when a genuinely new clip exists.
+**A0) LIVE World-Cup watcher (`watch_worldcup.py`) — current focus (2026-07-07).** Event-driven
+match coverage from **ESPN's free public scoreboard JSON** (`worldcup_live.py`, no key, no scrape).
+A 15-min GitHub cron (`worldcup_live.yml`) runs a ~30s stdlib-only gate; when a match is
+live/imminent the job stays up for the whole match, polling ESPN every ~75s and firing per event:
+- **GOAL** → targeted hunt for THAT goal's fresh upload (`find_worldcup_clips.py --query/--require`,
+  retried each poll until an upload appears, ~50 min max) → `build_clip` → post; **plus**
+  `clip_speed_reaction.py`: if **iShowSpeed is live**, record ~4 min of his stream (yt-dlp native
+  HLS downloader — ffmpeg can't speak the WARP SOCKS proxy) and post the **loudest ~42s window**
+  (his reaction). Speed content is OUR OWN livestream capture only — third-party Speed-clip
+  uploads stay blocked in the finders (`_common.title_ok`), per 2026-07-06 as amended 2026-07-07.
+- **FULL TIME** → star-player performance recap (`STAR_PLAYERS` list in `watch_worldcup.py`;
+  card carries the box-score line, footage from a targeted highlight hunt) + **brace/hat-trick
+  compilation** (`build_compilation.py` re-stitches that scorer's goal SOURCES — kept
+  pre-watermark in `.tmp/wc/` — into one <58s Short).
+Idempotent via `state/worldcup_watch.json` (Actions cache, same cache family as the poller);
+`--max-posts 14`/day across all live formats.
+
+**A) Single World-Cup clips (`clip_autopost.py`).** Every ~20 min a cloud job polls YouTube for a
+FRESH World-Cup moment — now **viral/fan/streamer content only** (`--categories popular,streamer`):
+**goals belong to the live watcher** (keeping them here too would double-post the same goal from a
+different upload; dedup is per video id). No third-party iShowSpeed uploads (user rule 2026-07-06).
+Builds ONE branded vertical Short and posts to YouTube + Instagram. "Only trigger when something
+happened" = dedup (`state/used_clips.json`) + an upload-date=Today search.
 Pipeline: `find_worldcup_clips → build_clip → host_public → upload_youtube/upload_instagram`.
 ⚠ Official goal footage is heavily Content-ID-claimed; posting it is Moemen's **accepted** risk
-(decision log 2026-07-04). Go-live is gated: the `worldcup_clips.yml` 20-min cron ships COMMENTED
-OUT until the handles are renamed and a sample is approved (see that file's header).
+(decision log 2026-07-04, extended to livestream capture 2026-07-07).
 
 **B) `#5 → #1` ranking countdowns (`rank_autopost.py`)** — the original format (below). Still
 present; single-clips are the active World-Cup play.
