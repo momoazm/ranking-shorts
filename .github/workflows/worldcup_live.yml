@@ -29,6 +29,14 @@ on:
         description: "Skip the iShowSpeed livestream capture"
         type: boolean
         default: false
+      date:
+        description: "Catch-up: YYYYMMDD scoreboard date (empty = today)"
+        type: string
+        default: ""
+      match:
+        description: "Catch-up: only this ESPN event id (empty = all)"
+        type: string
+        default: ""
 
 # One watcher at a time; never cancel one that may be mid-upload. A cron tick that fires
 # while a watcher is running just queues one pending run, which fast-exits afterwards.
@@ -159,10 +167,14 @@ jobs:
           IN_PRIVACY: ${{ inputs.privacy || 'public' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
           IN_NO_SPEED: ${{ inputs.no_speed }}
+          IN_DATE: ${{ inputs.date }}
+          IN_MATCH: ${{ inputs.match }}
         run: |
           ARGS=(--privacy "$IN_PRIVACY" --max-minutes 320)
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           if [ "$IN_NO_SPEED" == "true" ]; then ARGS+=(--no-speed); fi
+          if [ -n "$IN_DATE" ]; then ARGS+=(--date "$IN_DATE"); fi
+          if [ -n "$IN_MATCH" ]; then ARGS+=(--match "$IN_MATCH"); fi
           echo "watch_worldcup.py ${ARGS[*]}"
           python tools/watch_worldcup.py "${ARGS[@]}"
 

@@ -88,6 +88,7 @@ class Watcher:
             self.st = {"date": today, "goals": {}, "done_matches": [], "posts": 0}
         self.actions = []                     # run log for the exit summary
         self.speed_not_live_until = 0.0
+        self.was_live = set()                 # match ids seen in-progress THIS run (vs catch-up)
 
     # ---- posting ------------------------------------------------------------------
     def can_post(self):
@@ -179,9 +180,13 @@ class Watcher:
             query = f"{g['scorer']} goal {g['team']} vs {opp} World Cup 2026"
             require = last_name(g["scorer"])
         cands_path = f".tmp/wc/cands_{slug(key)}.json"
+        # Live matches: today-window (freshest). Catch-up over an already-ended match: the
+        # uploads may be from "yesterday" in YouTube's day bucketing -> widen to week; the
+        # targeted query + --require keep it on this exact goal.
+        window = "today" if match["id"] in self.was_live else "week"
         find, ferr = run_tool_safe("find_worldcup_clips.py",
                                    ["--query", query, "--require", require,
-                                    "--window", "today", "--categories", "goal",
+                                    "--window", window, "--categories", "goal",
                                     "--out", cands_path])
         cands = (find or {}).get("candidates", []) if not ferr else []
         if not cands:
@@ -237,14 +242,25 @@ class Watcher:
                     line = (f"{star['goals']} GOAL{'S' if star['goals'] != 1 else ''} "
                             f"{star['assists']} ASSIST{'S' if star['assists'] != 1 else ''}")
                 else:
-                    line = f"{star['shots']} SHOTS PERFORMANCE"
+                    # No goal contribution -> the story is the RESULT. From the R32 on, a loss
+                    # means the star is OUT of the World Cup -- that's the viral hook, not shots.
+                    side = "home" if match["home"] and match["home"]["name"] == star["team"] else "away"
+                    other = "away" if side == "home" else "home"
+                    try:
+                        lost = int(match[side]["score"]) < int(match[other]["score"])
+                    except (TypeError, ValueError, KeyError):
+                        lost = False
+                    line = "KNOCKED OUT" if lost else f"{star['shots']} SHOTS"
                 card = f"{star['name']} vs {opp} - {line}"
+                window = "today" if mid in self.was_live else "week"
                 find, ferr = run_tool_safe("find_worldcup_clips.py",
                                            ["--query", f"{star['name']} vs {opp} World Cup 2026",
+                                            "--query", f"{star['name']} {star['team']} World Cup 2026",
                                             "--require", last_name(star["name"]),
-                                            "--window", "today", "--categories", "popular",
+                                            "--window", window, "--categories", "popular",
                                             "--max-dur", "180",
                                             "--out", ".tmp/wc/star_cands.json"])
+                posted = False
                 for c in ((find or {}).get("candidates") or [])[:3] if not ferr else []:
                     build, berr = run_tool_safe("build_clip.py",
                                                 ["--url", c["url"], "--title", card,
@@ -252,7 +268,13 @@ class Watcher:
                     record_used(c["id"])
                     if not berr:
                         self.post(FINAL, card, "popular", f"star_recap:{star['name']}")
+                        posted = True
                         break
+                if not posted:
+                    # Visible in the run summary -- a star recap that finds no footage must not
+                    # vanish silently (bit us on a local dry run 2026-07-07).
+                    self.actions.append({"what": "star_recap_no_footage", "star": star["name"],
+                                         "card": card, "find_error": (ferr or "")[:120]})
 
         # (b) multi-goal compilation(s)
         by_scorer = {}
@@ -286,13 +308,16 @@ class Watcher:
         while time.time() < deadline:
             loops += 1
             try:
-                matches = get_scoreboard()
+                matches = get_scoreboard(self.args.date)
             except Exception as e:
                 self.actions.append({"what": "scoreboard_failed", "error": str(e)[:160]})
                 time.sleep(self.args.poll)
                 continue
+            if self.args.match:               # catch-up/targeted mode: only this event
+                matches = [m for m in matches if m["id"] == self.args.match]
 
             live = [m for m in matches if m["state"] == "in"]
+            self.was_live.update(m["id"] for m in live)
             soon = [m for m in matches if m["state"] == "pre"
                     and (minutes_to_kickoff(m) or 1e9) <= self.args.lead_min]
             ended = [m for m in matches if m["state"] == "post"
@@ -334,6 +359,8 @@ def main():
     ap.add_argument("--max-posts", type=int, default=14, help="Daily cap across ALL live formats")
     ap.add_argument("--no-speed", action="store_true", help="Skip iShowSpeed reaction capture")
     ap.add_argument("--once", action="store_true", help="Single poll cycle (testing)")
+    ap.add_argument("--date", default=None, help="YYYYMMDD scoreboard date (catch-up on a past day)")
+    ap.add_argument("--match", default=None, help="Only process this ESPN event id (targeted catch-up)")
     args = ap.parse_args()
 
     load_env()
