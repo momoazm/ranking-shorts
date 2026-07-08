@@ -126,6 +126,13 @@ there is no unlisted/draft privacy like YouTube; the only safe pre-test is the t
   `.tmp/final.mp4` (overlay in sync, audio clean, no visible looping artifacts).
   `upload_youtube.py` / `upload_tiktok.py` / `upload_instagram.py` are the **only irreversible
   steps.**
+- **English commentary only — no Indian/Hindi-commentary re-uploads** (user rule 2026-07-08). An
+  English *title* can still front Hindi *audio*, so the title screen can't catch it — the **channel**
+  is the signal. `_common.channel_ok()` hard-blocks Indian-language / Hindi-feed channels
+  (hindi/india/Sports Tak/DD Sports/Star Sports/Sony/…) for every category, and the goal finder
+  **prefers trusted broadcasters** (`channel_trusted()`: FIFA/FOX/CBS Golazo/ESPN/beIN/…), only
+  falling back to the wider channel-screened pool when none of them have the moment yet. Already-
+  posted Hindi-audio clips must be removed by hand (source channel isn't recorded post-publish).
 - **Clips must be no-copyright / fair-use safe.** Sourcing tools don't vet rights; the music bed is
   pitch-shifted to reduce Content ID matches but is not a guarantee.
 - `state/used_clips.json` tracks clips already used — don't reuse without reason.

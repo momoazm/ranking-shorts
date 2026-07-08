@@ -30,7 +30,7 @@ import os
 import random
 import urllib.parse
 
-from _common import REPO_ROOT, load_env, emit, fail, title_ok
+from _common import REPO_ROOT, load_env, emit, fail, title_ok, channel_ok, channel_trusted
 
 # YouTube search "sp" filter tokens (URL-encoded). "Upload date: Today" is what surfaces
 # just-happened content -- probed 2026-07-04: it returned same-day match uploads where a
@@ -118,6 +118,8 @@ def main():
                          "Keeps a targeted search from drifting to unrelated fresh uploads.")
     ap.add_argument("--window", default="today", choices=["today", "week"],
                     help="Upload-date window: 'today' (freshest, default) or 'week' (wider supply).")
+    ap.add_argument("--no-trusted-pref", action="store_true",
+                    help="Don't prefer official/major broadcasters (Indian-channel block still applies).")
     ap.add_argument("--history", default="state/used_clips.json",
                     help="JSON of already-posted clip ids, to avoid reposting")
     ap.add_argument("--out", default=".tmp/clip_candidates.json")
@@ -170,15 +172,29 @@ def main():
             # VOD would download the whole file. Both must be excluded before the build step.
             if not isinstance(dur, (int, float)) or not (args.min_dur <= dur <= args.max_dur):
                 continue
+            # Channel screen: an ENGLISH title can still front HINDI commentary from an Indian
+            # re-upload channel (user rule 2026-07-08). The title can't reveal that; the channel
+            # can. Hard-block bad channels for every category.
+            channel = (en.get("channel") or en.get("uploader") or "").strip()
+            handle = (en.get("uploader_id") or "").strip()
+            if not channel_ok(f"{channel} {handle}"):
+                continue
             seen.add(vid)
             ordered.append({"id": vid, "title": title, "duration": float(dur),
-                            "url": f"https://www.youtube.com/watch?v={vid}", "category": cat})
+                            "url": f"https://www.youtube.com/watch?v={vid}", "category": cat,
+                            "channel": channel,
+                            "trusted": channel_trusted(channel, handle)})
         if len(ordered) >= args.max * 3:     # plenty gathered -> stop hitting the API
             break
 
-    # `ytsearchdate` already returns newest-first per query; interleaving queries roughly preserves
-    # freshness. Keep the first --max as the candidates to try.
-    cands = ordered[: args.max]
+    # Prefer official / major English-commentary broadcasters (FIFA, FOX, CBS, ESPN, beIN...):
+    # they carry essentially every goal with clean commentary. If ANY trusted candidate was
+    # found, post only from those; otherwise fall back to the wider channel-screened pool (so a
+    # smaller nation's goal isn't dropped entirely) -- Indian channels are already gone above.
+    trusted = [c for c in ordered if c.get("trusted")]
+    pool = trusted if (trusted and not args.no_trusted_pref) else ordered
+    # `ytsearchdate` returns newest-first per query; interleaving roughly preserves freshness.
+    cands = pool[: args.max]
     if not cands:
         # Not an error the run should crash on -- "nothing new happened" is a valid outcome.
         emit({"source": "youtube", "count": 0, "candidates": [], "path": args.out,

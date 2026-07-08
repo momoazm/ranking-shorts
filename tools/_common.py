@@ -110,3 +110,44 @@ def title_ok(title):
     if _BLOCKED_SUBJECTS.search(t):
         return False
     return True
+
+
+# --- Channel screen: block Indian/Hindi-commentary re-upload channels ------------------------
+# The problem the title screen CAN'T solve: a goal clip with an English title
+# ("Messi Goal | Argentina 3-2 Egypt") but HINDI commentary audio, re-uploaded by an Indian
+# sports channel. The reliable signal is the CHANNEL / uploader handle, not the title. This
+# blocklist matches Indian-language markers and known Hindi-feed broadcasters in the channel
+# name/@handle; `channel_ok()` rejects them for every category.
+_BAD_CHANNEL = _re.compile(
+    r"hindi|\bindia\b|indian|bharat|desi|\bhind\b|"
+    r"sports\s*tak|aaj\s*tak|dd\s*sports|jio|khel|"
+    r"sony\s*(?:ten|liv|sports)|star\s*sports|sports\s*18|"
+    r"\bbangla\b|\btamil\b|\btelugu\b|\bmalayalam\b|\burdu\b|pakistan|\bptv\b",
+    _re.IGNORECASE)
+
+# Trusted English-commentary sources: official + major broadcasters. The World Cup's own FIFA
+# channel plus these cover essentially every goal with clean world-feed/English commentary, so
+# the goal finder PREFERS them (see find_worldcup_clips) and only falls back to the wider,
+# channel-screened pool when none of them have the moment yet.
+_TRUSTED_CHANNELS = {
+    "@fifa", "@fifaworldcup", "@foxsoccer", "@foxsports", "@cbssportsgolazo", "@cbssports",
+    "@espn", "@espnfc", "@espnuk", "@beinsports", "@beinsportsusa", "@tntsports", "@skysports",
+    "@nbcsports", "@daznfootball", "@dazn", "@onefootball", "@goal", "@433", "@bbcsport",
+}
+_TRUSTED_NAME = _re.compile(
+    r"\bfifa\b|fox\s*soccer|fox\s*sports|cbs\s*sports|golazo|\bespn\b|bein\s*sports|"
+    r"tnt\s*sports|sky\s*sports|nbc\s*sports|\bdazn\b|onefootball|\bbbc\s*sport",
+    _re.IGNORECASE)
+
+
+def channel_ok(channel_text):
+    """False if the channel name/@handle looks like an Indian/Hindi-commentary re-uploader."""
+    return not _BAD_CHANNEL.search(channel_text or "")
+
+
+def channel_trusted(channel_name, handle=""):
+    """True if the channel is an official/major English-commentary broadcaster."""
+    h = (handle or "").strip().lower()
+    if h and h in _TRUSTED_CHANNELS:
+        return True
+    return bool(_TRUSTED_NAME.search(channel_name or ""))
