@@ -40,6 +40,18 @@ on:
         description: "Catch-up: only this ESPN event id (empty = all)"
         type: string
         default: ""
+      platforms:
+        description: "Where to post (e.g. 'youtube' to backfill one platform)"
+        type: string
+        default: "youtube,instagram,email"
+      fresh:
+        description: "Backfill: re-hunt/re-post --match's goals, ignoring prior posted state"
+        type: boolean
+        default: false
+      redo_min:
+        description: "Backfill: only these goal minutes for --match (e.g. '79,83,90')"
+        type: string
+        default: ""
 
 # One watcher at a time; never cancel one that may be mid-upload. A cron tick that fires
 # while a watcher is running just queues one pending run, which fast-exits afterwards.
@@ -172,12 +184,17 @@ jobs:
           IN_NO_SPEED: ${{ inputs.no_speed }}
           IN_DATE: ${{ inputs.date }}
           IN_MATCH: ${{ inputs.match }}
+          IN_PLATFORMS: ${{ inputs.platforms || 'youtube,instagram,email' }}
+          IN_FRESH: ${{ inputs.fresh }}
+          IN_REDO_MIN: ${{ inputs.redo_min }}
         run: |
-          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 320)
+          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 320 --platforms "$IN_PLATFORMS")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           if [ "$IN_NO_SPEED" == "true" ]; then ARGS+=(--no-speed); fi
+          if [ "$IN_FRESH" == "true" ]; then ARGS+=(--fresh); fi
           if [ -n "$IN_DATE" ]; then ARGS+=(--date "$IN_DATE"); fi
           if [ -n "$IN_MATCH" ]; then ARGS+=(--match "$IN_MATCH"); fi
+          if [ -n "$IN_REDO_MIN" ]; then ARGS+=(--redo-min "$IN_REDO_MIN"); fi
           echo "watch_worldcup.py ${ARGS[*]}"
           python tools/watch_worldcup.py "${ARGS[@]}"
 
