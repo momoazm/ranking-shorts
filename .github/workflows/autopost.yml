@@ -99,6 +99,8 @@ jobs:
           fi
           # YouTube breaks old yt-dlp builds constantly; force the latest every run.
           pip install --upgrade yt-dlp
+          # PO-token provider plugin (auto-discovered by yt-dlp) -- beats the datacenter bot-wall.
+          pip install --upgrade bgutil-ytdlp-pot-provider
 
       - name: Start Cloudflare WARP (SOCKS proxy for yt-dlp egress)
         run: |
@@ -121,6 +123,14 @@ jobs:
             echo "::error::WARP proxy egress check failed -- yt-dlp would be bot-blocked"; exit 1
           fi
           echo
+          # PO-token provider (BgUtils): Docker token server on localhost:4416 so yt-dlp's web/tv
+          # clients mint valid proof-of-origin tokens and stop getting bot-walled on datacenter IPs
+          # (WARP alone started failing on the MrBeast pipeline 2026-07-08).
+          docker run --name bgutil-provider -d --init -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          for i in $(seq 1 30); do
+            curl -s --max-time 5 http://127.0.0.1:4416/ >/dev/null 2>&1 && { echo "POT provider up"; break; }
+            sleep 2
+          done
 
       - name: Reconstruct secrets (never committed)
         env:
@@ -176,6 +186,7 @@ jobs:
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
           # Cloud sourcing constraints -- see the header comment.
           YTDLP_PROXY: socks5://127.0.0.1:40000
+          no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           NO_REDDIT_SOURCES: "1"
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
