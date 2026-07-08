@@ -36,9 +36,9 @@ on:
         options: [today, week]
         default: today
       categories:
-        description: "Categories to search (scheduled runs use popular,streamer -- goals belong to the LIVE watcher)"
+        description: "Categories to search. Priority: iShowSpeed first, then other events (goals belong to the LIVE watcher)."
         type: string
-        default: "popular,streamer"
+        default: "speed,popular,streamer"
 
 # One run at a time; don't cancel a run that may be mid-upload.
 concurrency:
@@ -167,7 +167,7 @@ jobs:
           # Goals are owned by the LIVE watcher (worldcup_live.yml) since 2026-07-06: it posts
           # each goal minutes after it happens from the ESPN event feed. Keeping "goal" here too
           # would post the SAME goal twice from two different uploads (dedup is per video id).
-          IN_CATEGORIES: ${{ inputs.categories || 'popular,streamer' }}
+          IN_CATEGORIES: ${{ inputs.categories || 'speed,popular,streamer' }}
         run: |
           ARGS=(--privacy "$IN_PRIVACY" --window "$IN_WINDOW" --categories "$IN_CATEGORIES" --platforms youtube,instagram,email)
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
