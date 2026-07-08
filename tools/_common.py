@@ -174,9 +174,15 @@ def zernio_create_post(api_url, payload, api_key, max_tries=5):
             _t.sleep(backoff); backoff *= 2
             continue
         if r.status_code == 429 or r.status_code >= 500:
+            body = r.text[:200]
+            last = f"HTTP {r.status_code}: {body}"
+            # Distinguish a transient burst 429 (retry helps) from an ACCOUNT-level daily cap
+            # ("temporarily rate-limited ... wait 18h ... before posting") -- the latter won't
+            # clear for hours, so retrying is pointless; fail fast with the clear reason.
+            if r.status_code == 429 and _re.search(r"wait\s+\d+\s*h|before\s+post", body, _re.IGNORECASE):
+                return None, (f"Zernio account rate-limited (daily cap): {body}")
             ra = r.headers.get("Retry-After", "")
             wait = int(ra) if ra.isdigit() else backoff
-            last = f"HTTP {r.status_code}: {r.text[:120]}"
             if attempt < max_tries - 1:
                 _t.sleep(min(wait, 120)); backoff *= 2
             continue
