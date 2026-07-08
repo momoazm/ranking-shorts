@@ -31,7 +31,7 @@ import os
 import time
 import uuid
 
-from _common import load_env, emit, fail
+from _common import load_env, emit, fail, zernio_create_post
 
 ZERNIO_API = "https://zernio.com/api/v1"
 
@@ -78,14 +78,9 @@ def main():
 
     import httpx
 
-    headers = {"Authorization": f"Bearer {api_key}", "x-request-id": str(uuid.uuid4())}
-    try:
-        r = httpx.post(f"{ZERNIO_API}/posts", json=payload, headers=headers, timeout=60)
-        r.raise_for_status()
-        post = r.json().get("post", {})
-    except Exception as e:
-        body = getattr(getattr(e, "response", None), "text", "")
-        fail(f"Zernio post create failed: {e} {body}".strip())
+    post, cerr = zernio_create_post(f"{ZERNIO_API}/posts", payload, api_key)
+    if cerr:
+        fail(cerr)
         return
 
     post_id = post.get("_id")

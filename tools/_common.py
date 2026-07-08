@@ -151,3 +151,39 @@ def channel_trusted(channel_name, handle=""):
     if h and h in _TRUSTED_CHANNELS:
         return True
     return bool(_TRUSTED_NAME.search(channel_name or ""))
+
+
+# --- Zernio post-create with rate-limit retry -------------------------------------------------
+# Both upload_youtube.py and upload_instagram.py publish through Zernio's single POST /posts
+# endpoint, which shares one rate limit. Posting several clips in quick succession (a busy
+# match) returns HTTP 429 Too Many Requests -- on 2026-07-08 four of Argentina-Egypt's posts
+# 429'd on the YouTube side. This retries the CREATE call on 429/5xx with backoff (honoring a
+# Retry-After header when present) so a burst self-throttles instead of dropping posts.
+def zernio_create_post(api_url, payload, api_key, max_tries=5):
+    """POST to Zernio /posts, retrying on 429/5xx. Returns (post_dict, error_str)."""
+    import httpx
+    import time as _t
+    import uuid as _uuid
+    backoff, last = 20, None
+    for attempt in range(max_tries):
+        headers = {"Authorization": f"Bearer {api_key}", "x-request-id": str(_uuid.uuid4())}
+        try:
+            r = httpx.post(api_url, json=payload, headers=headers, timeout=60)
+        except Exception as e:                       # network blip -> retry
+            last = str(e)
+            _t.sleep(backoff); backoff *= 2
+            continue
+        if r.status_code == 429 or r.status_code >= 500:
+            ra = r.headers.get("Retry-After", "")
+            wait = int(ra) if ra.isdigit() else backoff
+            last = f"HTTP {r.status_code}: {r.text[:120]}"
+            if attempt < max_tries - 1:
+                _t.sleep(min(wait, 120)); backoff *= 2
+            continue
+        try:
+            r.raise_for_status()
+        except Exception as e:                       # 4xx other than 429 -> not retryable
+            body = getattr(getattr(e, "response", None), "text", "")
+            return None, f"Zernio post create failed: {e} {body}".strip()
+        return r.json().get("post", {}), None
+    return None, f"Zernio post create failed after {max_tries} tries ({last})"
