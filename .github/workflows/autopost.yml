@@ -17,11 +17,15 @@ name: ranking-shorts
 # silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
 
 on:
-  schedule:
-    # Fires at :50 the hour before each slot; the hold step releases at exactly
-    # 02:30 / 11:30 / 14:30 / 17:30 / 20:30 / 23:30 UTC -> 6 uploads/day hitting the
-    # US morning / lunch / afternoon / evening windows (UTC-4 in July).
-    - cron: "50 1,10,13,16,19,22 * * *"
+  # PAUSED FOR THE WORLD CUP (2026-07-08, Moemen): the #5->#1 RANKING countdown is the wrong
+  # format while the tournament is on -- the channel should post SINGLE football clips (goals,
+  # reactions, recaps) from worldcup_live.yml + worldcup_clips.yml, not ranking-style videos, and
+  # under NO_REDDIT_SOURCES this pipeline's fallback pool drifts mixed->fails = NON-football clips.
+  # Re-enable after the final (~2026-07-19) by uncommenting the schedule below.
+  # schedule:
+  #   # Fires at :50 the hour before each slot; the hold step releases at exactly
+  #   # 02:30 / 11:30 / 14:30 / 17:30 / 20:30 / 23:30 UTC -> 6 uploads/day.
+  #   - cron: "50 1,10,13,16,19,22 * * *"
   workflow_dispatch:      # manual "Run workflow" button (from the MOMO site) -- runs immediately
     inputs:
       no_upload:

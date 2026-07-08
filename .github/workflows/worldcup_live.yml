@@ -13,7 +13,10 @@ name: momoclips - World Cup LIVE watcher
 
 on:
   schedule:
-    - cron: "*/15 * * * *"    # cheap gate; the heavy path only runs while a match is on
+    # cheap gate; the heavy path only runs while a match is on. Re-registered 2026-07-08 after
+    # the */15 cron silently stalled (only ~3 scheduled runs in 24h instead of ~96 -> EGY-ARG was
+    # missed); pausing autopost.yml's 6 daily crons also frees account cron capacity.
+    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       privacy:
