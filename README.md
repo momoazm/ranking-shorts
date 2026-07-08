@@ -13,5 +13,12 @@ MOMO content engine). A character-dialogue format also exists in the tooling as 
   crop; **iShowSpeed un-blocked** (reverses the 07-06 ban); `popular` broadened to trending
   off-pitch moments. All 3 workflows now run the BgUtils **PO-token provider** so cloud YouTube
   sourcing beats the datacenter bot-wall (verified: built a clip, no bot-wall).
+- **iShowSpeed watcher (2026-07-09):** a NEW `watch_speed.py` + `speed_watch.yml` runs IN PARALLEL
+  with the goal-clip watcher: while Speed is live on a WC match it records his stream in chunks and
+  auto-posts a clip of every big moment (goal / penalty / **celebration / chant / creator collab**)
+  to Instagram. Detection = ESPN goals + **audio-energy peaks** (the catch-all for moments no feed
+  reports) + a **Groq→Gemini vision label** that titles the clip and filters false positives. All
+  Speed capture was removed from `watch_worldcup.py` to avoid double-posting. Built via the new
+  `/new-watcher` skill's pattern.
 - **Rules / how-to:** [ranking-shorts.md](ranking-shorts.md)
 - **Key dates:** Tied to the #1 priority — make these videos viral. Reduced availability ~2026-07-07.

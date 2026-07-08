@@ -41,6 +41,9 @@ def esc(text):
 def _ydl_opts(out_base, fmt, player_client=None):
     from _media import get_ffmpeg
     opts = {"format": fmt, "merge_output_format": "mp4",
+            # BEST QUALITY (2026-07-09): highest resolution first, H.264 only as a same-res
+            # tie-break (light decode at <=1080; higher comes as VP9/AV1). See _DL_ATTEMPTS.
+            "format_sort": ["res", "vcodec:h264", "acodec:m4a"],
             "outtmpl": out_base + ".%(ext)s", "noplaylist": True, "quiet": True,
             "no_warnings": True, "noprogress": True, "overwrites": True,
             "ffmpeg_location": os.path.dirname(get_ffmpeg()),
@@ -69,12 +72,16 @@ _DL_ATTEMPTS = [
     # WEB CLIENT FIRST (2026-07-08): the BgUtils PO-token provider supplies GVS tokens for the
     # `web` client, which is what actually beats YouTube's datacenter bot-wall -- the `android`/
     # `ios` fallbacks below CANNOT use a PO token, so leaning on them let the wall win (real
-    # 18:10 poller run bot-walled every download). Progressive/avc1 first (adaptive DASH frags
-    # 403 through the WARP SOCKS proxy), then DASH, then the non-POT clients as last-ditch.
-    (["web"], "b[height<=720][ext=mp4]/b[height<=720]/b"),
-    (["web"], "bv*[height<=720]+ba/b[height<=720]/b/best"),
-    (None, "b[height<=720][ext=mp4]/b[height<=720]/b"),
-    (["android"], "b[height<=720]/b/best"),
+    # 18:10 poller run bot-walled every download).
+    # BEST QUALITY (2026-07-09): DASH merge up to 1920 tall FIRST (source Shorts are already 9:16,
+    # so 1080x1920 is full quality; format_sort in _ydl_opts makes it highest-res + h264-tiebreak).
+    # clipping-auto proves DASH-through-WARP works with PO tokens; if adaptive frags still 403
+    # through the SOCKS proxy, the progressive/muxed line below (single stream, <=720) is the
+    # graceful fallback so a clip still ships. Then the non-POT clients as last-ditch.
+    (["web"], "bv*[height<=1920]+ba/b[height<=1920]"),
+    (["web"], "b[height<=1920][ext=mp4]/b[height<=1920]/b"),
+    (None, "bv*[height<=1920]+ba/b[height<=1920]/b"),
+    (["android"], "b/best"),
     (["ios"], "b/best"),
 ]
 

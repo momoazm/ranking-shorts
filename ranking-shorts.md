@@ -20,11 +20,23 @@ match coverage from **ESPN's free public scoreboard JSON** (`worldcup_live.py`, 
 A 15-min GitHub cron (`worldcup_live.yml`) runs a ~30s stdlib-only gate; when a match is
 live/imminent the job stays up for the whole match, polling ESPN every ~75s and firing per event:
 - **GOAL** → targeted hunt for THAT goal's fresh upload (`find_worldcup_clips.py --query/--require`,
-  retried each poll until an upload appears, ~50 min max) → `build_clip` → post; **plus**
-  `clip_speed_reaction.py`: if **iShowSpeed is live**, record ~4 min of his stream (yt-dlp native
-  HLS downloader — ffmpeg can't speak the WARP SOCKS proxy) and post the **loudest ~42s window**
-  (his reaction). Speed content is OUR OWN livestream capture only — third-party Speed-clip
-  uploads stay blocked in the finders (`_common.title_ok`), per 2026-07-06 as amended 2026-07-07.
+  retried each poll until an upload appears, ~50 min max) → `build_clip` → post. (iShowSpeed
+  reactions are NO LONGER captured here — see A0b.) Third-party Speed-clip uploads stay blocked in
+  the finders (`_common.title_ok`), per 2026-07-06.
+
+**A0b) iShowSpeed LIVE watcher (`watch_speed.py`) — PARALLEL to A0 (2026-07-09).** Own
+`speed_watch.yml` (same `*/15` ESPN gate, own `concurrency: speed-watch` so it runs alongside A0).
+While Speed is live on a WC match (`match_wc_stream` checks his `/live` title vs today's ESPN
+fixtures) it records his stream in rolling ~210s chunks (yt-dlp native HLS — ffmpeg can't speak the
+WARP SOCKS proxy) and posts a clip per big moment to **Instagram**. Detection FUSES: fresh ESPN
+goals (title it "SPEED REACTS TO <SCORER> GOAL") + **audio-energy peaks** (`clip_speed_reaction.top_peaks`,
+energy ≥ `--peak-ratio 1.6`×the chunk median — the catch-all for celebration/chant/collab moments
+no feed reports) + a **vision label** (`_llm.vision_complete`: **Groq llama-4-scout → Gemini**;
+Gemini alone 429'd) that writes the title + drops false positives (ads/menus/calm talking).
+**Safe-degrade:** vision down → post a goal-driven peak generically but DROP an unlabelled pure-hype
+peak. Idempotent via `state/speed_watch.json`; `--max-posts 8`/day; publishes paced
+(`--post-spacing 45`, `--post-retries 2`). Test: dispatch with `no_upload=true`, or locally
+`watch_speed.py --once --no-upload`. Built via the `/new-watcher` skill pattern.
 - **FULL TIME** → star-player performance recap (`STAR_PLAYERS` list in `watch_worldcup.py`;
   card carries the box-score line, footage from a targeted highlight hunt) + **brace/hat-trick
   compilation** (`build_compilation.py` re-stitches that scorer's goal SOURCES — kept

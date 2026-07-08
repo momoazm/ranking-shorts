@@ -1,0 +1,170 @@
+name: momoclips - iShowSpeed LIVE watcher
+
+# PARALLEL to worldcup_live.yml (Moemen's spec 2026-07-09). Same cheap ESPN gate: every 15 min a
+# ~30s step asks "is a World Cup match live or kicking off within ~25 min?" -- because that's the
+# only time iShowSpeed streams a WC watchalong. If not, the job ends there (no pip/ffmpeg/WARP
+# cost). If yes, the environment is set up and tools/watch_speed.py runs for the match window:
+# it checks if Speed is live on that match and, while he is, records his stream in chunks and posts
+# a clip of every big moment (goal / penalty / celebration / chant / creator collab) straight to
+# the football Instagram account. Detection = ESPN goals + audio-energy peaks + a Gemini vision
+# label. Its own concurrency group means it runs ALONGSIDE the broadcast goal-clip watcher, which
+# no longer captures Speed (no double-posting). state/speed_watch.json (cached) keeps it idempotent.
+# To PAUSE: disable this workflow in the Actions UI.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      no_upload:
+        description: "Build only, post nothing (safest test)"
+        type: boolean
+        default: false
+      platforms:
+        description: "Where to post his reactions"
+        type: string
+        default: "instagram"
+      any_live:
+        description: "Capture even if his stream title isn't clearly a WC match"
+        type: boolean
+        default: false
+      channel:
+        description: "Override the /live channel URL (testing)"
+        type: string
+        default: ""
+
+# Own group so this runs IN PARALLEL with worldcup-live. Never cancel a watcher mid-upload.
+concurrency:
+  group: speed-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+
+      # ~30s, stdlib-only: only spin up while a WC match is on (when Speed would be streaming it).
+      - name: Gate - is a match live or imminent?
+        id: gate
+        run: |
+          GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25)
+          echo "$GATE"
+          WATCH=$(echo "$GATE" | jq -r .watch)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then WATCH=true; fi
+          echo "watch=$WATCH" >> "$GITHUB_OUTPUT"
+
+      - name: Restore watcher state
+        if: steps.gate.outputs.watch == 'true'
+        uses: actions/cache@v4
+        with:
+          path: state
+          key: momoclips-speed-${{ github.run_id }}
+          restore-keys: |
+            momoclips-speed-
+
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.watch == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: System deps (ffmpeg w/ libass for the burned title card)
+        if: steps.gate.outputs.watch == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-liberation
+
+      - name: Python deps
+        if: steps.gate.outputs.watch == 'true'
+        run: |
+          pip install --upgrade pip
+          if ! pip install -r requirements.txt; then
+            pip install python-dotenv groq google-generativeai edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
+          fi
+          pip install --upgrade yt-dlp
+          # PO-token provider plugin (auto-discovered by yt-dlp) -- beats the datacenter bot-wall.
+          pip install --upgrade bgutil-ytdlp-pot-provider
+
+      - name: Start Cloudflare WARP (SOCKS proxy for yt-dlp egress)
+        if: steps.gate.outputs.watch == 'true'
+        run: |
+          curl -fsSL https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor -o /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq cloudflare-warp
+          for i in 1 2 3 4; do
+            warp-cli --accept-tos registration new && break || sleep 15
+          done
+          warp-cli --accept-tos mode proxy
+          warp-cli --accept-tos connect
+          for i in $(seq 1 40); do
+            if warp-cli --accept-tos status | grep -q "Connected"; then echo "WARP connected"; break; fi
+            sleep 3
+          done
+          warp-cli --accept-tos status
+          if ! curl -s --max-time 25 --proxy socks5h://127.0.0.1:40000 https://ifconfig.me; then
+            echo "::error::WARP proxy egress check failed -- yt-dlp would be bot-blocked"; exit 1
+          fi
+          echo
+          docker run --name bgutil-provider -d --init -p 4416:4416 brainicism/bgutil-ytdlp-pot-provider
+          for i in $(seq 1 30); do
+            curl -s --max-time 5 http://127.0.0.1:4416/ >/dev/null 2>&1 && { echo "POT provider up"; break; }
+            sleep 2
+          done
+
+      - name: Reconstruct secrets (never committed)
+        if: steps.gate.outputs.watch == 'true'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+        run: |
+          python3 - <<'EOF'
+          import os
+          keys = ["GROQ_API_KEY", "GEMINI_API_KEY", "ZERNIO_API_URL", "ZERNIO_API_KEY",
+                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID"]
+          lines = [f"{k}={os.environ[k]}" for k in keys if os.environ.get(k)]
+          with open("API.env", "w", encoding="utf-8") as f:
+              f.write("\n".join(lines) + "\n")
+          EOF
+          rm -f cookies.txt
+
+      - name: Watch iShowSpeed's stream and post his reactions
+        if: steps.gate.outputs.watch == 'true'
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          YTDLP_PROXY: socks5://127.0.0.1:40000
+          no_proxy: "127.0.0.1,localhost"
+          IN_NO_UPLOAD: ${{ inputs.no_upload }}
+          IN_PLATFORMS: ${{ inputs.platforms || 'instagram' }}
+          IN_ANY_LIVE: ${{ inputs.any_live }}
+          IN_CHANNEL: ${{ inputs.channel }}
+        run: |
+          ARGS=(--max-minutes 320 --platforms "$IN_PLATFORMS")
+          if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
+          if [ "$IN_ANY_LIVE" == "true" ]; then ARGS+=(--any-live); fi
+          if [ -n "$IN_CHANNEL" ]; then ARGS+=(--channel "$IN_CHANNEL"); fi
+          echo "watch_speed.py ${ARGS[*]}"
+          python tools/watch_speed.py "${ARGS[@]}"
+
+      - name: Upload built clips (inspection)
+        if: always() && steps.gate.outputs.watch == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: speed-watch-media
+          path: |
+            .tmp/speed/*.mp4
+          if-no-files-found: ignore
+          retention-days: 7

@@ -75,7 +75,7 @@ def record_live(watch_url, out_path, seconds):
     yt-dlp has no stop-after-N-seconds flag for live, so a watchdog terminates the process;
     --hls-use-mpegts + --no-part means the truncated .ts is still fully decodable."""
     cmd = [sys.executable, "-m", "yt_dlp", watch_url,
-           "-f", "best[height<=720]/best",
+           "-f", "best[height<=1080]/best",   # 2026-07-09: 1080p live edge (was 720) for quality
            "--hls-use-mpegts", "--no-part", "--quiet", "--no-warnings",
            "-o", str(out_path)]
     proxy = os.environ.get("YTDLP_PROXY")
@@ -99,11 +99,11 @@ def record_live(watch_url, out_path, seconds):
     return os.path.isfile(out_path) and os.path.getsize(out_path) > 500_000
 
 
-def loudest_window(media_path, window_sec):
-    """Start second of the loudest `window_sec` stretch, via per-second RMS energy.
+def per_second_energy(media_path):
+    """Per-second audio energy (sum of squared samples) for the whole file.
 
-    Decodes to 8kHz mono s16 PCM through ffmpeg and slides a window over per-second
-    energy sums -- pure stdlib, no numpy on the runner."""
+    Decodes to 8kHz mono s16 PCM through ffmpeg -- pure stdlib, no numpy on the runner.
+    Shared by loudest_window (single peak) and top_peaks (many peaks)."""
     ff = get_ffmpeg()
     proc = subprocess.run(
         [ff, "-v", "error", "-i", str(media_path), "-map", "a:0?",
@@ -111,21 +111,108 @@ def loudest_window(media_path, window_sec):
         capture_output=True)
     pcm = array.array("h")
     pcm.frombytes(proc.stdout[: len(proc.stdout) // 2 * 2])
-    if len(pcm) < 8000 * (window_sec + 5):
-        return 0.0                        # too short to scan; take from the start
     per_sec = []
     for i in range(0, len(pcm) - 8000 + 1, 8000):
         s = 0
         for v in pcm[i:i + 8000:8]:       # stride 8 => 1k samples/sec sampled; plenty for RMS
             s += v * v
         per_sec.append(s)
-    w = int(window_sec)
-    best_i, best_e, cur = 0, -1, sum(per_sec[:w])
+    return per_sec
+
+
+def _window_energy(per_sec, w):
+    """List of summed energies for every `w`-second window (index i = window starting at sec i)."""
+    if len(per_sec) < w:
+        return []
+    out, cur = [], sum(per_sec[:w])
+    out.append(cur)
     for i in range(len(per_sec) - w):
-        if cur > best_e:
-            best_e, best_i = cur, i
         cur += per_sec[i + w] - per_sec[i]
+        out.append(cur)
+    return out
+
+
+def loudest_window(media_path, window_sec, per_sec=None):
+    """Start second of the loudest `window_sec` stretch, via per-second RMS energy."""
+    if per_sec is None:
+        per_sec = per_second_energy(media_path)
+    w = int(window_sec)
+    if len(per_sec) < w + 5:
+        return 0.0                        # too short to scan; take from the start
+    we = _window_energy(per_sec, w)
+    best_i = max(range(len(we)), key=lambda i: we[i]) if we else 0
     return float(best_i)
+
+
+def top_peaks(media_path, window_sec, max_peaks=2, min_gap_sec=None, ratio=1.6, per_sec=None):
+    """Start seconds of the loudest, well-separated `window_sec` windows whose energy stands
+    OUT above the recording's own baseline (median window energy).
+
+    This is the catch-all detector for Speed's non-goal hype -- screams, chants, celebrations,
+    talking loudly with another creator -- none of which any sports feed reports. A window is a
+    candidate only if its energy >= `ratio` * the median window energy (so a calm stretch of a
+    stream produces zero peaks and we post nothing). Returns [(start_sec, energy_ratio), ...]
+    sorted loudest-first, spaced by >= `min_gap_sec` (default = window_sec) so two picks aren't
+    the same moment."""
+    if per_sec is None:
+        per_sec = per_second_energy(media_path)
+    w = int(window_sec)
+    if len(per_sec) < w + 5:
+        return []
+    we = _window_energy(per_sec, w)
+    if not we:
+        return []
+    med = sorted(we)[len(we) // 2] or 1
+    gap = int(min_gap_sec if min_gap_sec is not None else window_sec)
+    order = sorted(range(len(we)), key=lambda i: we[i], reverse=True)
+    picks = []
+    for i in order:
+        if we[i] < ratio * med:
+            break                         # everything below the bar from here on
+        if all(abs(i - p) >= gap for p, _ in picks):
+            picks.append((float(i), round(we[i] / med, 2)))
+        if len(picks) >= max_peaks:
+            break
+    return picks
+
+
+def extract_frames(media_path, start, seg, n, out_dir):
+    """Pull `n` evenly-spaced JPEG frames from [start, start+seg] for a vision-labeling pass.
+    Returns the list of frame paths actually written."""
+    ff = get_ffmpeg()
+    os.makedirs(out_dir, exist_ok=True)
+    paths = []
+    n = max(1, n)
+    for k in range(n):
+        t = start + (seg * (k + 0.5) / n)
+        out = os.path.join(out_dir, f"frame_{k}.jpg")
+        subprocess.run([ff, "-v", "error", "-y", "-ss", f"{t:.2f}", "-i", str(media_path),
+                        "-frames:v", "1", "-vf", "scale=512:-2", out],
+                       capture_output=True)
+        if os.path.isfile(out) and os.path.getsize(out) > 1000:
+            paths.append(out)
+    return paths
+
+
+def render_short(rec_path, start, seg, title, handle, out_path, tmp_dir=None):
+    """Cut [start, start+seg] from a recording, fit it 9:16 over a blurred fill, and burn the
+    on-brand title card (same look as build_clip). Shared by this tool's single-goal mode and
+    the parallel watch_speed.py watcher. Returns the absolute output path."""
+    tmp_dir = tmp_dir or str(TMP)
+    os.makedirs(tmp_dir, exist_ok=True)
+    body = os.path.join(tmp_dir, "body.mp4")
+    brv.normalize(str(rec_path), start, seg, body)
+    body_dur = probe_duration(body) or seg
+    ass_name = "speed_overlay.ass"
+    build_overlay_ass(clean_title(title), handle, body_dur, os.path.join(tmp_dir, ass_name))
+    out_abs = out_path if os.path.isabs(out_path) else str(REPO_ROOT / out_path)
+    os.makedirs(os.path.dirname(out_abs) or ".", exist_ok=True)
+    run_ffmpeg(["-i", os.path.abspath(body), "-vf", f"ass={ass_name}",
+                "-map", "0:v", "-map", "0:a?", "-r", "30",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+                os.path.abspath(out_abs)], cwd=tmp_dir)
+    return out_abs
 
 
 def main():
@@ -161,25 +248,10 @@ def main():
     seg = min(args.window, max(10.0, rec_dur - start - 1))
 
     # 9:16 blurred-fill fit of the loudest stretch, then the same card burn as build_clip.
-    body = str(TMP / "body.mp4")
     try:
-        brv.normalize(str(rec), start, seg, body)
+        out_path = render_short(rec, start, seg, args.title, args.handle, args.out)
     except Exception as e:
-        fail(f"normalize failed: {e}")
-        return
-    body_dur = probe_duration(body) or seg
-    ass_name = "speed_overlay.ass"
-    build_overlay_ass(clean_title(args.title), args.handle, body_dur, str(TMP / ass_name))
-    out_path = args.out if os.path.isabs(args.out) else str(REPO_ROOT / args.out)
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    try:
-        run_ffmpeg(["-i", os.path.abspath(body), "-vf", f"ass={ass_name}",
-                    "-map", "0:v", "-map", "0:a?", "-r", "30",
-                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
-                    "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
-                    os.path.abspath(out_path)], cwd=str(TMP))
-    except Exception as e:
-        fail(f"overlay burn failed: {e}")
+        fail(f"render failed: {e}")
         return
 
     emit({"live": True, "path": args.out,

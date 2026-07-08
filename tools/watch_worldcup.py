@@ -8,11 +8,10 @@ goals from this match.
 One long-running job (started by .github/workflows/worldcup_live.yml whenever a match is
 live or imminent) that polls ESPN's public scoreboard every ~75s and fires per event:
 
-  GOAL      -> (a) clip_speed_reaction.py: if Speed is live, record his stream and post the
-                   loudest ~40s (his reaction) -- time-critical, runs first;
-               (b) targeted YouTube hunt for THAT goal (scorer + teams, upload-date=today,
-                   title must contain the scorer) -> build_clip -> post. Retries every poll
-                   until an upload appears (they typically land 3-15 min after the goal).
+  GOAL      -> targeted YouTube hunt for THAT goal (scorer + teams, upload-date=today,
+               title must contain the scorer) -> build_clip -> post. Retries every poll
+               until an upload appears (they typically land 3-15 min after the goal).
+               (iShowSpeed reactions are handled by the parallel watch_speed.py watcher.)
   FULL TIME -> (a) star recap: if a STAR_PLAYERS name played, targeted hunt for their match
                    footage, card shows box-score line (goals/assists/shots);
                (b) brace/hat-trick compilation: any scorer with 2+ goals this match gets
@@ -54,7 +53,6 @@ STAR_PLAYERS = [
 ]
 
 GOAL_HUNT_MAX_MIN = 50      # stop hunting a goal's upload after this long
-SPEED_RECHECK_MIN = 10      # after a "not live" check, don't re-check Speed for this long
 
 
 def slug(s):
@@ -87,7 +85,6 @@ class Watcher:
         if self.st.get("date") != today:      # daily reset (posts cap + per-goal bookkeeping)
             self.st = {"date": today, "goals": {}, "done_matches": [], "posts": 0}
         self.actions = []                     # run log for the exit summary
-        self.speed_not_live_until = 0.0
         self.was_live = set()                 # match ids seen in-progress THIS run (vs catch-up)
         self.last_zernio_time = 0.0           # for spacing Zernio publishes (YouTube AND Instagram)
         self.platforms = {p.strip().lower() for p in args.platforms.split(",") if p.strip()}
@@ -179,37 +176,15 @@ class Watcher:
              "own_goal": goal["own_goal"], "match_id": match["id"]}
         self.st["goals"][goal["key"]] = g
         print(f"::notice::GOAL {goal['scorer']} ({goal['minute']}) {match['short']}")
-        # Speed's reaction is only capturable in the moment -- if this goal surfaced from an
-        # already-ended match (catch-up run), recording his stream now would clip the wrong thing.
-        if match["state"] == "in":
-            self.try_speed_reaction(match, goal["key"])
-        else:
-            g["speed_done"] = True
+        # iShowSpeed reactions are now owned entirely by the PARALLEL watch_speed.py watcher
+        # (2026-07-09) -- capturing them here too would double-post them. This watcher does only
+        # broadcast goal clips + end-of-game recaps.
 
     def opponent_of(self, match, team_name):
         h, aw = match["home"], match["away"]
         if h and h["name"] == team_name:
             return (aw or {}).get("name") or "?"
         return (h or {}).get("name") or "?"
-
-    def try_speed_reaction(self, match, key):
-        g = self.st["goals"][key]
-        if g["speed_done"] or self.args.no_speed or not self.can_post():
-            return
-        g["speed_done"] = True                       # one shot per goal, whatever the outcome
-        if time.time() < self.speed_not_live_until:
-            return
-        out = f".tmp/wc/speed_{slug(key)}.mp4"
-        title = f"SPEED REACTS - {g['scorer'].upper()} GOAL ({g['minute']})"
-        res, err = run_tool_safe("clip_speed_reaction.py", ["--title", title, "--out", out])
-        if err or not (res or {}).get("live"):
-            if (res or {}).get("live") is False:     # quiet no-op: he just isn't streaming
-                self.speed_not_live_until = time.time() + SPEED_RECHECK_MIN * 60
-            else:
-                self.actions.append({"what": "speed_reaction_failed", "goal": key,
-                                     "error": (err or "").splitlines()[0][:160]})
-            return
-        self.post(out, title, "streamer", f"speed_reaction:{g['scorer']}")
 
     def hunt_goal_clip(self, match, key):
         g = self.st["goals"][key]
@@ -347,6 +322,15 @@ class Watcher:
                 continue
             self.post(FINAL, card, "goal", f"compilation:{scorer} x{len(srcs)}")
 
+        # The match is fully closed out -> its kept pre-watermark goal sources have served the
+        # compilation and are finally used; delete them so .tmp/wc doesn't accumulate (2026-07-09).
+        for g in self.goals_of_match(mid).values():
+            if g.get("src"):
+                try:
+                    Path(g["src"]).unlink()
+                except OSError:
+                    pass
+
         self.st["done_matches"].append(mid)
 
     # ---- main loop ----------------------------------------------------------------
@@ -409,7 +393,9 @@ def main():
     ap.add_argument("--lead-min", type=float, default=25.0)
     ap.add_argument("--max-minutes", type=float, default=320.0, help="Hard job-length cap")
     ap.add_argument("--max-posts", type=int, default=14, help="Daily cap across ALL live formats")
-    ap.add_argument("--no-speed", action="store_true", help="Skip iShowSpeed reaction capture")
+    ap.add_argument("--no-speed", action="store_true",
+                    help="Deprecated no-op (Speed capture moved to watch_speed.py); kept so the "
+                         "existing workflow_dispatch input keeps working")
     ap.add_argument("--post-spacing", type=float, default=45.0,
                     help="Min seconds between ANY two Zernio publishes (YouTube+Instagram share "
                          "one rate limit -> burst 429s)")
