@@ -90,6 +90,20 @@ class Watcher:
         self.speed_not_live_until = 0.0
         self.was_live = set()                 # match ids seen in-progress THIS run (vs catch-up)
         self.last_zernio_time = 0.0           # for spacing Zernio publishes (YouTube AND Instagram)
+        self.platforms = {p.strip().lower() for p in args.platforms.split(",") if p.strip()}
+        self.redo_min = [x.strip() for x in (args.redo_min or "").split(",") if x.strip()]
+        # --fresh (catch-up backfill): drop the target match's prior goal-state so its goals are
+        # re-hunted + re-posted, and point the finder at a throwaway history so already-"used"
+        # source clips are findable again (e.g. re-post to YouTube-only after a 429 dropped them).
+        self.hist_arg = []
+        if args.fresh:
+            self.hist_arg = ["--history", ".tmp/wc/fresh_hist.json"]
+            (REPO_ROOT / ".tmp" / "wc").mkdir(parents=True, exist_ok=True)
+            (REPO_ROOT / ".tmp" / "wc" / "fresh_hist.json").write_text('{"used": []}', encoding="utf-8")
+            if args.match:
+                self.st["goals"] = {k: g for k, g in self.st["goals"].items()
+                                    if g.get("match_id") != args.match}
+                self.st["done_matches"] = [m for m in self.st["done_matches"] if m != args.match]
 
     # ---- posting ------------------------------------------------------------------
     def can_post(self):
@@ -130,26 +144,29 @@ class Watcher:
             a["delivery"]["error"] = (herr or "host_public returned no url").splitlines()[0][:160]
             return False
         ok = False
-        m, err = self._zernio_upload("upload_youtube.py",
-                                     ["--video-url", url, "--title", yt_title,
-                                      "--description", description, "--tags", ",".join(tags),
-                                      "--privacy", self.args.privacy, "--confirm"])
-        a["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
-        ok = ok or not err
-        m, err = self._zernio_upload("upload_instagram.py",
-                                     ["--video-url", url, "--caption", ig_caption, "--confirm"])
-        if err:
-            ig = {"skipped": err.splitlines()[0][:160]}
-            # run_tool_safe returns the full parsed JSON on failure -- keep Instagram's own
-            # reason (platform_status) so a future failure is diagnosable without re-running.
-            detail = (m or {}).get("platform_status")
-            if detail:
-                ig["platform_status"] = detail
-            a["delivery"]["instagram"] = ig
-        else:
-            a["delivery"]["instagram"] = {"id": m.get("post_id") or m.get("media_id")}
-        ok = ok or not err
-        run_tool_safe("email_video.py", ["--video", final_rel, "--subject", f"momoclips live: {card}"])
+        if "youtube" in self.platforms:
+            m, err = self._zernio_upload("upload_youtube.py",
+                                         ["--video-url", url, "--title", yt_title,
+                                          "--description", description, "--tags", ",".join(tags),
+                                          "--privacy", self.args.privacy, "--confirm"])
+            a["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
+            ok = ok or not err
+        if "instagram" in self.platforms:
+            m, err = self._zernio_upload("upload_instagram.py",
+                                         ["--video-url", url, "--caption", ig_caption, "--confirm"])
+            if err:
+                ig = {"skipped": err.splitlines()[0][:160]}
+                # run_tool_safe returns the full parsed JSON on failure -- keep Instagram's own
+                # reason (platform_status) so a future failure is diagnosable without re-running.
+                detail = (m or {}).get("platform_status")
+                if detail:
+                    ig["platform_status"] = detail
+                a["delivery"]["instagram"] = ig
+            else:
+                a["delivery"]["instagram"] = {"id": m.get("post_id") or m.get("media_id")}
+            ok = ok or not err
+        if "email" in self.platforms:
+            run_tool_safe("email_video.py", ["--video", final_rel, "--subject", f"momoclips live: {card}"])
         if ok:
             self.st["posts"] += 1
         return ok
@@ -217,7 +234,7 @@ class Watcher:
         find, ferr = run_tool_safe("find_worldcup_clips.py",
                                    ["--query", query, "--require", require,
                                     "--window", window, "--categories", "goal",
-                                    "--out", cands_path])
+                                    *self.hist_arg, "--out", cands_path])
         cands = (find or {}).get("candidates", []) if not ferr else []
         if not cands:
             return                                    # nothing uploaded yet; retry next poll
@@ -288,7 +305,7 @@ class Watcher:
                                             "--query", f"{star['name']} {star['team']} World Cup 2026",
                                             "--require", last_name(star["name"]),
                                             "--window", window, "--categories", "popular",
-                                            "--max-dur", "180",
+                                            "--max-dur", "180", *self.hist_arg,
                                             "--out", ".tmp/wc/star_cands.json"])
                 posted = False
                 for c in ((find or {}).get("candidates") or [])[:3] if not ferr else []:
@@ -355,6 +372,10 @@ class Watcher:
 
             for m in live + ended:
                 for goal in m["goals"]:
+                    # --redo-min (backfill): process ONLY these goal minutes for the target match,
+                    # so re-posting the 4 that a 429 dropped doesn't duplicate the ones that landed.
+                    if self.redo_min and any(r in (goal.get("minute") or "") for r in self.redo_min) is False:
+                        continue
                     if goal["key"] not in self.st["goals"]:
                         self.on_new_goal(m, goal)
                 for key in list(self.goals_of_match(m["id"])):
@@ -396,6 +417,14 @@ def main():
     ap.add_argument("--once", action="store_true", help="Single poll cycle (testing)")
     ap.add_argument("--date", default=None, help="YYYYMMDD scoreboard date (catch-up on a past day)")
     ap.add_argument("--match", default=None, help="Only process this ESPN event id (targeted catch-up)")
+    ap.add_argument("--platforms", default="youtube,instagram,email",
+                    help="Where to post (e.g. 'youtube' to backfill ONE platform after a partial run)")
+    ap.add_argument("--fresh", action="store_true",
+                    help="Re-hunt + re-post the --match's goals, ignoring prior used/posted state "
+                         "(backfill a platform that a 429 dropped). Pair with --platforms + --match.")
+    ap.add_argument("--redo-min", default=None,
+                    help="Backfill only these goal minutes for --match (e.g. '79,83,90'); the "
+                         "goals that already landed are left alone. Full-time recap still runs.")
     args = ap.parse_args()
 
     load_env()
