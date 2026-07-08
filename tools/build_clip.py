@@ -19,8 +19,9 @@ import argparse
 import json
 import os
 import re
+import sys
 
-from _common import REPO_ROOT, load_env, emit, fail
+from _common import REPO_ROOT, load_env, emit, fail, is_tod, TOD_CROP_FRAC
 from _media import run_ffmpeg, get_ffmpeg, probe_duration
 
 # Reuse the ranking pipeline's downloader + 9:16 normaliser (same module, sibling import).
@@ -110,6 +111,9 @@ def main():
     ap.add_argument("--max-secs", type=float, default=58.0, help="Hard cap (<60s Shorts length)")
     ap.add_argument("--music", default=None, help="Optional music bed path (default: keep original audio only)")
     ap.add_argument("--music-volume", type=float, default=0.12)
+    ap.add_argument("--source-handle", default="",
+                    help="Uploader @handle of the source. TOD-by-beIN clips get their bottom "
+                         "branding bar cropped off before the 9:16 fit; every other source is untouched.")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -136,6 +140,21 @@ def main():
         fail("could not read source duration", src=src)
         return
     seg = min(dur, args.max_secs)   # single-moment uploads are already short; cap at <60s from the start
+
+    # 1b) TOD-by-beIN clips carry a bottom branding bar; crop it off BEFORE the 9:16 fit so it's
+    #     gone from both the sharp foreground and the blurred fill. TOD-only (is_tod gate) --
+    #     every other source is left untouched. A crop failure falls back to the uncropped source.
+    if is_tod("", args.source_handle) and TOD_CROP_FRAC > 0:
+        cropped = str(tmpdir / "src_crop.mp4")
+        keep_h = f"trunc(ih*{1.0 - TOD_CROP_FRAC:.4f}/2)*2"   # even height; y=0 keeps the top, drops the bottom bar
+        try:
+            run_ffmpeg(["-i", os.path.abspath(src), "-vf", f"crop=iw:{keep_h}:0:0",
+                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "18",
+                        "-c:a", "aac", "-b:a", "192k", os.path.abspath(cropped)])
+            if os.path.isfile(cropped):
+                src = cropped
+        except Exception as e:
+            print(f"::warning::TOD bottom-crop failed ({str(e)[:120]}); using uncropped source", file=sys.stderr)
 
     # 2) fit to 9:16 over a blurred fill, keep original audio (or silence if the clip is quiet).
     body = str(tmpdir / "body.mp4")

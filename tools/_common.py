@@ -89,8 +89,9 @@ _LISTY = _re.compile(
     r"compilation|montage|\bquiz\b|\btrivia\b",
     _re.IGNORECASE)
 
-# Blocked subjects (user rule 2026-07-06): no iShowSpeed content on the channel.
-_BLOCKED_SUBJECTS = _re.compile(r"i\s*show\s*speed|ishowspeed|\bspeedy?\s+(?:at|reacts?|watch)", _re.IGNORECASE)
+# iShowSpeed / "Speed" content is ALLOWED again (user decision 2026-07-08, reverses the
+# 2026-07-06 blanket block). No subject blocklist remains -- Speed clips (our own livestream
+# captures AND third-party uploads) are sourced like any other creator.
 
 
 def title_ok(title):
@@ -106,8 +107,6 @@ def title_ok(title):
     if _TALK_OR_FOREIGN.search(t):
         return False
     if _LISTY.search(t):
-        return False
-    if _BLOCKED_SUBJECTS.search(t):
         return False
     return True
 
@@ -130,6 +129,8 @@ _BAD_CHANNEL = _re.compile(
 # the goal finder PREFERS them (see find_worldcup_clips) and only falls back to the wider,
 # channel-screened pool when none of them have the moment yet.
 _TRUSTED_CHANNELS = {
+    # TOD by beIN (@tod_bybein) is the PREFERRED FIFA-highlights source (user 2026-07-08).
+    "@tod_bybein",
     "@fifa", "@fifaworldcup", "@foxsoccer", "@foxsports", "@cbssportsgolazo", "@cbssports",
     "@espn", "@espnfc", "@espnuk", "@beinsports", "@beinsportsusa", "@tntsports", "@skysports",
     "@nbcsports", "@daznfootball", "@dazn", "@onefootball", "@goal", "@433", "@bbcsport",
@@ -151,6 +152,20 @@ def channel_trusted(channel_name, handle=""):
     if h and h in _TRUSTED_CHANNELS:
         return True
     return bool(_TRUSTED_NAME.search(channel_name or ""))
+
+
+# TOD by beIN (@tod_bybein): preferred FIFA-highlights source (user 2026-07-08). Its uploads
+# carry a bottom branding bar, so build_clip crops the bottom off TOD clips ONLY (is_tod gate).
+TOD_CROP_FRAC = 0.10   # fraction of source height to trim off the bottom for TOD clips
+
+
+def is_tod(channel_name="", handle=""):
+    """True if a candidate came from the TOD-by-beIN channel (so we crop its bottom bar)."""
+    h = (handle or "").strip().lower().lstrip("@")
+    if "tod_bybein" in h:
+        return True
+    n = (channel_name or "").lower()
+    return "tod" in n and "bein" in n
 
 
 # --- Zernio post-create with rate-limit retry -------------------------------------------------

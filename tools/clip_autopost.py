@@ -169,7 +169,7 @@ def main():
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_CLIPS", "8")),
                     help="Daily post cap so a busy match day doesn't flood the channel")
     ap.add_argument("--window", default="today", choices=["today", "week"])
-    ap.add_argument("--categories", default="goal,streamer,popular")
+    ap.add_argument("--categories", default="goal,speed,streamer,popular")
     ap.add_argument("--music", default=None, help="Optional music bed (default: keep original clip audio)")
     ap.add_argument("--keep-tmp", action="store_true")
     args = ap.parse_args()
@@ -220,7 +220,8 @@ def main():
     attempts = []
     for c in cands[: max(1, min(5, len(cands)))]:
         _card, _yt, _desc, _cap, _tags = build_meta(c, args.handle)
-        build_args = ["--url", c["url"], "--title", _card, "--handle", args.handle, "--out", FINAL]
+        build_args = ["--url", c["url"], "--title", _card, "--handle", args.handle,
+                      "--source-handle", c.get("handle", ""), "--out", FINAL]
         if args.music:
             build_args += ["--music", args.music]
         b, berr = run_tool_safe("build_clip.py", build_args)

@@ -243,7 +243,8 @@ class Watcher:
         for c in cands[:3]:
             build, berr = run_tool_safe("build_clip.py",
                                         ["--url", c["url"], "--title", card,
-                                         "--handle", self.args.handle, "--out", FINAL])
+                                         "--handle", self.args.handle,
+                                         "--source-handle", c.get("handle", ""), "--out", FINAL])
             record_used(c["id"])
             if berr:
                 continue

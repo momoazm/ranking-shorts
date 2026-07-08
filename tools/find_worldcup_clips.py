@@ -14,9 +14,13 @@ every path (probed 2026-07-03), while YouTube works through the WARP SOCKS proxy
 sorted newest-first, which is what makes fresh goals/clips surface within minutes.
 
 Categories (each candidate is tagged so the title/caption can match its vibe):
-  goal      -- Messi / Ronaldo / big-nation goals (official footage; copyright risk accepted)
-  streamer  -- creators at / reacting to the World Cup (NO iShowSpeed -- user rule 2026-07-06)
-  popular   -- viral / best-moment World-Cup clips
+Priority (user 2026-07-08): the GAME itself first, then iShowSpeed, then other events -- the
+finder emits candidates in that tier order, and the orchestrator posts the first that builds.
+  goal      -- (tier 1) Messi/Ronaldo/big-nation goals; TOD-by-beIN preferred (copyright risk accepted)
+  speed     -- (tier 2) iShowSpeed at / reacting to the World Cup (un-blocked 2026-07-08)
+  streamer  -- (tier 3) other creators reacting to the World Cup
+  popular   -- (tier 3) viral / best-moment clips + trending OFF-pitch moments (celebrations,
+               fan scenes, drama/controversy) -- "the trending stuff other than the game itself"
 
 Usage:
     python tools/find_worldcup_clips.py [--max 8] [--min-dur 5] [--max-dur 180]
@@ -30,7 +34,7 @@ import os
 import random
 import urllib.parse
 
-from _common import REPO_ROOT, load_env, emit, fail, title_ok, channel_ok, channel_trusted
+from _common import REPO_ROOT, load_env, emit, fail, title_ok, channel_ok, channel_trusted, is_tod
 
 # YouTube search "sp" filter tokens (URL-encoded). "Upload date: Today" is what surfaces
 # just-happened content -- probed 2026-07-04: it returned same-day match uploads where a
@@ -43,6 +47,8 @@ SP_WEEK = "EgIIAw%3D%3D"
 # so titles are descriptive (helps the safety/relevance read) and results stay on-theme.
 QUERIES = {
     "goal": [
+        # TOD by beIN (@tod_bybein) is the preferred FIFA-highlights source (user 2026-07-08).
+        "TOD beIN World Cup 2026 goal",
         "Messi goal World Cup 2026",
         "Ronaldo goal World Cup 2026",
         "World Cup 2026 goal today",
@@ -52,14 +58,25 @@ QUERIES = {
         "England goal World Cup 2026",
         "Portugal goal World Cup 2026",
     ],
+    # Own priority tier (user 2026-07-08): the game itself first, iShowSpeed second, then the rest.
+    "speed": [
+        "iShowSpeed World Cup 2026 reaction",
+        "iShowSpeed at World Cup 2026",
+    ],
     "streamer": [
-        # No iShowSpeed (user rule 2026-07-06) -- _common.title_ok also hard-blocks him by title.
         "streamer reacts World Cup 2026 goal",
         "fan reaction World Cup 2026 goal",
     ],
     "popular": [
+        # The match PLUS the most-trending off-pitch moments (user 2026-07-08): celebrations,
+        # fan scenes, drama/controversy, rivalries, and viral non-goal moments -- "the trending
+        # stuff other than the game itself".
         "World Cup 2026 viral moment",
         "World Cup 2026 best moment today",
+        "World Cup 2026 celebration",
+        "World Cup 2026 fans go crazy",
+        "World Cup 2026 red card controversy",
+        "World Cup 2026 trending moment today",
     ],
 }
 
@@ -106,7 +123,7 @@ def main():
                          "<60s, so bias toward true single-moment clips (goals/reactions) over "
                          "multi-minute highlights reels.")
     ap.add_argument("--max", type=int, default=8, help="Max candidates to return (orchestrator posts the top one)")
-    ap.add_argument("--categories", default="goal,streamer,popular",
+    ap.add_argument("--categories", default="goal,speed,streamer,popular",
                     help="Comma list restricting which categories to search (e.g. 'streamer,popular').")
     ap.add_argument("--query", action="append", default=None,
                     help="TARGETED mode (repeatable): search exactly these queries instead of the "
@@ -182,19 +199,24 @@ def main():
             seen.add(vid)
             ordered.append({"id": vid, "title": title, "duration": float(dur),
                             "url": f"https://www.youtube.com/watch?v={vid}", "category": cat,
-                            "channel": channel,
-                            "trusted": channel_trusted(channel, handle)})
+                            "channel": channel, "handle": handle,
+                            "trusted": channel_trusted(channel, handle),
+                            "is_tod": is_tod(channel, handle)})
         if len(ordered) >= args.max * 3:     # plenty gathered -> stop hitting the API
             break
 
-    # Prefer official / major English-commentary broadcasters (FIFA, FOX, CBS, ESPN, beIN...):
-    # they carry essentially every goal with clean commentary. If ANY trusted candidate was
-    # found, post only from those; otherwise fall back to the wider channel-screened pool (so a
-    # smaller nation's goal isn't dropped entirely) -- Indian channels are already gone above.
-    trusted = [c for c in ordered if c.get("trusted")]
-    pool = trusted if (trusted and not args.no_trusted_pref) else ordered
-    # `ytsearchdate` returns newest-first per query; interleaving roughly preserves freshness.
-    cands = pool[: args.max]
+    # PRIORITY TIERS (user 2026-07-08): the GAME itself first, then iShowSpeed, then other
+    # events (fan/streamer/popular). Within the goal tier, prefer official/major broadcasters
+    # (TOD/beIN, FIFA, FOX, CBS, ESPN...) for clean commentary -- if any trusted goal was found,
+    # drop the untrusted goals (Hindi/re-upload risk); Speed and events aren't broadcaster
+    # content, so the trusted screen only gates goals and they stay as lower-tier fallback.
+    trusted_goals = [c for c in ordered if c.get("category") == "goal" and c.get("trusted")]
+    if trusted_goals and not args.no_trusted_pref:
+        ordered = [c for c in ordered if c.get("category") != "goal" or c.get("trusted")]
+    tier = {"goal": 0, "speed": 1}
+    # Stable sort keeps each query's newest-first (freshness) order WITHIN a tier.
+    ordered.sort(key=lambda c: tier.get(c.get("category"), 2))
+    cands = ordered[: args.max]
     if not cands:
         # Not an error the run should crash on -- "nothing new happened" is a valid outcome.
         emit({"source": "youtube", "count": 0, "candidates": [], "path": args.out,

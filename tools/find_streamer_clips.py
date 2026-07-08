@@ -1,7 +1,7 @@
 """Find candidate WORLD-CUP STREAMER clips (FaZe / Marlon etc.) via YouTube search.
 
-NO iShowSpeed (user rule 2026-07-06) -- queries dropped here and `_common.title_ok`
-hard-blocks him by title in every finder.
+iShowSpeed is allowed again (user decision 2026-07-08, reverses the 2026-07-06 ban) -- Speed
+queries are back here and `_common.title_ok` no longer hard-blocks him.
 
 Why YouTube instead of Reddit for this angle: the streamer subs (r/LivestreamFail ...) are
 drama-heavy and mostly NOT World-Cup related, and their post titles are too vague for the ranker's
@@ -33,7 +33,9 @@ from _common import REPO_ROOT, load_env, emit, fail, title_ok
 # results stay on-theme and descriptively titled (the ranker filters by title). The generic last
 # query covers streamers not named here so a thin roster never starves supply.
 STREAMER_QUERIES = [
-    # No iShowSpeed (user rule 2026-07-06).
+    # iShowSpeed un-blocked 2026-07-08 (reverses the 2026-07-06 ban).
+    "iShowSpeed World Cup football reaction",
+    "iShowSpeed at the World Cup 2026",
     "FaZe World Cup football reaction",
     "Marlon streamer World Cup watchalong",
     "streamer reacts World Cup goal",
