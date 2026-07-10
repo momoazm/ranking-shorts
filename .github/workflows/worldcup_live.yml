@@ -13,12 +13,19 @@ name: momoclips - World Cup LIVE watcher
 
 on:
   schedule:
-    # cheap gate; the heavy path only runs while a match is on. Re-registered 2026-07-08 after
-    # the */15 cron silently stalled (only ~3 scheduled runs in 24h instead of ~96 -> EGY-ARG was
-    # missed); pausing autopost.yml's 6 daily crons also frees account cron capacity.
-    - cron: "*/15 * * * *"
+    # SEED ticks only (2026-07-10). The */15 cron stalled TWICE (~3 delivered runs/day instead
+    # of ~96 -> EGY-ARG missed 07-08, MAR-FRA missed 07-09): GitHub silently drops most ticks
+    # when an account requests hundreds/day. Coverage no longer depends on cron punctuality --
+    # any ONE delivered tick starts a RELAY CHAIN (gate --chain): the run naps to a near kickoff
+    # and watches, or sleeps ~50 min and re-dispatches itself (dispatch events are delivered
+    # reliably). 12 cheap seeds/day just make sure a chain gets seeded.
+    - cron: "11 */2 * * *"
   workflow_dispatch:
     inputs:
+      relay:
+        description: "Internal: chained self-dispatch -- run the honest gate (do not force a watch)"
+        type: boolean
+        default: false
       privacy:
         description: "YouTube privacy for this run"
         type: choice
@@ -61,6 +68,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write      # the relay chain re-dispatches this workflow via the GITHUB_TOKEN
 
 jobs:
   watch:
@@ -69,16 +77,28 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # ~30s, stdlib-only: decide whether anything is worth watching before paying for setup.
-      # Manual dispatches always proceed (that's how a no-upload test runs on a quiet day).
-      - name: Gate - is a match live or imminent?
+      # Stdlib-only: decide whether anything is worth watching before paying for setup.
+      # Scheduled + relayed runs use gate --chain (nap to a near kickoff / sleep ~50 min and
+      # re-dispatch / exit for the day). HUMAN dispatches always proceed immediately (that's
+      # how a no-upload test or a --date catch-up runs on a quiet day).
+      - name: Gate - watch now, relay toward the next kickoff, or exit
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25)
-          echo "$GATE"
-          WATCH=$(echo "$GATE" | jq -r .watch)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then WATCH=true; fi
-          echo "watch=$WATCH" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.relay }}" != "true" ]; then
+            python3 tools/worldcup_live.py --mode gate --lead-min 25 || true
+            ACTION=watch
+          else
+            GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25 --chain)
+            echo "$GATE"
+            ACTION=$(echo "$GATE" | jq -r '.action // "exit"')
+          fi
+          echo "decision: $ACTION"
+          if [ "$ACTION" = "relay" ]; then
+            gh workflow run worldcup_live.yml -R "$GITHUB_REPOSITORY" -f relay=true
+          fi
+          if [ "$ACTION" = "watch" ]; then echo "watch=true" >> "$GITHUB_OUTPUT"; else echo "watch=false" >> "$GITHUB_OUTPUT"; fi
 
       # Shared with worldcup_clips.yml's cache family: used_clips.json (cross-pipeline dedup)
       # + worldcup_watch.json (this watcher's per-goal idempotency).
@@ -199,7 +219,9 @@ jobs:
           IN_FRESH: ${{ inputs.fresh }}
           IN_REDO_MIN: ${{ inputs.redo_min }}
         run: |
-          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 320 --platforms "$IN_PLATFORMS")
+          # 300 (not 320): the chain gate may nap up to ~30 min before this step; keep
+          # nap + setup + watch under the 350-min job timeout (hosted hard cap is 360).
+          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 300 --platforms "$IN_PLATFORMS")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           if [ "$IN_NO_SPEED" == "true" ]; then ARGS+=(--no-speed); fi
           if [ "$IN_FRESH" == "true" ]; then ARGS+=(--fresh); fi
@@ -219,3 +241,23 @@ jobs:
             .tmp/wc/*.mp4
           if-no-files-found: ignore
           retention-days: 7
+
+      # Chain FORWARD after a watch: the watcher exits when its match window is done, but a
+      # later kickoff today still needs coverage and the next cron tick may never arrive.
+      # Re-dispatching (honest gate) keeps the relay chain alive match-to-match. always():
+      # even a crashed watch shouldn't kill coverage of tonight's other game.
+      - name: Relay forward if more matches remain today
+        if: always() && steps.gate.outputs.watch == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25 || echo '{}')
+          echo "$GATE"
+          NEXT=$(echo "$GATE" | jq -r '.next_wait_min // empty')
+          LIVE=$(echo "$GATE" | jq -r '.watch // false')
+          if [ -n "$NEXT" ] || [ "$LIVE" = "true" ]; then
+            echo "More football today -- relaying."
+            gh workflow run worldcup_live.yml -R "$GITHUB_REPOSITORY" -f relay=true
+          else
+            echo "Nothing left today; chain ends."
+          fi

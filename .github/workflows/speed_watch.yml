@@ -13,9 +13,17 @@ name: momoclips - iShowSpeed LIVE watcher
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # SEED ticks only (2026-07-10; offset from worldcup_live's seeds). GitHub silently drops
+    # most high-frequency cron ticks (the */15 delivered ~3 runs/day -> MAR-FRA reaction was
+    # missed). Any ONE delivered tick now starts a RELAY CHAIN (gate --chain) that carries
+    # coverage to every kickoff today by re-dispatching itself; see worldcup_live.yml.
+    - cron: "41 */2 * * *"
   workflow_dispatch:
     inputs:
+      relay:
+        description: "Internal: chained self-dispatch -- run the honest gate (do not force a watch)"
+        type: boolean
+        default: false
       no_upload:
         description: "Build only, post nothing (safest test)"
         type: boolean
@@ -40,6 +48,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write      # the relay chain re-dispatches this workflow via the GITHUB_TOKEN
 
 jobs:
   watch:
@@ -48,15 +57,26 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # ~30s, stdlib-only: only spin up while a WC match is on (when Speed would be streaming it).
-      - name: Gate - is a match live or imminent?
+      # Stdlib-only: only spin up while a WC match is on (when Speed would be streaming it).
+      # Scheduled + relayed runs use gate --chain; human dispatches always proceed.
+      - name: Gate - watch now, relay toward the next kickoff, or exit
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25)
-          echo "$GATE"
-          WATCH=$(echo "$GATE" | jq -r .watch)
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then WATCH=true; fi
-          echo "watch=$WATCH" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.relay }}" != "true" ]; then
+            python3 tools/worldcup_live.py --mode gate --lead-min 25 || true
+            ACTION=watch
+          else
+            GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25 --chain)
+            echo "$GATE"
+            ACTION=$(echo "$GATE" | jq -r '.action // "exit"')
+          fi
+          echo "decision: $ACTION"
+          if [ "$ACTION" = "relay" ]; then
+            gh workflow run speed_watch.yml -R "$GITHUB_REPOSITORY" -f relay=true
+          fi
+          if [ "$ACTION" = "watch" ]; then echo "watch=true" >> "$GITHUB_OUTPUT"; else echo "watch=false" >> "$GITHUB_OUTPUT"; fi
 
       - name: Restore watcher state
         if: steps.gate.outputs.watch == 'true'
@@ -152,7 +172,8 @@ jobs:
           IN_ANY_LIVE: ${{ inputs.any_live }}
           IN_CHANNEL: ${{ inputs.channel }}
         run: |
-          ARGS=(--max-minutes 320 --platforms "$IN_PLATFORMS")
+          # 300 (not 320): the chain gate may nap up to ~30 min first; stay under the timeout.
+          ARGS=(--max-minutes 300 --platforms "$IN_PLATFORMS")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           if [ "$IN_ANY_LIVE" == "true" ]; then ARGS+=(--any-live); fi
           if [ -n "$IN_CHANNEL" ]; then ARGS+=(--channel "$IN_CHANNEL"); fi
@@ -168,3 +189,20 @@ jobs:
             .tmp/speed/*.mp4
           if-no-files-found: ignore
           retention-days: 7
+
+      # Keep the relay chain alive match-to-match (see worldcup_live.yml for the rationale).
+      - name: Relay forward if more matches remain today
+        if: always() && steps.gate.outputs.watch == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          GATE=$(python3 tools/worldcup_live.py --mode gate --lead-min 25 || echo '{}')
+          echo "$GATE"
+          NEXT=$(echo "$GATE" | jq -r '.next_wait_min // empty')
+          LIVE=$(echo "$GATE" | jq -r '.watch // false')
+          if [ -n "$NEXT" ] || [ "$LIVE" = "true" ]; then
+            echo "More football today -- relaying."
+            gh workflow run speed_watch.yml -R "$GITHUB_REPOSITORY" -f relay=true
+          else
+            echo "Nothing left today; chain ends."
+          fi

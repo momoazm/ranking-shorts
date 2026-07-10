@@ -12,9 +12,20 @@ pip/ffmpeg/WARP setup, so a no-match day costs ~30s of CI, not 5 min.
 Usage:
     python tools/worldcup_live.py --mode scoreboard [--date YYYYMMDD]
     python tools/worldcup_live.py --mode summary --event 760505
-    python tools/worldcup_live.py --mode gate [--lead-min 25]
+    python tools/worldcup_live.py --mode gate [--lead-min 25] [--chain]
 
-Prints one JSON object (matches / player stats / {"watch": bool}).
+Prints one JSON object (matches / player stats / {"watch": bool, ...}).
+
+--chain (the workflow's scheduled/relayed path) turns the gate into a RELAY PLANNER:
+GitHub silently drops most high-frequency cron ticks on this account (*/15 delivered ~3
+runs/day twice in a row -> EGY-ARG and MAR-FRA were missed), so instead of hoping a tick
+lands inside a kickoff window, ANY delivered run carries coverage forward itself:
+  - match live/imminent            -> {"action": "watch"}   (run the watcher now)
+  - kickoff <= --nap-min away      -> sleep right here, then {"action": "watch"}
+  - kickoff later today            -> sleep --hop-min, then {"action": "relay"}
+                                      (the workflow re-dispatches itself; dispatch events
+                                      are delivered reliably, unlike cron)
+  - nothing left today             -> {"action": "exit"}
 """
 import argparse
 import json
@@ -143,6 +154,14 @@ def main():
     ap.add_argument("--event", default=None, help="ESPN event id (summary mode)")
     ap.add_argument("--lead-min", type=float, default=25.0,
                     help="gate: watch if a match is live or kicks off within this many minutes")
+    ap.add_argument("--chain", action="store_true",
+                    help="gate: nap-or-relay toward the next kickoff instead of just answering")
+    ap.add_argument("--nap-min", type=float, default=30.0,
+                    help="chain: kickoff at most this many min past the lead window -> sleep "
+                         "here and watch in THIS run (keeps the job under the 6h cap)")
+    ap.add_argument("--hop-min", type=float, default=50.0,
+                    help="chain: sleep this long before relaying (short hops release the "
+                         "concurrency slot so manual dispatches never queue for hours)")
     args = ap.parse_args()
 
     try:
@@ -159,10 +178,40 @@ def main():
             soon = [m for m in matches if m["state"] == "pre"
                     and (minutes_to_kickoff(m) is not None)
                     and minutes_to_kickoff(m) <= args.lead_min]
-            emit({"watch": bool(live or soon),
-                  "live": [m["short"] for m in live],
-                  "soon": [m["short"] for m in soon],
-                  "today": [f"{m['short']} [{m['state']}]" for m in matches]})
+            # Earliest FUTURE kickoff beyond the lead window -> how long a chained run
+            # must carry coverage forward before the watcher is worth starting.
+            upcoming = sorted((minutes_to_kickoff(m), m["short"]) for m in matches
+                              if m["state"] == "pre" and minutes_to_kickoff(m) is not None
+                              and minutes_to_kickoff(m) > args.lead_min)
+            next_wait_min = round(upcoming[0][0] - args.lead_min, 1) if upcoming else None
+            # SAFETY NET: a match that ended recently (kickoff < ~5h ago). If the chain died
+            # mid-day (Actions outage, dropped seed), the ended match never opens a live/soon
+            # gate and its goals+recap are lost -- that's exactly how the 07-09 22:48 tick
+            # walked past the already-finished MAR-FRA. A catch-up watch is a cheap no-op when
+            # state says everything already posted. Deliberately NOT counted in `watch`: the
+            # relay-forward step keys off watch/next_wait_min, and counting recent_post there
+            # would relay in a loop until the window expired.
+            recent_post = [m["short"] for m in matches if m["state"] == "post"
+                           and (minutes_to_kickoff(m) or -1e9) > -300]
+            out = {"watch": bool(live or soon),
+                   "live": [m["short"] for m in live],
+                   "soon": [m["short"] for m in soon],
+                   "recent_post": recent_post,
+                   "next_wait_min": next_wait_min,
+                   "next_kickoff": upcoming[0][1] if upcoming else None,
+                   "today": [f"{m['short']} [{m['state']}]" for m in matches]}
+            if args.chain:
+                if out["watch"] or recent_post:
+                    out["action"] = "watch"
+                elif next_wait_min is None:
+                    out["action"] = "exit"
+                elif next_wait_min <= args.nap_min:
+                    time.sleep(next_wait_min * 60 + 30)   # +30s so the re-check lands inside lead
+                    out["action"] = "watch"
+                else:
+                    time.sleep(args.hop_min * 60)
+                    out["action"] = "relay"
+            emit(out)
             return
         emit({"count": len(matches), "matches": matches})
     except Exception as e:

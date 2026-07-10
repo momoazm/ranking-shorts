@@ -38,7 +38,7 @@ def esc(text):
     return str(text).replace("\\", " ").replace("{", "(").replace("}", ")").replace("\n", " ").strip()
 
 
-def _ydl_opts(out_base, fmt, player_client=None):
+def _ydl_opts(out_base, fmt, player_client=None, use_proxy=True):
     from _media import get_ffmpeg
     opts = {"format": fmt, "merge_output_format": "mp4",
             # BEST QUALITY (2026-07-09): highest resolution first, H.264 only as a same-res
@@ -60,29 +60,33 @@ def _ydl_opts(out_base, fmt, player_client=None):
     # GitHub-hosted runner, or a residential proxy URL). ffmpeg can't speak SOCKS, so
     # never combine this with ffmpeg-side downloading (range/section cuts).
     proxy = os.environ.get("YTDLP_PROXY")
-    if proxy:
+    if proxy and use_proxy:
         opts["proxy"] = proxy
     return opts
 
 
-# Tried in order. The first lenient format works for Reddit (the default source) and normal YouTube;
-# the android attempt is a YouTube fallback for blocked/datacenter IPs (the youtube player_client is
-# simply ignored by other extractors like Reddit).
+# Tried in order: (player_client, format, use_proxy). The first lenient format works for Reddit
+# (the default source) and normal YouTube; the youtube player_client is simply ignored by other
+# extractors like Reddit.
 _DL_ATTEMPTS = [
-    # WEB CLIENT FIRST (2026-07-08): the BgUtils PO-token provider supplies GVS tokens for the
-    # `web` client, which is what actually beats YouTube's datacenter bot-wall -- the `android`/
-    # `ios` fallbacks below CANNOT use a PO token, so leaning on them let the wall win (real
-    # 18:10 poller run bot-walled every download).
-    # BEST QUALITY (2026-07-09): DASH merge up to 1920 tall FIRST (source Shorts are already 9:16,
-    # so 1080x1920 is full quality; format_sort in _ydl_opts makes it highest-res + h264-tiebreak).
-    # clipping-auto proves DASH-through-WARP works with PO tokens; if adaptive frags still 403
-    # through the SOCKS proxy, the progressive/muxed line below (single stream, <=720) is the
-    # graceful fallback so a clip still ships. Then the non-POT clients as last-ditch.
-    (["web"], "bv*[height<=1920]+ba/b[height<=1920]"),
-    (["web"], "b[height<=1920][ext=mp4]/b[height<=1920]/b"),
-    (None, "bv*[height<=1920]+ba/b[height<=1920]/b"),
-    (["android"], "b/best"),
-    (["ios"], "b/best"),
+    # TV CLIENT FIRST (2026-07-10): the BgUtils PO-token provider mints GVS tokens for BOTH the
+    # `tv` and `web` clients, but only `web` was ever tried -- and on 07-09 YouTube started
+    # serving web-client requests from the WARP egress a degraded <=360p ladder even WITH a
+    # valid POT (both clipping-auto scheduled runs died on the 1080p floor). `tv` is the least
+    # bot-walled POT-covered client (it's yt-dlp's own default for exactly that reason).
+    # BEST QUALITY (2026-07-09): DASH merge up to 1920 tall (source Shorts are already 9:16, so
+    # 1080x1920 is full quality; format_sort makes it highest-res + h264-tiebreak).
+    (["tv"], "bv*[height<=1920]+ba/b[height<=1920]", True),
+    (["web"], "bv*[height<=1920]+ba/b[height<=1920]", True),
+    # DIRECT runner IP (no WARP): BgUtils' primary design case is POT-on-datacenter-IP; when the
+    # WARP egress range itself is flagged, dropping the proxy is what un-degrades the ladder.
+    (["tv", "web"], "bv*[height<=1920]+ba/b[height<=1920]", False),
+    # Graceful fallbacks so a clip still ships: progressive/muxed (single stream, <=720) through
+    # the proxy, then the non-POT clients as last-ditch.
+    (["web"], "b[height<=1920][ext=mp4]/b[height<=1920]/b", True),
+    (None, "bv*[height<=1920]+ba/b[height<=1920]/b", True),
+    (["android"], "b/best", True),
+    (["ios"], "b/best", False),
 ]
 
 
@@ -115,14 +119,14 @@ def download(url, out_base):
         return out
     from yt_dlp import YoutubeDL
     last = None
-    for player_client, fmt in _DL_ATTEMPTS:
+    for player_client, fmt, use_proxy in _DL_ATTEMPTS:
         for f in glob.glob(out_base + ".*"):           # clear partials from a prior attempt
             try:
                 os.remove(f)
             except OSError:
                 pass
         try:
-            with YoutubeDL(_ydl_opts(out_base, fmt, player_client)) as ydl:
+            with YoutubeDL(_ydl_opts(out_base, fmt, player_client, use_proxy)) as ydl:
                 ydl.extract_info(url, download=True)
             path = _resolve(out_base)
             if path:

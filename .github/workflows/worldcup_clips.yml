@@ -18,7 +18,11 @@ name: momoclips - World Cup single clips
 
 on:
   schedule:
-    - cron: "*/20 * * * *"     # every 20 min; posts only when a genuinely new clip is found
+    # Hourly (2026-07-10; was */20). GitHub silently drops most ticks when the account asks
+    # for hundreds/day -- the */15+*/15+*/20 trio was delivered as ~3 batched runs/day EACH,
+    # which also delayed clipping-auto's and follower-race's daily crons by hours. Fewer,
+    # spaced ticks actually get DELIVERED more often; posts still dedupe on used_clips.json.
+    - cron: "29 * * * *"
   workflow_dispatch:
     inputs:
       privacy:
