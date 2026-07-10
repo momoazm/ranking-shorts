@@ -31,8 +31,11 @@ fixtures) it records his stream in rolling ~210s chunks (yt-dlp native HLS — f
 WARP SOCKS proxy) and posts a clip per big moment to **Instagram**. Detection FUSES: fresh ESPN
 goals (title it "SPEED REACTS TO <SCORER> GOAL") + **audio-energy peaks** (`clip_speed_reaction.top_peaks`,
 energy ≥ `--peak-ratio 1.6`×the chunk median — the catch-all for celebration/chant/collab moments
-no feed reports) + a **vision label** (`_llm.vision_complete`: **Groq llama-4-scout → Gemini**;
-Gemini alone 429'd) that writes the title + drops false positives (ads/menus/calm talking).
+no feed reports) + a **vision label** (`_llm.vision_complete`: **Groq llama-4-scout (dies
+2026-07-17) → Zhipu glm-4.6v-flash (needs ZHIPU_API_KEY) → Gemini**; Gemini alone 429'd) that
+writes the title + drops false positives (ads/menus/calm talking). Text LLM chain is
+accuracy-first since 2026-07-10: **Nemotron 3 Ultra → Qwen3 Coder (OpenRouter :free) → Zhipu
+glm-4.7-flash → Groq gpt-oss-120b → Cerebras → Gemini → Mistral**.
 **Safe-degrade:** vision down → post a goal-driven peak generically but DROP an unlabelled pure-hype
 peak. Idempotent via `state/speed_watch.json`; `--max-posts 8`/day; publishes paced
 (`--post-spacing 45`, `--post-retries 2`). Test: dispatch with `no_upload=true`, or locally
