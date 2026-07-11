@@ -6,7 +6,8 @@ name: momoclips - World Cup LIVE watcher
 # tools/watch_worldcup.py runs for the whole match window, polling ESPN every ~75s:
 #   GOAL      -> post that goal's clip (targeted YouTube hunt) + iShowSpeed's live reaction
 #                (our own capture of his stream -- clip_speed_reaction.py)
-#   FULL TIME -> star-player performance recap + brace/hat-trick goal compilation
+#   FULL TIME -> star-player performance recap + brace/hat-trick goal compilation + a Short
+#                from TOD-by-beIN's official match-highlights upload when it lands (2026-07-11)
 # Posts are PUBLIC by default (channel went public 2026-07-05). state/worldcup_watch.json
 # (cached, shared with the 20-min poller's cache) makes everything idempotent across runs.
 # To PAUSE: disable this workflow in the Actions UI.

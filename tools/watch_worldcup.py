@@ -15,7 +15,12 @@ live or imminent) that polls ESPN's public scoreboard every ~75s and fires per e
   FULL TIME -> (a) star recap: if a STAR_PLAYERS name played, targeted hunt for their match
                    footage, card shows box-score line (goals/assists/shots);
                (b) brace/hat-trick compilation: any scorer with 2+ goals this match gets
-                   their goal SOURCES (kept pre-watermark) stitched by build_compilation.py.
+                   their goal SOURCES (kept pre-watermark) stitched by build_compilation.py;
+               (c) TOD highlights (Moemen 2026-07-11): keep hunting for TOD-by-beIN's
+                   (@tod_bybein) highlights upload of THIS match and post a Short from it
+                   the moment it lands (they typically upload within the hour; hunt expires
+                   after HIGHLIGHT_HUNT_MAX_MIN). TOD-only -- other channels' "highlights"
+                   are re-upload risk, and TOD is the user's preferred FIFA source.
 
 State (state/worldcup_watch.json, cached across CI runs like used_clips.json) makes goals
 and end-of-game posts idempotent -- a crashed/restarted watcher never double-posts.
@@ -52,7 +57,8 @@ STAR_PLAYERS = [
     "Jamal Musiala", "Christian Pulisic",
 ]
 
-GOAL_HUNT_MAX_MIN = 50      # stop hunting a goal's upload after this long
+GOAL_HUNT_MAX_MIN = 50        # stop hunting a goal's upload after this long
+HIGHLIGHT_HUNT_MAX_MIN = 180  # stop hunting TOD's post-match highlights upload after this long
 
 
 def slug(s):
@@ -83,7 +89,8 @@ class Watcher:
         self.st = load_state()
         today = date.today().isoformat()
         if self.st.get("date") != today:      # daily reset (posts cap + per-goal bookkeeping)
-            self.st = {"date": today, "goals": {}, "done_matches": [], "posts": 0}
+            self.st = {"date": today, "goals": {}, "done_matches": [], "posts": 0, "highlights": {}}
+        self.st.setdefault("highlights", {})  # state written before 2026-07-11 lacks the key
         self.actions = []                     # run log for the exit summary
         self.was_live = set()                 # match ids seen in-progress THIS run (vs catch-up)
         self.last_zernio_time = 0.0           # for spacing Zernio publishes (YouTube AND Instagram)
@@ -101,6 +108,7 @@ class Watcher:
                 self.st["goals"] = {k: g for k, g in self.st["goals"].items()
                                     if g.get("match_id") != args.match}
                 self.st["done_matches"] = [m for m in self.st["done_matches"] if m != args.match]
+                self.st.get("highlights", {}).pop(args.match, None)
 
     # ---- posting ------------------------------------------------------------------
     def can_post(self):
@@ -322,6 +330,17 @@ class Watcher:
                 continue
             self.post(FINAL, card, "goal", f"compilation:{scorer} x{len(srcs)}")
 
+        # (c) register the TOD-highlights hunt (Moemen 2026-07-11): TOD by beIN uploads each
+        # match's official highlights some time after FT -- keep hunting for it every poll
+        # (hunt_tod_highlights) and post a Short from it the moment it lands. Registered with
+        # everything the hunt needs so it survives job restarts via state alone.
+        self.st["highlights"][mid] = {
+            "seen": time.time(), "posted": False, "expired": False,
+            "home": (match["home"] or {}).get("name") or "?",
+            "away": (match["away"] or {}).get("name") or "?",
+            "score": f"{(match['home'] or {}).get('score', '?')}-{(match['away'] or {}).get('score', '?')}",
+        }
+
         # The match is fully closed out -> its kept pre-watermark goal sources have served the
         # compilation and are finally used; delete them so .tmp/wc doesn't accumulate (2026-07-09).
         for g in self.goals_of_match(mid).values():
@@ -332,6 +351,52 @@ class Watcher:
                     pass
 
         self.st["done_matches"].append(mid)
+
+    # ---- TOD post-match highlights ---------------------------------------------------
+    def hl_pending(self):
+        return any(not (h["posted"] or h["expired"]) for h in self.st["highlights"].values())
+
+    def hunt_tod_highlights(self):
+        """Post a Short from TOD-by-beIN's official highlights upload of each finished match.
+        Runs every poll until the upload appears or the hunt expires; TOD-ONLY (is_tod flag)
+        because generic 'highlights' uploads are exactly the re-upload pool we screen out."""
+        for mid, hl in self.st["highlights"].items():
+            if hl["posted"] or hl["expired"] or not self.can_post():
+                continue
+            if (time.time() - hl["seen"]) > HIGHLIGHT_HUNT_MAX_MIN * 60:
+                hl["expired"] = True
+                self.actions.append({"what": "tod_highlights_expired", "match": mid,
+                                     "card": f"{hl['home']} {hl['score']} {hl['away']}"})
+                continue
+            # A hunt resumed by a later run (this match no longer in was_live) may be chasing
+            # an upload from YouTube's "yesterday" bucket -> widen the window like goal hunts.
+            window = "today" if mid in self.was_live else "week"
+            find, ferr = run_tool_safe(
+                "find_worldcup_clips.py",
+                ["--query", f"{hl['home']} vs {hl['away']} highlights World Cup 2026",
+                 "--query", f"TOD highlights {hl['home']} {hl['away']} World Cup 2026",
+                 "--require", "highlight",     # TOD titles its uploads "Highlights | A n-n B | ..."
+                 "--window", window, "--categories", "goal",
+                 "--max-dur", "1200",          # full TOD highlight reels run ~8-15 min
+                 *self.hist_arg, "--out", f".tmp/wc/hl_{slug(mid)}.json"])
+            cands = [c for c in (find or {}).get("candidates", []) if c.get("is_tod")] if not ferr else []
+            if not cands:
+                continue                       # TOD hasn't uploaded yet; retry next poll
+            card = f"{hl['home']} {hl['score']} {hl['away']} - HIGHLIGHTS"
+            for c in cands[:2]:
+                # build_clip takes the FIRST <58s of the source -- TOD reels front-load the
+                # early action -- and its --source-handle gate crops TOD's bottom brand bar.
+                build, berr = run_tool_safe("build_clip.py",
+                                            ["--url", c["url"], "--title", card,
+                                             "--handle", self.args.handle,
+                                             "--source-handle", c.get("handle", ""),
+                                             "--out", FINAL])
+                record_used(c["id"])
+                if berr:
+                    continue
+                hl["posted"] = True
+                self.post(FINAL, card, "goal", f"tod_highlights:{mid}")
+                break
 
     # ---- main loop ----------------------------------------------------------------
     def run(self):
@@ -368,11 +433,12 @@ class Watcher:
             for m in ended:
                 if self.match_settled(m["id"]):
                     self.close_out_match(m)
+            self.hunt_tod_highlights()
 
             save_state(self.st)
             hunting = any(not (g["clip_posted"] or g["clip_expired"])
                           for g in self.st["goals"].values())
-            if not live and not soon and not ended and not hunting:
+            if not live and not soon and not ended and not hunting and not self.hl_pending():
                 break                                  # nothing to watch -> end the job
             if self.args.once:
                 break
@@ -381,6 +447,8 @@ class Watcher:
         save_state(self.st)
         emit({"status": "done", "loops": loops, "posts_today": self.st["posts"],
               "goals_tracked": len(self.st["goals"]),
+              "highlights": {m: ("posted" if h["posted"] else "expired" if h["expired"] else "pending")
+                             for m, h in self.st["highlights"].items()},
               "done_matches": self.st["done_matches"], "actions": self.actions})
 
 
