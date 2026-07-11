@@ -72,10 +72,15 @@ def clean_title(raw):
     return re.sub(r"^[^0-9A-Za-z]+", "", out).strip(" -–—:;|.,!?")
 
 
-def build_overlay_ass(title, handle, total, out_path):
+def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text=""):
     """A compact title card: bold title pinned top for the whole clip + a small handle
     watermark bottom-centre. Colours/anchoring mirror build_ranking_video's Header style so
-    the two formats look like one channel. Gold accent = brand."""
+    the two formats look like one channel. Gold accent = brand.
+
+    Optional follow CTA (mirrors build_ranking_video's end-card): a bold pop-in over the
+    LAST cta_dur seconds of footage that's already playing -- no dead time appended, no SFX
+    (audio rule). Research on short-form CTAs backs this over a bolt-on end screen: baked
+    into the video reads as natural, a separate end card kills momentum/rewatch."""
     def ass_time(t):
         h = int(t // 3600); m = int((t % 3600) // 60); s = t % 60
         return f"{h}:{m:02d}:{s:05.2f}"
@@ -89,7 +94,9 @@ def build_overlay_ass(title, handle, total, out_path):
         # Title: bold white, gold-adjacent shadow box, pinned top-centre the whole clip.
         "Style: Title,Arial,64,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,60,60,120,1\n"
         # Handle: small gold watermark, bottom-centre, lifted clear of the phone UI.
-        "Style: Handle,Arial,44,&H0066D7FF&,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,2,60,60,150,1\n\n"
+        "Style: Handle,Arial,44,&H0066D7FF&,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,2,60,60,150,1\n"
+        # CTA: bold gold follow prompt, sits above the handle watermark so they never collide.
+        "Style: CTA,Arial,58,&H0066D7FF&,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,6,3,2,60,60,260,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
@@ -99,6 +106,12 @@ def build_overlay_ass(title, handle, total, out_path):
         "{\\fad(120,0)\\fscx112\\fscy112\\t(0,240,\\fscx100\\fscy100)}" + esc(title),
         f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Handle,,0,0,0,,{esc(handle)}",
     ]
+    if cta_dur > 0 and cta_text:
+        eff = min(cta_dur, total)
+        cs = max(0.0, total - eff)
+        rows.append(
+            f"Dialogue: 1,{ass_time(cs)},{ass_time(total)},CTA,,0,0,0,,"
+            "{\\fad(150,0)\\fscx120\\fscy120\\t(0,250,\\fscx100\\fscy100)}" + esc(cta_text)[:26])
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(head + "\n".join(rows) + "\n")
 
@@ -114,6 +127,12 @@ def main():
     ap.add_argument("--source-handle", default="",
                     help="Uploader @handle of the source. TOD-by-beIN clips get their bottom "
                          "branding bar cropped off before the 9:16 fit; every other source is untouched.")
+    ap.add_argument("--cta", dest="cta", action="store_true", default=True,
+                    help="Follow CTA pop-in over the last --cta-dur seconds (default ON; no SFX, "
+                         "per the audio rule -- purely on-screen text, same pattern as build_ranking_video).")
+    ap.add_argument("--no-cta", dest="cta", action="store_false", help="Disable the follow CTA.")
+    ap.add_argument("--cta-dur", type=float, default=2.2, help="CTA pop-in length in seconds.")
+    ap.add_argument("--cta-text", default="FOLLOW FOR MORE", help="Follow CTA on-screen text.")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -169,7 +188,8 @@ def main():
     #    ranking/clipping ass burns).
     body_dur = probe_duration(body) or seg
     ass_name = "clip_overlay.ass"
-    build_overlay_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name))
+    build_overlay_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name),
+                       args.cta_dur if args.cta else 0.0, args.cta_text)
 
     out_path = args.out if os.path.isabs(args.out) else str(REPO_ROOT / args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

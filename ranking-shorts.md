@@ -151,3 +151,11 @@ there is no unlisted/draft privacy like YouTube; the only safe pre-test is the t
 - **Clips must be no-copyright / fair-use safe.** Sourcing tools don't vet rights; the music bed is
   pitch-shifted to reduce Content ID matches but is not a guarantee.
 - `state/used_clips.json` tracks clips already used — don't reuse without reason.
+- **Follow CTA on every format (2026-07-12).** `build_ranking_video.py` already had a visual
+  "FOLLOW FOR #1 DAILY" end-card; `build_clip.py`/`build_compilation.py` (single WC clips,
+  compilations, streamer clips) did not — now they share the same pattern: a branded
+  "FOLLOW FOR MORE" pop-in burned over the LAST ~2.2s of already-playing footage (no dead time
+  appended), gold on brand, positioned above the handle watermark. `--cta`/`--no-cta`/
+  `--cta-dur`/`--cta-text` flags, default ON. Deliberately **text overlay, not a spoken voice
+  line** — kept in-frame CTAs (not a bolt-on end screen) per follow-CTA research, and a spoken
+  "follow" line would break the project's no-AI-narrator identity (original clip audio only).

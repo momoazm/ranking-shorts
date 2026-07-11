@@ -35,6 +35,11 @@ def main():
     ap.add_argument("--title", required=True)
     ap.add_argument("--handle", default="@itsmomoclips")
     ap.add_argument("--max-total", type=float, default=58.0, help="Hard cap (<60s Shorts rule)")
+    ap.add_argument("--cta", dest="cta", action="store_true", default=True,
+                    help="Follow CTA pop-in over the last --cta-dur seconds (default ON; no SFX).")
+    ap.add_argument("--no-cta", dest="cta", action="store_false", help="Disable the follow CTA.")
+    ap.add_argument("--cta-dur", type=float, default=2.2, help="CTA pop-in length in seconds.")
+    ap.add_argument("--cta-text", default="FOLLOW FOR MORE", help="Follow CTA on-screen text.")
     ap.add_argument("--out", default=".tmp/final.mp4")
     args = ap.parse_args()
 
@@ -69,8 +74,10 @@ def main():
         return
 
     total = sum(probe_duration(p) or 0 for p in parts)
+    total = min(total, args.max_total)
     ass_name = "compile_overlay.ass"
-    build_overlay_ass(clean_title(args.title), args.handle, total, str(TMP / ass_name))
+    build_overlay_ass(clean_title(args.title), args.handle, total, str(TMP / ass_name),
+                       args.cta_dur if args.cta else 0.0, args.cta_text)
 
     out_path = args.out if os.path.isabs(args.out) else str(REPO_ROOT / args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
