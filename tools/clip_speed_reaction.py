@@ -194,17 +194,23 @@ def extract_frames(media_path, start, seg, n, out_dir):
     return paths
 
 
-def render_short(rec_path, start, seg, title, handle, out_path, tmp_dir=None):
+def render_short(rec_path, start, seg, title, handle, out_path, tmp_dir=None,
+                  cta_text="", cta_dur=0.0):
     """Cut [start, start+seg] from a recording, fit it 9:16 over a blurred fill, and burn the
     on-brand title card (same look as build_clip). Shared by this tool's single-goal mode and
-    the parallel watch_speed.py watcher. Returns the absolute output path."""
+    the parallel watch_speed.py watcher. Returns the absolute output path.
+
+    cta_text/cta_dur default to off (unchanged behavior) -- this pipeline doesn't carry the
+    follow-CTA build_clip.py/build_compilation.py have; watch_speed.py opts in only for its
+    weekly style-experiment post (see tools/pick_weekly_style.py)."""
     tmp_dir = tmp_dir or str(TMP)
     os.makedirs(tmp_dir, exist_ok=True)
     body = os.path.join(tmp_dir, "body.mp4")
     brv.normalize(str(rec_path), start, seg, body)
     body_dur = probe_duration(body) or seg
     ass_name = "speed_overlay.ass"
-    build_overlay_ass(clean_title(title), handle, body_dur, os.path.join(tmp_dir, ass_name))
+    build_overlay_ass(clean_title(title), handle, body_dur, os.path.join(tmp_dir, ass_name),
+                      cta_dur=cta_dur, cta_text=cta_text)
     out_abs = out_path if os.path.isabs(out_path) else str(REPO_ROOT / out_path)
     os.makedirs(os.path.dirname(out_abs) or ".", exist_ok=True)
     run_ffmpeg(["-i", os.path.abspath(body), "-vf", f"ass={ass_name}",

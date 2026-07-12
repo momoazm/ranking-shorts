@@ -124,6 +124,21 @@ then publishes via `upload_instagram.py`. Caveat: an IG Reel publish is **immedi
 there is no unlisted/draft privacy like YouTube; the only safe pre-test is the tool's dry run
 (omit `--confirm`). Long-lived tokens expire ~60 days; refresh before relying on a daily run.
 
+## Weekly IG style experiment (2026-07-12)
+`clip_autopost.py`, `watch_worldcup.py`, and `watch_speed.py` all post to the same `@momoclips`
+Instagram account, so they share one weekly experiment slot (`tools/pick_weekly_style.py`,
+`state/style_experiment.json`, rotation keyed by ISO week number: `default_cta` → `cta_daily` →
+`cta_directional`). Each build call site *peeks* the queued variant before rendering (so the CTA
+text is baked into the video) but only *claims* the slot via `--consume` after that post's
+Instagram upload actually succeeds — a failed post never burns the week's only experiment. Every
+successful post (experimental or not) is logged to `state/ig_post_log.json`
+(`_common.log_ig_post`), which is what the Monday `style_experiment.yml` cron →
+`tools/check_style_experiment.py` reads to compare an experiment post against a baseline of
+recent normal posts via Zernio analytics (`tools/ig_fetch_analytics.py`) and WhatsApp Moemen
+(`tools/send_whatsapp.py`, CallMeBot — see `.claude/skills/send-whatsapp/SKILL.md`) on a clear
+win. **Never auto-applies a winning CTA** — it's a notification; Moemen decides whether to update
+`build_clip.py`'s/`build_compilation.py`'s default `--cta-text`.
+
 ## Hard rules specific to this project
 
 - **Under-1-minute hard cap on any video** (user rule, 2026-06-24 — strictly *less than* a minute,

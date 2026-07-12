@@ -20,5 +20,11 @@ MOMO content engine). A character-dialogue format also exists in the tooling as 
   reports) + a **Groq→Gemini vision label** that titles the clip and filters false positives. All
   Speed capture was removed from `watch_worldcup.py` to avoid double-posting. Built via the new
   `/new-watcher` skill's pattern.
+- **Weekly IG style experiment (2026-07-12):** whichever of `clip_autopost.py` /
+  `watch_worldcup.py` / `watch_speed.py` lands the FIRST successful @momoclips Instagram post in
+  a new ISO week tries a rotated follow-CTA variant (`tools/pick_weekly_style.py`); a new Monday
+  cron (`style_experiment.yml` → `tools/check_style_experiment.py`) compares it to recent posts
+  via Zernio analytics and WhatsApps Moemen (CallMeBot) if it clearly won. Notification only —
+  never auto-changes the default CTA.
 - **Rules / how-to:** [ranking-shorts.md](ranking-shorts.md)
 - **Key dates:** Tied to the #1 priority — make these videos viral. Reduced availability ~2026-07-07.

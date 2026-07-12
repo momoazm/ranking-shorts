@@ -34,7 +34,7 @@ import argparse
 import time
 from datetime import date
 
-from _common import REPO_ROOT, load_env, emit
+from _common import REPO_ROOT, load_env, emit, log_ig_post
 from _media import probe_duration
 from clip_autopost import run_tool_safe, build_meta
 from clip_speed_reaction import (DEFAULT_CHANNEL, resolve_live, record_live,
@@ -143,7 +143,16 @@ class SpeedWatcher:
                 time.sleep(30 * (attempt + 1))
         return m, err
 
-    def post(self, final_rel, card, what):
+    def _peek_weekly_variant(self):
+        """Weekly style experiment (2026-07-12): cache one peek per process run so a busy
+        multi-clip chunk doesn't hammer state/style_experiment.json. Consuming (claiming the
+        week's slot) still always happens fresh at post time -- see post()."""
+        if not hasattr(self, "_weekly_variant_cache"):
+            weekly, werr = run_tool_safe("pick_weekly_style.py", [])
+            self._weekly_variant_cache = weekly if (not werr and weekly and not weekly.get("used")) else None
+        return self._weekly_variant_cache
+
+    def post(self, final_rel, card, what, cta_variant=None):
         a = {"what": what, "card": card, "delivery": {}}
         self.actions.append(a)
         if self.args.no_upload:
@@ -161,6 +170,7 @@ class SpeedWatcher:
         if "instagram" in self.platforms:
             m, err = self._zernio_upload("upload_instagram.py",
                                          ["--video-url", url, "--caption", ig_caption, "--confirm"])
+            media_id = None if err else (m.get("post_id") or m.get("media_id"))
             if err:
                 ig = {"skipped": err.splitlines()[0][:160]}
                 detail = (m or {}).get("platform_status")
@@ -168,8 +178,18 @@ class SpeedWatcher:
                     ig["platform_status"] = detail
                 a["delivery"]["instagram"] = ig
             else:
-                a["delivery"]["instagram"] = {"id": m.get("post_id") or m.get("media_id")}
+                a["delivery"]["instagram"] = {"id": media_id}
             ok = ok or not err
+            if media_id:
+                used_style, used_experiment = None, False
+                if cta_variant:
+                    # Only NOW claim the weekly slot -- the clip already rendered with this
+                    # variant, but a failed post shouldn't burn the week's only experiment.
+                    claim, cerr = run_tool_safe("pick_weekly_style.py", ["--consume"])
+                    if not cerr and claim and claim.get("consumed"):
+                        used_style, used_experiment = cta_variant["name"], True
+                log_ig_post(media_id, style=used_style, experiment=used_experiment,
+                            context={"source": "watch_speed", "what": what})
         if "youtube" in self.platforms:
             m, err = self._zernio_upload("upload_youtube.py",
                                          ["--video-url", url, "--title", yt_title,
@@ -220,12 +240,16 @@ class SpeedWatcher:
             title = title or "SPEED GOES CRAZY"
             self.st["clip_no"] += 1
             out_rel = f".tmp/speed/clip_{self.st['clip_no']}.mp4"
+            variant = self._peek_weekly_variant()
+            render_kwargs = {}
+            if variant:
+                render_kwargs = {"cta_text": variant["cta_text"], "cta_dur": variant["cta_dur"]}
             try:
-                render_short(chunk_path, start, seg, title, self.args.handle, out_rel)
+                render_short(chunk_path, start, seg, title, self.args.handle, out_rel, **render_kwargs)
             except Exception as e:
                 self.actions.append({"what": "render_failed", "title": title, "error": str(e)[:140]})
                 continue
-            self.post(out_rel, title, f"speed_clip:{title}")
+            self.post(out_rel, title, f"speed_clip:{title}", cta_variant=variant)
             # The clip is finally used (hosted+posted) -> delete it so .tmp/speed doesn't grow
             # (2026-07-09). In --no-upload mode keep it: CI uploads it as an inspection artifact.
             if not self.args.no_upload:

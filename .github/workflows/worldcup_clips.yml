@@ -133,6 +133,8 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
+          CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
         run: |
           python3 - <<'EOF'
           import os
@@ -145,7 +147,7 @@ jobs:
                   f.write(os.environ["GMAIL_TOKEN_JSON"])
           keys = ["GROQ_API_KEY", "GEMINI_API_KEY", "IG_USER_ID", "IG_ACCESS_TOKEN",
                   "GMAIL_SENDER_EMAIL", "GMAIL_TO", "ZERNIO_API_URL", "ZERNIO_API_KEY",
-                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID"]
+                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID", "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY"]
           lines = ["GMAIL_TOKEN_PATH=gmail_token.json"]
           lines += [f"{k}={os.environ[k]}" for k in keys if os.environ.get(k)]
           with open("API.env", "w", encoding="utf-8") as f:

@@ -29,7 +29,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from _common import emit, load_env
+from _common import emit, load_env, log_ig_post
 from _llm import llm_complete, parse_json
 from build_clip import clean_title   # shared title tidy so card + posted text match
 
@@ -212,6 +212,16 @@ def main():
               "elapsed_sec": round(time.time() - t0, 1)})
         return
 
+    # Weekly style experiment (2026-07-12): peek (don't claim yet) this week's rotated
+    # follow-CTA variant for @momoclips -- shared across clip_autopost/watch_worldcup/
+    # watch_speed, whichever lands a real post first that week claims it. See
+    # tools/pick_weekly_style.py.
+    exp_variant, is_experiment = None, False
+    if publishing:
+        weekly, werr = run_tool_safe("pick_weekly_style.py", [])
+        if not werr and weekly and not weekly.get("used"):
+            exp_variant, is_experiment = weekly, True
+
     # 2) build the branded Short. Try candidates in order until one builds: an individual clip
     # can 403 on its video data (geo/format-locked streams on some uploads) even though search
     # + WARP work, so a single bad clip must not waste the whole poll. Each attempted source is
@@ -224,6 +234,8 @@ def main():
                       "--source-handle", c.get("handle", ""), "--out", FINAL]
         if args.music:
             build_args += ["--music", args.music]
+        if is_experiment:
+            build_args += ["--cta-text", exp_variant["cta_text"], "--cta-dur", str(exp_variant["cta_dur"])]
         b, berr = run_tool_safe("build_clip.py", build_args)
         record_used(c["id"])
         if not berr:
@@ -264,8 +276,20 @@ def main():
             if "instagram" in platforms:
                 m, err = run_tool_safe("upload_instagram.py",
                                        ["--video-url", url, "--caption", ig_caption, "--confirm"])
-                result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:160]} if err else {"media_id": m.get("post_id") or m.get("media_id")}
+                media_id = None if err else (m.get("post_id") or m.get("media_id"))
+                result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:160]} if err else {"media_id": media_id}
                 published = published or not err
+                if media_id:
+                    used_style, used_experiment = None, False
+                    if is_experiment:
+                        # Only NOW claim the weekly slot -- the clip already rendered with this
+                        # variant, but a failed post shouldn't burn the week's only experiment.
+                        claim, cerr = run_tool_safe("pick_weekly_style.py", ["--consume"])
+                        if not cerr and claim and claim.get("consumed"):
+                            used_style, used_experiment = exp_variant["name"], True
+                    log_ig_post(media_id, style=used_style, experiment=used_experiment,
+                                context={"source": "clip_autopost", "category": cand.get("category"),
+                                         "title": card})
 
     if publishing and "email" in platforms:
         m, err = run_tool_safe("email_video.py", ["--video", FINAL, "--subject", f"momoclips: {card}"])

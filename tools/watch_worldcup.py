@@ -39,7 +39,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from _common import REPO_ROOT, load_env, emit
+from _common import REPO_ROOT, load_env, emit, log_ig_post
 from clip_autopost import run_tool_safe, record_used, build_meta
 from worldcup_live import get_scoreboard, get_summary, minutes_to_kickoff, norm_name
 
@@ -134,7 +134,17 @@ class Watcher:
                 time.sleep(30 * (attempt + 1))
         return m, err
 
-    def post(self, final_rel, card, category, what):
+    def _peek_weekly_variant(self):
+        """Weekly style experiment (2026-07-12): cache one peek per process run so a busy match
+        day doesn't hammer state/style_experiment.json across many goal/recap/compilation posts.
+        Consuming (claiming the week's slot) still always happens fresh at post time -- see
+        post()."""
+        if not hasattr(self, "_weekly_variant_cache"):
+            weekly, werr = run_tool_safe("pick_weekly_style.py", [])
+            self._weekly_variant_cache = weekly if (not werr and weekly and not weekly.get("used")) else None
+        return self._weekly_variant_cache
+
+    def post(self, final_rel, card, category, what, cta_variant=None):
         """host_public -> YouTube + Instagram + email, mirroring clip_autopost's delivery."""
         a = {"what": what, "card": card, "delivery": {}}
         self.actions.append(a)
@@ -159,6 +169,7 @@ class Watcher:
         if "instagram" in self.platforms:
             m, err = self._zernio_upload("upload_instagram.py",
                                          ["--video-url", url, "--caption", ig_caption, "--confirm"])
+            media_id = None if err else (m.get("post_id") or m.get("media_id"))
             if err:
                 ig = {"skipped": err.splitlines()[0][:160]}
                 # run_tool_safe returns the full parsed JSON on failure -- keep Instagram's own
@@ -168,8 +179,18 @@ class Watcher:
                     ig["platform_status"] = detail
                 a["delivery"]["instagram"] = ig
             else:
-                a["delivery"]["instagram"] = {"id": m.get("post_id") or m.get("media_id")}
+                a["delivery"]["instagram"] = {"id": media_id}
             ok = ok or not err
+            if media_id:
+                used_style, used_experiment = None, False
+                if cta_variant:
+                    # Only NOW claim the weekly slot -- the clip already rendered with this
+                    # variant, but a failed post shouldn't burn the week's only experiment.
+                    claim, cerr = run_tool_safe("pick_weekly_style.py", ["--consume"])
+                    if not cerr and claim and claim.get("consumed"):
+                        used_style, used_experiment = cta_variant["name"], True
+                log_ig_post(media_id, style=used_style, experiment=used_experiment,
+                            context={"source": "watch_worldcup", "category": category, "what": what})
         if "email" in self.platforms:
             run_tool_safe("email_video.py", ["--video", final_rel, "--subject", f"momoclips live: {card}"])
         if ok:
@@ -223,11 +244,14 @@ class Watcher:
             return                                    # nothing uploaded yet; retry next poll
         card = (f"OWN GOAL! {match['short']} ({g['minute']})" if g["own_goal"]
                 else f"{g['scorer'].upper()} SCORES vs {opp} ({g['minute']})")
+        variant = self._peek_weekly_variant()
         for c in cands[:3]:
-            build, berr = run_tool_safe("build_clip.py",
-                                        ["--url", c["url"], "--title", card,
-                                         "--handle", self.args.handle,
-                                         "--source-handle", c.get("handle", ""), "--out", FINAL])
+            build_args = ["--url", c["url"], "--title", card,
+                          "--handle", self.args.handle,
+                          "--source-handle", c.get("handle", ""), "--out", FINAL]
+            if variant:
+                build_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
+            build, berr = run_tool_safe("build_clip.py", build_args)
             record_used(c["id"])
             if berr:
                 continue
@@ -240,7 +264,7 @@ class Watcher:
                 break
             g["src"] = str(src_keep) if src_keep else None
             g["clip_posted"] = True
-            self.post(FINAL, card, "goal", f"goal_clip:{g['scorer']}")
+            self.post(FINAL, card, "goal", f"goal_clip:{g['scorer']}", cta_variant=variant)
             return
 
     # ---- end of game --------------------------------------------------------------
@@ -292,13 +316,16 @@ class Watcher:
                                             "--max-dur", "180", *self.hist_arg,
                                             "--out", ".tmp/wc/star_cands.json"])
                 posted = False
+                variant = self._peek_weekly_variant()
                 for c in ((find or {}).get("candidates") or [])[:3] if not ferr else []:
-                    build, berr = run_tool_safe("build_clip.py",
-                                                ["--url", c["url"], "--title", card,
-                                                 "--handle", self.args.handle, "--out", FINAL])
+                    build_args = ["--url", c["url"], "--title", card,
+                                  "--handle", self.args.handle, "--out", FINAL]
+                    if variant:
+                        build_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
+                    build, berr = run_tool_safe("build_clip.py", build_args)
                     record_used(c["id"])
                     if not berr:
-                        self.post(FINAL, card, "popular", f"star_recap:{star['name']}")
+                        self.post(FINAL, card, "popular", f"star_recap:{star['name']}", cta_variant=variant)
                         posted = True
                         break
                 if not posted:
@@ -321,14 +348,16 @@ class Watcher:
             args = []
             for s in srcs:
                 args += ["--clip", s]
-            build, berr = run_tool_safe("build_compilation.py",
-                                        [*args, "--title", card, "--handle", self.args.handle,
-                                         "--out", FINAL])
+            variant = self._peek_weekly_variant()
+            comp_args = [*args, "--title", card, "--handle", self.args.handle, "--out", FINAL]
+            if variant:
+                comp_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
+            build, berr = run_tool_safe("build_compilation.py", comp_args)
             if berr:
                 self.actions.append({"what": "compilation_failed", "scorer": scorer,
                                      "error": berr.splitlines()[0][:160]})
                 continue
-            self.post(FINAL, card, "goal", f"compilation:{scorer} x{len(srcs)}")
+            self.post(FINAL, card, "goal", f"compilation:{scorer} x{len(srcs)}", cta_variant=variant)
 
         # (c) register the TOD-highlights hunt (Moemen 2026-07-11): TOD by beIN uploads each
         # match's official highlights some time after FT -- keep hunting for it every poll
@@ -383,19 +412,22 @@ class Watcher:
             if not cands:
                 continue                       # TOD hasn't uploaded yet; retry next poll
             card = f"{hl['home']} {hl['score']} {hl['away']} - HIGHLIGHTS"
+            variant = self._peek_weekly_variant()
             for c in cands[:2]:
                 # build_clip takes the FIRST <58s of the source -- TOD reels front-load the
                 # early action -- and its --source-handle gate crops TOD's bottom brand bar.
-                build, berr = run_tool_safe("build_clip.py",
-                                            ["--url", c["url"], "--title", card,
-                                             "--handle", self.args.handle,
-                                             "--source-handle", c.get("handle", ""),
-                                             "--out", FINAL])
+                build_args = ["--url", c["url"], "--title", card,
+                              "--handle", self.args.handle,
+                              "--source-handle", c.get("handle", ""),
+                              "--out", FINAL]
+                if variant:
+                    build_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
+                build, berr = run_tool_safe("build_clip.py", build_args)
                 record_used(c["id"])
                 if berr:
                     continue
                 hl["posted"] = True
-                self.post(FINAL, card, "goal", f"tod_highlights:{mid}")
+                self.post(FINAL, card, "goal", f"tod_highlights:{mid}", cta_variant=variant)
                 break
 
     # ---- main loop ----------------------------------------------------------------

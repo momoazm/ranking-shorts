@@ -208,3 +208,33 @@ def zernio_create_post(api_url, payload, api_key, max_tries=5):
             return None, f"Zernio post create failed: {e} {body}".strip()
         return r.json().get("post", {}), None
     return None, f"Zernio post create failed after {max_tries} tries ({last})"
+
+
+# --- Instagram post log (weekly style-experiment tracking) ----------------
+# Durable, append-only record of every successful Instagram publish across the three
+# posting call sites that all share the @momoclips account (clip_autopost.py,
+# watch_worldcup.py, watch_speed.py), so check_style_experiment.py can later pull an
+# experimental post's id plus a baseline of recent normal posts and compare
+# performance via Zernio analytics.
+
+def log_ig_post(post_id, style=None, experiment=False, context=None):
+    import datetime
+    path = REPO_ROOT / "state" / "ig_post_log.json"
+    data = {"posts": []}
+    if path.is_file():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    data.setdefault("posts", []).append({
+        "post_id": post_id,
+        "posted_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "style": style,
+        "experiment": bool(experiment),
+        "resolved": False,
+        "context": context or {},
+    })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
