@@ -74,10 +74,16 @@ _NON_LATIN = _re.compile(
 _TALK_OR_FOREIGN = _re.compile(
     r"\b(news|zee|zeenews|aaj\s*tak|abp|ndtv|republic|india\s*tv|dd\s+sports|breaking|"
     r"preview|prediction|predictions|analysis|debate|podcast|interview|press\s+conference|"
-    r"explained|record|rankings?|stats?|comparison|"
+    r"explained|record|rankings?|stats?|comparison|recap|round\s*up|roundup|wrap\s*up|"
+    r"breakdown|post[\s-]*match\s+(?:show|analysis|reaction)|studio\s+(?:show|reaction)|"
     r"hindi|urdu|tamil|telugu|malayalam|bangla|bengali|marathi|punjabi|bhojpuri|"
     r"ka|ki|ke|ko|hai|kya|kaun|nahi|wala|dekho|mein|aur)\b",
     _re.IGNORECASE)
+
+# iShowSpeed is BLOCKED (user 2026-07-12, reverses the 2026-07-08 un-block). Matched against
+# both title and channel/handle so a third-party re-upload can't slip past the channel screen
+# alone -- this is the deterministic backstop; the LLM relevance screen also excludes him.
+_ISHOWSPEED = _re.compile(r"i\s*show\s*speed", _re.IGNORECASE)
 
 # Ranked-list / stat-list / compilation markers: the single-clip pipeline posts ONE specific
 # moment, and the countdown pipeline builds its own ranking -- neither should ever source a
@@ -89,17 +95,17 @@ _LISTY = _re.compile(
     r"compilation|montage|\bquiz\b|\btrivia\b",
     _re.IGNORECASE)
 
-# iShowSpeed / "Speed" content is ALLOWED again (user decision 2026-07-08, reverses the
-# 2026-07-06 blanket block). No subject blocklist remains -- Speed clips (our own livestream
-# captures AND third-party uploads) are sourced like any other creator.
+# iShowSpeed / "Speed" content is BLOCKED again (user 2026-07-12, re-reverses the
+# 2026-07-08 un-block back to the 2026-07-06 stance). _ISHOWSPEED above is checked in both
+# title_ok() and channel_ok() below.
 
 
 def title_ok(title):
     """True if a candidate's title looks like English-language actual-footage content.
 
-    Rejects non-Latin-script titles and news/analysis/talking-head markers. Deliberately
-    conservative: a false reject just skips one candidate; a false accept posts an
-    off-audience video to the channel.
+    Rejects non-Latin-script titles, news/analysis/talking-head markers, and iShowSpeed.
+    Deliberately conservative: a false reject just skips one candidate; a false accept
+    posts an off-audience video to the channel.
     """
     t = title or ""
     if _NON_LATIN.search(t):
@@ -107,6 +113,8 @@ def title_ok(title):
     if _TALK_OR_FOREIGN.search(t):
         return False
     if _LISTY.search(t):
+        return False
+    if _ISHOWSPEED.search(t):
         return False
     return True
 
@@ -142,8 +150,10 @@ _TRUSTED_NAME = _re.compile(
 
 
 def channel_ok(channel_text):
-    """False if the channel name/@handle looks like an Indian/Hindi-commentary re-uploader."""
-    return not _BAD_CHANNEL.search(channel_text or "")
+    """False if the channel name/@handle looks like an Indian/Hindi-commentary re-uploader,
+    or is iShowSpeed himself / a channel branded around him."""
+    t = channel_text or ""
+    return not _BAD_CHANNEL.search(t) and not _ISHOWSPEED.search(t)
 
 
 def channel_trusted(channel_name, handle=""):

@@ -17,6 +17,9 @@ Usage:
         [--privacy unlisted|public] [--max-videos 8] [--window today|week]
         [--categories goal,streamer,popular] [--keep-tmp]
 
+No iShowSpeed content (user 2026-07-12): the 'speed' category no longer exists in
+find_worldcup_clips.py, and the relevance screen below still excludes him as a backstop.
+
 Copyright note: official goal footage is heavily Content-ID-claimed; posting it is Moemen's
 explicit, accepted risk (decision log 2026-07-04). Nothing here vets rights.
 """
@@ -169,7 +172,7 @@ def main():
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_CLIPS", "8")),
                     help="Daily post cap so a busy match day doesn't flood the channel")
     ap.add_argument("--window", default="today", choices=["today", "week"])
-    ap.add_argument("--categories", default="goal,speed,streamer,popular")
+    ap.add_argument("--categories", default="goal,streamer,popular")
     ap.add_argument("--music", default=None, help="Optional music bed (default: keep original clip audio)")
     ap.add_argument("--keep-tmp", action="store_true")
     args = ap.parse_args()

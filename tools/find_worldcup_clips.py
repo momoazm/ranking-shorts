@@ -14,13 +14,16 @@ every path (probed 2026-07-03), while YouTube works through the WARP SOCKS proxy
 sorted newest-first, which is what makes fresh goals/clips surface within minutes.
 
 Categories (each candidate is tagged so the title/caption can match its vibe):
-Priority (user 2026-07-08): the GAME itself first, then iShowSpeed, then other events -- the
-finder emits candidates in that tier order, and the orchestrator posts the first that builds.
+Priority (user 2026-07-08, iShowSpeed removed 2026-07-12): the GAME itself first, then other
+events -- the finder emits candidates in that tier order, and the orchestrator posts the first
+that builds.
   goal      -- (tier 1) Messi/Ronaldo/big-nation goals; TOD-by-beIN preferred (copyright risk accepted)
-  speed     -- (tier 2) iShowSpeed at / reacting to the World Cup (un-blocked 2026-07-08)
-  streamer  -- (tier 3) other creators reacting to the World Cup
-  popular   -- (tier 3) viral / best-moment clips + trending OFF-pitch moments (celebrations,
+  streamer  -- (tier 2) other creators reacting to the World Cup (NOT iShowSpeed -- see channel_ok)
+  popular   -- (tier 2) viral / best-moment clips + trending OFF-pitch moments (celebrations,
                fan scenes, drama/controversy) -- "the trending stuff other than the game itself"
+
+`speed` (iShowSpeed) is REMOVED (user 2026-07-12, reverses the 2026-07-08 un-block): no query
+searches for it, and channel_ok() screens out his handle/name from every other category too.
 
 Usage:
     python tools/find_worldcup_clips.py [--max 8] [--min-dur 5] [--max-dur 180]
@@ -57,11 +60,6 @@ QUERIES = {
         "France goal World Cup 2026",
         "England goal World Cup 2026",
         "Portugal goal World Cup 2026",
-    ],
-    # Own priority tier (user 2026-07-08): the game itself first, iShowSpeed second, then the rest.
-    "speed": [
-        "iShowSpeed World Cup 2026 reaction",
-        "iShowSpeed at World Cup 2026",
     ],
     "streamer": [
         "streamer reacts World Cup 2026 goal",
@@ -123,7 +121,7 @@ def main():
                          "<60s, so bias toward true single-moment clips (goals/reactions) over "
                          "multi-minute highlights reels.")
     ap.add_argument("--max", type=int, default=8, help="Max candidates to return (orchestrator posts the top one)")
-    ap.add_argument("--categories", default="goal,speed,streamer,popular",
+    ap.add_argument("--categories", default="goal,streamer,popular",
                     help="Comma list restricting which categories to search (e.g. 'streamer,popular').")
     ap.add_argument("--query", action="append", default=None,
                     help="TARGETED mode (repeatable): search exactly these queries instead of the "
@@ -205,15 +203,16 @@ def main():
         if len(ordered) >= args.max * 3:     # plenty gathered -> stop hitting the API
             break
 
-    # PRIORITY TIERS (user 2026-07-08): the GAME itself first, then iShowSpeed, then other
-    # events (fan/streamer/popular). Within the goal tier, prefer official/major broadcasters
-    # (TOD/beIN, FIFA, FOX, CBS, ESPN...) for clean commentary -- if any trusted goal was found,
-    # drop the untrusted goals (Hindi/re-upload risk); Speed and events aren't broadcaster
-    # content, so the trusted screen only gates goals and they stay as lower-tier fallback.
+    # PRIORITY TIERS (user 2026-07-08, iShowSpeed tier removed 2026-07-12): the GAME itself
+    # first, then other events (fan/streamer/popular). Within the goal tier, prefer
+    # official/major broadcasters (TOD/beIN, FIFA, FOX, CBS, ESPN...) for clean commentary --
+    # if any trusted goal was found, drop the untrusted goals (Hindi/re-upload risk); events
+    # aren't broadcaster content, so the trusted screen only gates goals and they stay as
+    # lower-tier fallback.
     trusted_goals = [c for c in ordered if c.get("category") == "goal" and c.get("trusted")]
     if trusted_goals and not args.no_trusted_pref:
         ordered = [c for c in ordered if c.get("category") != "goal" or c.get("trusted")]
-    tier = {"goal": 0, "speed": 1}
+    tier = {"goal": 0}
     # Stable sort keeps each query's newest-first (freshness) order WITHIN a tier.
     ordered.sort(key=lambda c: tier.get(c.get("category"), 2))
     cands = ordered[: args.max]

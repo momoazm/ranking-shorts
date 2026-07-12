@@ -40,7 +40,7 @@ from datetime import date
 from pathlib import Path
 
 from _common import REPO_ROOT, load_env, emit, log_ig_post
-from clip_autopost import run_tool_safe, record_used, build_meta
+from clip_autopost import run_tool_safe, record_used, build_meta, screen_candidates
 from worldcup_live import get_scoreboard, get_summary, minutes_to_kickoff, norm_name
 
 TMP = REPO_ROOT / ".tmp" / "wc"
@@ -198,6 +198,15 @@ class Watcher:
         return ok
 
     # ---- per-goal -----------------------------------------------------------------
+    def is_duplicate_goal(self, match_id, goal):
+        """True if an already-tracked goal in this match is the SAME real-world goal.
+        ESPN's `clock.value` (raw seconds) can jitter by a second between polls, which
+        mints a fresh `key` (see worldcup_live.parse_match) for what is really the same
+        goal -- caught 2026-07-11 posting Mac Allister's goal to YouTube+Instagram TWICE
+        in one run. Same scorer + same displayed minute in the same match = a repeat."""
+        return any(g["scorer"] == goal["scorer"] and g["minute"] == goal["minute"]
+                   for g in self.goals_of_match(match_id).values())
+
     def on_new_goal(self, match, goal):
         g = {"seen": time.time(), "clip_posted": False, "clip_expired": False,
              "speed_done": False, "src": None,
@@ -242,6 +251,9 @@ class Watcher:
         cands = (find or {}).get("candidates", []) if not ferr else []
         if not cands:
             return                                    # nothing uploaded yet; retry next poll
+        cands = screen_candidates(cands)
+        if not cands:
+            return                                    # only news/analysis/non-footage this cycle; retry next poll
         card = (f"OWN GOAL! {match['short']} ({g['minute']})" if g["own_goal"]
                 else f"{g['scorer'].upper()} SCORES vs {opp} ({g['minute']})")
         variant = self._peek_weekly_variant()
@@ -317,7 +329,14 @@ class Watcher:
                                             "--out", ".tmp/wc/star_cands.json"])
                 posted = False
                 variant = self._peek_weekly_variant()
-                for c in ((find or {}).get("candidates") or [])[:3] if not ferr else []:
+                star_cands = (find or {}).get("candidates") or [] if not ferr else []
+                # Broad query ("{star} vs {opp} World Cup 2026") is the likeliest spot for a
+                # news/analysis segment to slip past the deterministic title screen (unlike the
+                # goal hunt's tight --require match) -- run the same semantic screen clip_autopost
+                # uses (excludes news/analysis/iShowSpeed) as a second gate.
+                if star_cands:
+                    star_cands = screen_candidates(star_cands)
+                for c in star_cands[:3]:
                     build_args = ["--url", c["url"], "--title", card,
                                   "--handle", self.args.handle, "--out", FINAL]
                     if variant:
@@ -411,6 +430,9 @@ class Watcher:
             cands = [c for c in (find or {}).get("candidates", []) if c.get("is_tod")] if not ferr else []
             if not cands:
                 continue                       # TOD hasn't uploaded yet; retry next poll
+            cands = screen_candidates(cands)
+            if not cands:
+                continue                       # TOD's upload this cycle screened out (e.g. a studio recap, not the raw highlights reel)
             card = f"{hl['home']} {hl['score']} {hl['away']} - HIGHLIGHTS"
             variant = self._peek_weekly_variant()
             for c in cands[:2]:
@@ -458,7 +480,7 @@ class Watcher:
                     # so re-posting the 4 that a 429 dropped doesn't duplicate the ones that landed.
                     if self.redo_min and any(r in (goal.get("minute") or "") for r in self.redo_min) is False:
                         continue
-                    if goal["key"] not in self.st["goals"]:
+                    if goal["key"] not in self.st["goals"] and not self.is_duplicate_goal(m["id"], goal):
                         self.on_new_goal(m, goal)
                 for key in list(self.goals_of_match(m["id"])):
                     self.hunt_goal_clip(m, key)

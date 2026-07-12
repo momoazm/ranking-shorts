@@ -1,5 +1,10 @@
 name: momoclips - iShowSpeed LIVE watcher
 
+# DISABLED 2026-07-12 (Moemen's call: no iShowSpeed content on momoclips at all). Manually
+# disabled in the Actions UI (gh workflow disable) -- the cron below no longer fires. The file
+# is kept (not deleted) in case the decision reverses; re-enable with `gh workflow enable
+# speed_watch.yml` if so.
+#
 # PARALLEL to worldcup_live.yml (Moemen's spec 2026-07-09). Same cheap ESPN gate: every 15 min a
 # ~30s step asks "is a World Cup match live or kicking off within ~25 min?" -- because that's the
 # only time iShowSpeed streams a WC watchalong. If not, the job ends there (no pip/ffmpeg/WARP
@@ -9,7 +14,6 @@ name: momoclips - iShowSpeed LIVE watcher
 # the football Instagram account. Detection = ESPN goals + audio-energy peaks + a Gemini vision
 # label. Its own concurrency group means it runs ALONGSIDE the broadcast goal-clip watcher, which
 # no longer captures Speed (no double-posting). state/speed_watch.json (cached) keeps it idempotent.
-# To PAUSE: disable this workflow in the Actions UI.
 
 on:
   schedule:
