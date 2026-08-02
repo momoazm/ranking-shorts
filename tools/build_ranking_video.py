@@ -184,7 +184,8 @@ def normalize(src, offset, dur, out, loop=0):
                 "-c:a", "aac", "-b:a", "160k", out])
 
 
-GOLD = "&H0066D7FF&"   # ASS AABBGGRR -> bright gold (the active rank)
+# MOMO theme gold #E6B23A in ASS AABBGGRR (ASS stores colors as BGR, not RGB).
+GOLD = "&H003AB2E6&"
 
 
 def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text="", cta_dur=0.0, cta_text=""):

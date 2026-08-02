@@ -78,6 +78,30 @@ QUERIES = {
     ],
 }
 
+# After the 2026 tournament, the football account must keep sourcing fresh moments. These are a
+# fallback only: targeted live-goal searches stay World-Cup-specific, and the original World Cup
+# queries still win whenever they return candidates. Keeping this in the same picker means the
+# workflow does not silently become a no-op just because the tournament window has closed.
+GENERAL_QUERIES = {
+    "goal": [
+        "football goal today",
+        "soccer goal today",
+        "football last minute goal",
+        "football insane goal",
+    ],
+    "streamer": [
+        "football fan reaction today",
+        "football streamer reaction today",
+        "soccer fan reaction viral",
+    ],
+    "popular": [
+        "football viral moment today",
+        "football celebration today",
+        "football skill today",
+        "soccer funny moment today",
+    ],
+}
+
 
 def load_used(path):
     """Set of clip ids already posted (so we never repeat one)."""
@@ -112,6 +136,56 @@ def search_recent(query, n, sp):
     return info.get("entries") or []
 
 
+def parse_duration(value):
+    """Normalize yt-dlp's numeric or MM:SS duration fields."""
+    if isinstance(value, (int, float)) and value >= 0:
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        bits = value.strip().split(":")
+        try:
+            total = 0.0
+            for bit in bits:
+                total = total * 60 + float(bit)
+            return total
+        except ValueError:
+            return None
+    return None
+
+
+def enrich_entry(entry):
+    """Fetch full metadata for a flat search result when the search page omitted it.
+
+    YouTube's current results extractor frequently returns title/id but no duration, channel, or
+    upload timestamp. The previous picker interpreted that as invalid and discarded every result.
+    This probe is intentionally metadata-only (no download) and returns the original entry on a
+    transient bot-check failure; the caller can still use a clearly short-looking search result.
+    """
+    vid = entry.get("id")
+    if not vid:
+        return entry
+    from yt_dlp import YoutubeDL
+    opts = {"quiet": True, "no_warnings": True, "noprogress": True, "skip_download": True,
+            "socket_timeout": 20, "extractor_retries": 1}
+    cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
+    if os.path.isfile(cookie):
+        opts["cookiefile"] = cookie
+    proxy = os.environ.get("YTDLP_PROXY")
+    if proxy:
+        opts["proxy"] = proxy
+    try:
+        with YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(entry.get("url") or f"https://www.youtube.com/watch?v={vid}",
+                                    download=False)
+        merged = dict(entry)
+        for key in ("title", "duration", "duration_string", "channel", "uploader",
+                    "uploader_id", "upload_date", "timestamp"):
+            if info.get(key) not in (None, ""):
+                merged[key] = info[key]
+        return merged
+    except Exception:
+        return entry
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--per-query", type=int, default=8, help="Results fetched per query (newest first)")
@@ -135,6 +209,8 @@ def main():
                     help="Upload-date window: 'today' (freshest, default) or 'week' (wider supply).")
     ap.add_argument("--no-trusted-pref", action="store_true",
                     help="Don't prefer official/major broadcasters (Indian-channel block still applies).")
+    ap.add_argument("--world-cup-only", action="store_true",
+                    help="Disable the post-tournament general-football fallback (for targeted live hunts).")
     ap.add_argument("--history", default="state/used_clips.json",
                     help="JSON of already-posted clip ids, to avoid reposting")
     ap.add_argument("--out", default=".tmp/clip_candidates.json")
@@ -162,45 +238,80 @@ def main():
     require = [_fold(w.strip()) for w in (args.require or "").split(",") if w.strip()]
 
     ordered, seen, errors = [], set(), []   # ordered = freshest-first candidates, deduped
-    for q, cat in plan:
-        try:
-            entries = search_recent(q, args.per_query, sp)
-        except Exception as e:
-            errors.append(f"{q}: {str(e)[:80]}")
-            continue
-        for en in entries:
-            vid = en.get("id")
-            dur = en.get("duration")
-            title = (en.get("title") or "").strip()
-            if not vid or not title or vid in seen or vid in used:
+    probe_budget = max(24, args.max * 6)
+    unknown_duration = 0
+    # The general plan is only a fallback. Do not apply it to targeted goal hunts: those must
+    # stay scoped to the scorer/team event supplied by the live watcher.
+    plans = [plan]
+    if not args.query and not args.world_cup_only:
+        general_plan = [(q, "football") for cat in wanted for q in GENERAL_QUERIES.get(cat, [])]
+        random.shuffle(general_plan)
+        plans.append(general_plan)
+
+    for current_plan in plans:
+        for q, cat in current_plan:
+            try:
+                entries = search_recent(q, args.per_query, sp)
+            except Exception as e:
+                errors.append(f"{q}: {str(e)[:80]}")
                 continue
-            # English-audience screen: drop non-Latin-script titles and news/analysis/talk
-            # markers (a Hindi Zee News studio segment got posted on 2026-07-05 -- its title
-            # carried English keywords, so keyword search alone can't be trusted).
-            if not title_ok(title):
-                continue
-            # Targeted mode: every required word must appear (accent-insensitive) so a search
-            # for "Bellingham goal England vs Mexico" can't return some other fresh upload.
-            if require and any(w not in _fold(title) for w in require):
-                continue
-            # Require a KNOWN, short duration: unknown usually means a live stream, and a long
-            # VOD would download the whole file. Both must be excluded before the build step.
-            if not isinstance(dur, (int, float)) or not (args.min_dur <= dur <= args.max_dur):
-                continue
-            # Channel screen: an ENGLISH title can still front HINDI commentary from an Indian
-            # re-upload channel (user rule 2026-07-08). The title can't reveal that; the channel
-            # can. Hard-block bad channels for every category.
-            channel = (en.get("channel") or en.get("uploader") or "").strip()
-            handle = (en.get("uploader_id") or "").strip()
-            if not channel_ok(f"{channel} {handle}"):
-                continue
-            seen.add(vid)
-            ordered.append({"id": vid, "title": title, "duration": float(dur),
-                            "url": f"https://www.youtube.com/watch?v={vid}", "category": cat,
-                            "channel": channel, "handle": handle,
-                            "trusted": channel_trusted(channel, handle),
-                            "is_tod": is_tod(channel, handle)})
-        if len(ordered) >= args.max * 3:     # plenty gathered -> stop hitting the API
+            for raw_en in entries:
+                en = raw_en
+                vid = en.get("id")
+                duration = parse_duration(en.get("duration") or en.get("duration_string"))
+                title = (en.get("title") or "").strip()
+                if not vid or not title or vid in seen or vid in used:
+                    continue
+                # English-audience screen: drop non-Latin-script titles and news/analysis/talk
+                # markers (a Hindi Zee News studio segment got posted on 2026-07-05 -- its title
+                # carried English keywords, so keyword search alone can't be trusted).
+                if not title_ok(title):
+                    continue
+                # Targeted mode: every required word must appear (accent-insensitive) so a search
+                # for "Bellingham goal England vs Mexico" can't return some other fresh upload.
+                if require and any(w not in _fold(title) for w in require):
+                    continue
+                # Flat search results often omit metadata. Probe before rejecting them instead of
+                # turning a healthy search into count=0. The budget prevents a bot-walled query
+                # from making a 20-minute workflow probe every result on every poll.
+                if (duration is None or not (en.get("channel") or en.get("uploader"))) and probe_budget > 0:
+                    en = enrich_entry(en)
+                    probe_budget -= 1
+                    duration = parse_duration(en.get("duration") or en.get("duration_string"))
+                    title = (en.get("title") or title).strip()
+                if duration is not None and not (args.min_dur <= duration <= args.max_dur):
+                    continue
+                # If YouTube still withholds duration after the metadata probe, retain the result
+                # rather than dropping the whole pool. build_clip enforces its own <60s output
+                # cap; the candidate is marked unknown for observability. This is especially
+                # important for Shorts results, whose flat extractor omits duration most often.
+                duration_unknown = duration is None
+                if duration_unknown:
+                    unknown_duration += 1
+                # Channel screen: an ENGLISH title can still front HINDI commentary from an Indian
+                # re-upload channel (user rule 2026-07-08). The title can't reveal that; the channel
+                # can. Hard-block bad channels for every category.
+                channel = (en.get("channel") or en.get("uploader") or "").strip()
+                handle = (en.get("uploader_id") or "").strip()
+                if not channel_ok(f"{channel} {handle}"):
+                    continue
+                seen.add(vid)
+                stamp = en.get("timestamp")
+                if not isinstance(stamp, (int, float)):
+                    try:
+                        stamp = int(en.get("upload_date", "0") or "0")
+                    except (TypeError, ValueError):
+                        stamp = 0
+                ordered.append({"id": vid, "title": title, "duration": duration,
+                                "duration_unknown": duration_unknown,
+                                "url": f"https://www.youtube.com/watch?v={vid}", "category": cat,
+                                "channel": channel, "handle": handle,
+                                "timestamp": stamp or 0,
+                                "trusted": channel_trusted(channel, handle),
+                                "is_tod": is_tod(channel, handle)})
+            if len(ordered) >= args.max * 3:     # plenty gathered -> stop hitting the API
+                break
+        if len(ordered) >= args.max * 3:
             break
 
     # PRIORITY TIERS (user 2026-07-08, iShowSpeed tier removed 2026-07-12): the GAME itself
@@ -213,19 +324,23 @@ def main():
     if trusted_goals and not args.no_trusted_pref:
         ordered = [c for c in ordered if c.get("category") != "goal" or c.get("trusted")]
     tier = {"goal": 0}
-    # Stable sort keeps each query's newest-first (freshness) order WITHIN a tier.
-    ordered.sort(key=lambda c: tier.get(c.get("category"), 2))
+    # Sort by content tier first, then true upload timestamp when available. This fixes the old
+    # shuffled-query behavior where a stale result from the first random query beat a clip posted
+    # minutes ago in a later query.
+    ordered.sort(key=lambda c: (tier.get(c.get("category"), 2), -(c.get("timestamp") or 0)))
     cands = ordered[: args.max]
     if not cands:
         # Not an error the run should crash on -- "nothing new happened" is a valid outcome.
         emit({"source": "youtube", "count": 0, "candidates": [], "path": args.out,
-              "note": "no fresh unused clips", "errors": errors[:6]})
+              "note": "no fresh unused clips", "errors": errors[:6],
+              "unknown_duration_probes": unknown_duration})
         return
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump({"source": "youtube", "candidates": cands}, f, indent=2, ensure_ascii=False)
-    emit({"source": "youtube", "count": len(cands), "candidates": cands, "path": args.out})
+    emit({"source": "youtube", "count": len(cands), "candidates": cands, "path": args.out,
+          "unknown_duration_probes": unknown_duration})
 
 
 if __name__ == "__main__":

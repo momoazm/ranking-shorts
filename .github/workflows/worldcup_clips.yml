@@ -133,6 +133,10 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
         run: |
@@ -147,7 +151,8 @@ jobs:
                   f.write(os.environ["GMAIL_TOKEN_JSON"])
           keys = ["GROQ_API_KEY", "GEMINI_API_KEY", "IG_USER_ID", "IG_ACCESS_TOKEN",
                   "GMAIL_SENDER_EMAIL", "GMAIL_TO", "ZERNIO_API_URL", "ZERNIO_API_KEY",
-                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID", "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY"]
+                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID", "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY",
+                  "TIKTOK_ACCESS_TOKEN", "TIKTOK_REFRESH_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"]
           lines = ["GMAIL_TOKEN_PATH=gmail_token.json"]
           lines += [f"{k}={os.environ[k]}" for k in keys if os.environ.get(k)]
           with open("API.env", "w", encoding="utf-8") as f:
@@ -163,6 +168,11 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_PRIVACY: PUBLIC_TO_EVERYONE
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           # Scheduled runs (no inputs) default to PUBLIC (Moemen's go-ahead 2026-07-05,
@@ -175,7 +185,7 @@ jobs:
           # would post the SAME goal twice from two different uploads (dedup is per video id).
           IN_CATEGORIES: ${{ inputs.categories || 'speed,popular,streamer' }}
         run: |
-          ARGS=(--privacy "$IN_PRIVACY" --window "$IN_WINDOW" --categories "$IN_CATEGORIES" --platforms youtube,instagram,email)
+          ARGS=(--privacy "$IN_PRIVACY" --window "$IN_WINDOW" --categories "$IN_CATEGORIES" --platforms youtube,instagram,tiktok,email)
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           echo "clip_autopost.py ${ARGS[*]}"
           python tools/clip_autopost.py "${ARGS[@]}"

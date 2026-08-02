@@ -9,7 +9,7 @@ best 5 with commentary, then they're trimmed, captioned with a countdown overlay
 delivered. Same safety/daily-cap conventions as autopost.py.
 
 Usage:
-    python tools/rank_autopost.py [--no-upload] [--niche "..."] [--platforms email,export]
+    python tools/rank_autopost.py [--no-upload] [--niche "..."] [--platforms youtube,instagram,tiktok,email]
         [--privacy public] [--max-videos 6] [--keep-tmp]
 """
 import argparse
@@ -111,7 +111,12 @@ def main():
     ap.add_argument("--force-genre", default="worldcup", choices=["", "fails", "cats", "babies", "dogs", "worldcup"],
                     help="Lock every video to one genre instead of letting the topic model rotate.")
     ap.add_argument("--search", default=None, help="Override the Tenor search query")
-    ap.add_argument("--platforms", default="youtube,email")
+    ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
+    ap.add_argument("--tiktok-privacy", default=None,
+                    choices=["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR",
+                             "PUBLIC_TO_EVERYONE"],
+                    help="TikTok privacy (defaults to PUBLIC_TO_EVERYONE for public runs, "
+                         "SELF_ONLY otherwise).")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
     ap.add_argument("--music", default=None, help="Optional music bed path (default: none -- keep clip audio)")
     ap.add_argument("--music-query", default="trending tiktok background music 2026")
@@ -139,7 +144,6 @@ def main():
             print(json.dumps({"status": "skipped_daily_cap", "used_today": daily_used(),
                               "max_videos": args.max_videos}, indent=2))
             return
-        daily_increment()
 
     # 1) figure out the genre (forced, or let the model pick) -> 2) for worldcup, PROBE which angle
     # (fan/match/streamer) is actually sourceable BEFORE committing to a title -- supply per angle
@@ -288,7 +292,6 @@ def main():
     if music_path:
         build_args += ["--music", music_path]
     build = run_tool("build_ranking_video.py", build_args)
-    record_used(RANKED)   # mark these clips used so they aren't repeated next run
 
     # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
     title = topic["title"]
@@ -305,42 +308,72 @@ def main():
               "requested_genre": requested_genre, "used_genre": topic.get("genre"),
               "fallback_reason": fallback_reason, "delivery": {}}
 
-    # 6) deliver
-    if "email" in platforms:
+    # 6) deliver. Host the finished MP4 once for the public-url platforms, then use the local
+    # file for TikTok's FILE_UPLOAD API. The old flow hosted separately for YouTube and Instagram,
+    # which doubled the number of failure points and could leave one platform silently skipped.
+    published = False
+    host_url = None
+    host_error = None
+    needs_public_url = publishing and any(p in platforms for p in ("youtube", "instagram"))
+    if needs_public_url:
+        host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
+        host_url = (host or {}).get("url")
+        host_error = herr or (None if host_url else "host_public returned no url")
+
+    if publishing and "youtube" in platforms:
+        yt = (meta.get("youtube") or {})
+        if host_error:
+            result["delivery"]["youtube"] = {"skipped": host_error.splitlines()[0][:140]}
+        else:
+            m, err = run_tool_safe("upload_youtube.py", ["--video-url", host_url,
+                                       "--title", yt.get("title", title),
+                                       "--description", yt.get("description", ""),
+                                       "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
+                                       "--privacy", args.privacy, "--confirm"])
+            ok = not err and (m or {}).get("status") == "uploaded"
+            result["delivery"]["youtube"] = ({"skipped": err.splitlines()[0][:140]}
+                                                if err else {"url": m.get("url")})
+            published = published or ok
+
+    if publishing and "instagram" in platforms:
+        ig = (meta.get("instagram") or {})
+        if host_error:
+            result["delivery"]["instagram"] = {"skipped": host_error.splitlines()[0][:140]}
+        else:
+            m, err = run_tool_safe("upload_instagram.py", ["--video-url", host_url,
+                                       "--caption", ig.get("caption", title), "--confirm"])
+            ok = not err and (m or {}).get("status") == "uploaded"
+            result["delivery"]["instagram"] = ({"skipped": err.splitlines()[0][:140]}
+                                                  if err else {"media_id": m.get("post_id") or m.get("media_id")})
+            published = published or ok
+
+    if publishing and "tiktok" in platforms:
+        tt = (meta.get("tiktok") or {})
+        tiktok_privacy = args.tiktok_privacy or (
+            "PUBLIC_TO_EVERYONE" if args.privacy == "public" else "SELF_ONLY")
+        m, err = run_tool_safe("upload_tiktok.py", ["--video", FINAL,
+                                    "--title", tt.get("caption", title),
+                                    "--privacy", tiktok_privacy, "--confirm"])
+        ok = not err and (m or {}).get("status") == "uploaded"
+        result["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:140]}
+                                          if err else {"publish_id": m.get("publish_id")})
+        published = published or ok
+
+    if publishing and "email" in platforms:
         m, err = run_tool_safe("email_video.py", ["--video", FINAL, "--captions-meta", CAPMETA,
                                                   "--subject", f"Ranking Short: {title}"])
         result["delivery"]["email"] = {"skipped": err.splitlines()[0][:140]} if err else {"sent_to": m.get("to")}
     if "export" in platforms:
         m, err = run_tool_safe("export_local.py", ["--video", FINAL, "--captions-meta", CAPMETA, "--title", title])
         result["delivery"]["export"] = {"error": err.splitlines()[0][:140]} if err else {"folder": m.get("folder")}
-    if publishing and "youtube" in platforms:
-        # YouTube now publishes via Zernio too (same channel-OAuth-avoidance reasoning as
-        # Instagram) -- it also needs a PUBLIC url, not a local path.
-        yt = (meta.get("youtube") or {})
-        host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
-        if herr or not (host or {}).get("url"):
-            result["delivery"]["youtube"] = {"skipped": (herr or "host_public returned no url").splitlines()[0][:140]}
-        else:
-            m, err = run_tool_safe("upload_youtube.py", ["--video-url", host["url"], "--title", yt.get("title", title),
-                                   "--description", yt.get("description", ""),
-                                   "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
-                                   "--privacy", args.privacy, "--confirm"])
-            result["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:140]} if err else {"url": m.get("url")}
-            if not err:
-                result["status"] = "uploaded"
-    if publishing and "instagram" in platforms:
-        # IG can't take a local file -> host the mp4 at a PUBLIC url, then publish it as a Reel.
-        ig = (meta.get("instagram") or {})
-        caption = ig.get("caption", title)
-        host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
-        if herr or not (host or {}).get("url"):
-            result["delivery"]["instagram"] = {"skipped": (herr or "host_public returned no url").splitlines()[0][:140]}
-        else:
-            m, err = run_tool_safe("upload_instagram.py", ["--video-url", host["url"],
-                                   "--caption", caption, "--confirm"])
-            result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:140]} if err else {"media_id": m.get("post_id") or m.get("media_id")}
-            if not err:
-                result["status"] = "uploaded"
+
+    # A failed build/upload must be retryable. The old code incremented the daily cap before
+    # building and marked source clips used before delivery, so one transient LLM, host, or API
+    # failure could make later scheduled runs appear to have "stopped" permanently.
+    if published:
+        result["status"] = "uploaded"
+        daily_increment()
+        record_used(RANKED)
 
     if not args.keep_tmp:
         import shutil

@@ -17,15 +17,12 @@ name: ranking-shorts
 # silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
 
 on:
-  # PAUSED FOR THE WORLD CUP (2026-07-08, Moemen): the #5->#1 RANKING countdown is the wrong
-  # format while the tournament is on -- the channel should post SINGLE football clips (goals,
-  # reactions, recaps) from worldcup_live.yml + worldcup_clips.yml, not ranking-style videos, and
-  # under NO_REDDIT_SOURCES this pipeline's fallback pool drifts mixed->fails = NON-football clips.
-  # Re-enable after the final (~2026-07-19) by uncommenting the schedule below.
-  # schedule:
-  #   # Fires at :50 the hour before each slot; the hold step releases at exactly
-  #   # 02:30 / 11:30 / 14:30 / 17:30 / 20:30 / 23:30 UTC -> 6 uploads/day.
-  #   - cron: "50 1,10,13,16,19,22 * * *"
+  # The tournament pause was never removed after the final, so this workflow had no scheduled
+  # trigger after 2026-07-07. Resume the normal ranking schedule now; football single clips use
+  # the separate worldcup workflows.
+  schedule:
+    # Fires at :50 the hour before each slot; the hold step releases at the exact target minute.
+    - cron: "50 1,10,13,16,19,22 * * *"
   workflow_dispatch:      # manual "Run workflow" button (from the MOMO site) -- runs immediately
     inputs:
       no_upload:
@@ -37,6 +34,10 @@ on:
 
 permissions:
   contents: write   # weekly keepalive commit (public repos lose schedules after 60 idle days)
+
+concurrency:
+  group: ranking-shorts-post
+  cancel-in-progress: false
 
 jobs:
   post:
@@ -152,6 +153,11 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_PRIVACY: PUBLIC_TO_EVERYONE
         run: |
           python3 - <<'EOF'
           import os
@@ -190,7 +196,7 @@ jobs:
           NO_REDDIT_SOURCES: "1"
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
-          ARGS=(--privacy public --platforms youtube,email,zernio)
+          ARGS=(--privacy public --platforms youtube,instagram,tiktok,email)
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           python tools/rank_autopost.py "${ARGS[@]}"
 

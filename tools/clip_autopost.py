@@ -111,6 +111,7 @@ CATEGORY_META = {
     "goal":     ("\U0001F6A8⚽\U0001F525", ["WorldCup2026", "football", "goal", "shorts"]),
     "streamer": ("\U0001F62E\U0001F525",       ["streamer", "WorldCup2026", "shorts"]),
     "popular":  ("\U0001F525",                 ["WorldCup2026", "viral", "football", "shorts"]),
+    "football": ("\U0001F525",                 ["football", "soccer", "viral", "shorts"]),
 }
 
 
@@ -126,8 +127,9 @@ def screen_candidates(cands):
         f"CANDIDATES:\n{listing}\n\n"
         'Return ONE JSON object: {"matches": [<int indices>]}\n'
         "Return the indices of every candidate whose title clearly describes ACTUAL FOOTAGE of "
-        "ONE SINGLE specific World Cup moment: a goal, save, skill, celebration, streamer/fan "
-        "reaction, or viral on-the-ground moment. EXCLUDE: ranked lists and Top-N countdowns, "
+        "ONE SINGLE specific football/soccer moment (World Cup content is welcome but not "
+        "required): a goal, save, skill, celebration, streamer/fan reaction, or viral "
+        "on-the-ground moment. EXCLUDE: ranked lists and Top-N countdowns, "
         "'most/best X in history' or all-time stat/record pieces, player-vs-player comparisons, "
         "compilations and montages, news reports and news-channel segments, studio "
         "discussion/analysis, previews, predictions, interviews, press conferences, podcasts, "
@@ -157,15 +159,21 @@ def build_meta(cand, handle):
                         "".join(c if c.isalnum() else " " for c in raw.lower()).split()
                         if len(w) > 3][:6]
     hashtags = " ".join(f"#{t}" for t in dict.fromkeys(tags))
-    description = f"{card}\n\n{hashtags}\n\nFollow {handle} for daily World Cup clips."
-    ig_caption = f"{card} {emoji}\n\nFollow {handle} for daily World Cup clips ⚽\U0001F525\n\n{hashtags}"
+    subject = "football clips" if cat == "football" else "World Cup clips"
+    description = f"{card}\n\n{hashtags}\n\nFollow {handle} for daily {subject}."
+    ig_caption = f"{card} {emoji}\n\nFollow {handle} for daily {subject} ⚽\U0001F525\n\n{hashtags}"
     return card, yt_title, description, ig_caption, tags
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true", help="Build only; post nothing")
-    ap.add_argument("--platforms", default="youtube,instagram,email")
+    ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
+    ap.add_argument("--tiktok-privacy", default=None,
+                    choices=["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR",
+                             "PUBLIC_TO_EVERYONE"],
+                    help="TikTok privacy (defaults to PUBLIC_TO_EVERYONE for public runs, "
+                         "SELF_ONLY otherwise).")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"],
                     help="YouTube privacy (default public -- Moemen's go-ahead 2026-07-05)")
     ap.add_argument("--handle", default="@itsmomoclips")
@@ -240,10 +248,12 @@ def main():
         if is_experiment:
             build_args += ["--cta-text", exp_variant["cta_text"], "--cta-dur", str(exp_variant["cta_dur"])]
         b, berr = run_tool_safe("build_clip.py", build_args)
-        record_used(c["id"])
         if not berr:
             cand, card, yt_title, description, ig_caption, tags, build = c, _card, _yt, _desc, _cap, _tags, b
             break
+        # A source that cannot be downloaded/rendered is a bad candidate; remember it so the
+        # picker advances. Successful builds are only marked after a confirmed platform post.
+        record_used(c["id"])
         attempts.append({"id": c["id"], "error": berr.splitlines()[0][:160]})
         print(f"::warning::build_clip failed for {c['id']}: {berr.splitlines()[0][:160]}", file=sys.stderr)
 
@@ -257,13 +267,18 @@ def main():
               "duration_sec": build.get("duration_sec"), "privacy": args.privacy,
               "elapsed_sec": None, "delivery": {}}
 
-    # 3) deliver. host_public gives the public URL that Zernio-based uploaders need.
+    # 3) deliver. host_public gives the public URL that Zernio-based uploaders need; TikTok's
+    # Content Posting API uploads the local MP4 directly, so it remains usable even when hosting
+    # is temporarily unavailable.
     published = False
+    host_url = None
+    host_error = None
     if publishing and ("youtube" in platforms or "instagram" in platforms):
         host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
-        url = (host or {}).get("url")
-        if herr or not url:
-            skip = (herr or "host_public returned no url").splitlines()[0][:160]
+        host_url = (host or {}).get("url")
+        host_error = herr or (None if host_url else "host_public returned no url")
+        if host_error:
+            skip = host_error.splitlines()[0][:160]
             if "youtube" in platforms:
                 result["delivery"]["youtube"] = {"skipped": skip}
             if "instagram" in platforms:
@@ -271,17 +286,18 @@ def main():
         else:
             if "youtube" in platforms:
                 m, err = run_tool_safe("upload_youtube.py",
-                                       ["--video-url", url, "--title", yt_title,
+                                       ["--video-url", host_url, "--title", yt_title,
                                         "--description", description, "--tags", ",".join(tags),
                                         "--privacy", args.privacy, "--confirm"])
+                ok = not err and (m or {}).get("status") == "uploaded"
                 result["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
-                published = published or not err
+                published = published or ok
             if "instagram" in platforms:
                 m, err = run_tool_safe("upload_instagram.py",
-                                       ["--video-url", url, "--caption", ig_caption, "--confirm"])
+                                       ["--video-url", host_url, "--caption", ig_caption, "--confirm"])
                 media_id = None if err else (m.get("post_id") or m.get("media_id"))
                 result["delivery"]["instagram"] = {"skipped": err.splitlines()[0][:160]} if err else {"media_id": media_id}
-                published = published or not err
+                published = published or (not err and (m or {}).get("status") == "uploaded")
                 if media_id:
                     used_style, used_experiment = None, False
                     if is_experiment:
@@ -294,6 +310,16 @@ def main():
                                 context={"source": "clip_autopost", "category": cand.get("category"),
                                          "title": card})
 
+    if publishing and "tiktok" in platforms:
+        tiktok_privacy = args.tiktok_privacy or (
+            "PUBLIC_TO_EVERYONE" if args.privacy == "public" else "SELF_ONLY")
+        m, err = run_tool_safe("upload_tiktok.py", ["--video", FINAL,
+                                    "--title", f"{card} #football #shorts",
+                                    "--privacy", tiktok_privacy, "--confirm"])
+        result["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:160]}
+                                          if err else {"publish_id": m.get("publish_id")})
+        published = published or (not err and (m or {}).get("status") == "uploaded")
+
     if publishing and "email" in platforms:
         m, err = run_tool_safe("email_video.py", ["--video", FINAL, "--subject", f"momoclips: {card}"])
         result["delivery"]["email"] = {"skipped": err.splitlines()[0][:160]} if err else {"sent_to": m.get("to")}
@@ -301,6 +327,9 @@ def main():
     if published:
         result["status"] = "uploaded"
         daily_increment()
+        # Do not consume a fresh candidate merely because it built. If all delivery APIs fail,
+        # the next scheduled poll can retry the same source instead of reporting no_source.
+        record_used(cand["id"])
 
     result["elapsed_sec"] = round(time.time() - t0, 1)
 

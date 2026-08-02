@@ -21,7 +21,7 @@ import os
 import re
 import sys
 
-from _common import REPO_ROOT, load_env, emit, fail, is_tod, TOD_CROP_FRAC
+from _common import REPO_ROOT, load_env, emit, fail, is_tod, TOD_CROP_FRAC, load_theme
 from _media import run_ffmpeg, get_ffmpeg, probe_duration
 
 # Reuse the ranking pipeline's downloader + 9:16 normaliser (same module, sibling import).
@@ -72,7 +72,16 @@ def clean_title(raw):
     return re.sub(r"^[^0-9A-Za-z]+", "", out).strip(" -–—:;|.,!?")
 
 
-def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text=""):
+def hex_to_ass_bgr(hex_color, alpha="00"):
+    """Convert the shared MOMO #RRGGBB theme color to ASS AABBGGRR."""
+    h = (hex_color or "#FFFFFF").lstrip("#")
+    if len(h) != 6:
+        h = "FFFFFF"
+    r, g, b = h[0:2], h[2:4], h[4:6]
+    return f"&H{alpha}{b}{g}{r}&"
+
+
+def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text="", theme=None):
     """A compact title card: bold title pinned top for the whole clip + a small handle
     watermark bottom-centre. Colours/anchoring mirror build_ranking_video's Header style so
     the two formats look like one channel. Gold accent = brand.
@@ -85,22 +94,31 @@ def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text=""):
         h = int(t // 3600); m = int((t % 3600) // 60); s = t % 60
         return f"{h}:{m:02d}:{s:05.2f}"
 
+    theme = theme or {"colors": {}}
+    colors = theme.get("colors", {})
+    gold = hex_to_ass_bgr(colors.get("gold", "#E6B23A"))
+    gold_light = hex_to_ass_bgr(colors.get("gold_light", "#F4D277"))
+    white = hex_to_ass_bgr(colors.get("text_on_dark", "#F2E9D8"))
+    navy = hex_to_ass_bgr(colors.get("navy", "#040810"), "78")
+    teal = hex_to_ass_bgr(colors.get("nile_teal", "#2E7C8C"))
     head = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\nWrapStyle: 0\n\n"
         "[V4+ Styles]\n"
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
         "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
         "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        # Title: bold white, gold-adjacent shadow box, pinned top-centre the whole clip.
-        "Style: Title,Arial,64,&H00FFFFFF,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,5,3,8,60,60,120,1\n"
-        # Handle: small gold watermark, bottom-centre, lifted clear of the phone UI.
-        "Style: Handle,Arial,44,&H0066D7FF&,&H0,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,3,2,2,60,60,150,1\n"
-        # CTA: bold gold follow prompt, sits above the handle watermark so they never collide.
-        "Style: CTA,Arial,58,&H0066D7FF&,&H0,&H00000000,&H78000000,1,0,0,0,100,100,0,0,1,6,3,2,60,60,260,1\n\n"
+        # Opaque navy panels keep the hook legible over pale pitch footage; gold and teal are
+        # read from the shared MOMO theme instead of the old hard-coded yellow.
+        "Style: Title,Liberation Sans,64," + white + "," + gold + ",&H00000000," + navy + ",1,0,0,0,100,100,0,0,3,14,0,8,70,70,122,1\n"
+        "Style: Badge,Liberation Sans,30," + gold_light + "," + gold_light + ",&H00000000," + navy + ",1,0,0,0,100,100,0,0,3,8,0,8,70,70,64,1\n"
+        "Style: Handle,Liberation Sans,40," + gold_light + "," + gold_light + ",&H00000000," + navy + ",1,0,0,0,100,100,0,0,3,8,0,2,60,60,148,1\n"
+        "Style: CTA,Liberation Sans,56," + white + "," + gold + ",&H00000000," + teal + ",1,0,0,0,100,100,0,0,3,10,0,2,60,60,258,1\n\n"
         "[Events]\n"
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     )
     rows = [
+        f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Badge,,0,0,0,,"
+        "{\\fad(120,0)}MOMOCLIPS / FOOTBALL",
         # Title pops in with a quick scale-down so it punches on the open, then holds.
         f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Title,,0,0,0,,"
         "{\\fad(120,0)\\fscx112\\fscy112\\t(0,240,\\fscx100\\fscy100)}" + esc(title),
@@ -188,8 +206,12 @@ def main():
     #    ranking/clipping ass burns).
     body_dur = probe_duration(body) or seg
     ass_name = "clip_overlay.ass"
+    try:
+        theme = load_theme()
+    except Exception:
+        theme = {"colors": {}}
     build_overlay_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name),
-                       args.cta_dur if args.cta else 0.0, args.cta_text)
+                       args.cta_dur if args.cta else 0.0, args.cta_text, theme=theme)
 
     out_path = args.out if os.path.isabs(args.out) else str(REPO_ROOT / args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

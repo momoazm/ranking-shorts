@@ -145,7 +145,7 @@ class Watcher:
         return self._weekly_variant_cache
 
     def post(self, final_rel, card, category, what, cta_variant=None):
-        """host_public -> YouTube + Instagram + email, mirroring clip_autopost's delivery."""
+        """Publish to the requested platforms with one public host and direct TikTok upload."""
         a = {"what": what, "card": card, "delivery": {}}
         self.actions.append(a)
         if self.args.no_upload:
@@ -153,45 +153,60 @@ class Watcher:
             return True
         cand = {"title": card, "category": category}
         _, yt_title, description, ig_caption, tags = build_meta(cand, self.args.handle)
-        host, herr = run_tool_safe("host_public.py", ["--video", final_rel])
-        url = (host or {}).get("url")
-        if herr or not url:
-            a["delivery"]["error"] = (herr or "host_public returned no url").splitlines()[0][:160]
-            return False
+        host_url = None
+        host_error = None
+        if self.platforms & {"youtube", "instagram"}:
+            host, herr = run_tool_safe("host_public.py", ["--video", final_rel])
+            host_url = (host or {}).get("url")
+            host_error = herr or (None if host_url else "host_public returned no url")
         ok = False
         if "youtube" in self.platforms:
-            m, err = self._zernio_upload("upload_youtube.py",
-                                         ["--video-url", url, "--title", yt_title,
-                                          "--description", description, "--tags", ",".join(tags),
-                                          "--privacy", self.args.privacy, "--confirm"])
-            a["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
-            ok = ok or not err
-        if "instagram" in self.platforms:
-            m, err = self._zernio_upload("upload_instagram.py",
-                                         ["--video-url", url, "--caption", ig_caption, "--confirm"])
-            media_id = None if err else (m.get("post_id") or m.get("media_id"))
-            if err:
-                ig = {"skipped": err.splitlines()[0][:160]}
-                # run_tool_safe returns the full parsed JSON on failure -- keep Instagram's own
-                # reason (platform_status) so a future failure is diagnosable without re-running.
-                detail = (m or {}).get("platform_status")
-                if detail:
-                    ig["platform_status"] = detail
-                a["delivery"]["instagram"] = ig
+            if host_error:
+                a["delivery"]["youtube"] = {"skipped": host_error.splitlines()[0][:160]}
             else:
-                a["delivery"]["instagram"] = {"id": media_id}
-            ok = ok or not err
-            if media_id:
-                used_style, used_experiment = None, False
-                if cta_variant:
-                    # Only NOW claim the weekly slot -- the clip already rendered with this
-                    # variant, but a failed post shouldn't burn the week's only experiment.
-                    claim, cerr = run_tool_safe("pick_weekly_style.py", ["--consume"])
-                    if not cerr and claim and claim.get("consumed"):
-                        used_style, used_experiment = cta_variant["name"], True
-                log_ig_post(media_id, style=used_style, experiment=used_experiment,
-                            context={"source": "watch_worldcup", "category": category, "what": what})
-        if "email" in self.platforms:
+                m, err = self._zernio_upload("upload_youtube.py",
+                                             ["--video-url", host_url, "--title", yt_title,
+                                              "--description", description, "--tags", ",".join(tags),
+                                              "--privacy", self.args.privacy, "--confirm"])
+                a["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
+                ok = ok or (not err and (m or {}).get("status") == "uploaded")
+        if "instagram" in self.platforms:
+            if host_error:
+                a["delivery"]["instagram"] = {"skipped": host_error.splitlines()[0][:160]}
+            else:
+                m, err = self._zernio_upload("upload_instagram.py",
+                                             ["--video-url", host_url, "--caption", ig_caption, "--confirm"])
+                media_id = None if err else (m.get("post_id") or m.get("media_id"))
+                if err:
+                    ig = {"skipped": err.splitlines()[0][:160]}
+                    # run_tool_safe returns the full parsed JSON on failure -- keep Instagram's own
+                    # reason (platform_status) so a future failure is diagnosable without re-running.
+                    detail = (m or {}).get("platform_status")
+                    if detail:
+                        ig["platform_status"] = detail
+                    a["delivery"]["instagram"] = ig
+                else:
+                    a["delivery"]["instagram"] = {"id": media_id}
+                ok = ok or (not err and (m or {}).get("status") == "uploaded")
+                if media_id:
+                    used_style, used_experiment = None, False
+                    if cta_variant:
+                        # Only NOW claim the weekly slot -- the clip already rendered with this
+                        # variant, but a failed post shouldn't burn the week's only experiment.
+                        claim, cerr = run_tool_safe("pick_weekly_style.py", ["--consume"])
+                        if not cerr and claim and claim.get("consumed"):
+                            used_style, used_experiment = cta_variant["name"], True
+                    log_ig_post(media_id, style=used_style, experiment=used_experiment,
+                                context={"source": "watch_worldcup", "category": category, "what": what})
+        if "tiktok" in self.platforms:
+            tiktok_privacy = getattr(self.args, "tiktok_privacy", None) or "PUBLIC_TO_EVERYONE"
+            m, err = self._zernio_upload("upload_tiktok.py",
+                                         ["--video", final_rel, "--title", f"{card} #football #shorts",
+                                          "--privacy", tiktok_privacy, "--confirm"])
+            a["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:160]}
+                                          if err else {"publish_id": m.get("publish_id")})
+            ok = ok or (not err and (m or {}).get("status") == "uploaded")
+        if "email" in self.platforms and ok:
             run_tool_safe("email_video.py", ["--video", final_rel, "--subject", f"momoclips live: {card}"])
         if ok:
             self.st["posts"] += 1
@@ -264,8 +279,8 @@ class Watcher:
             if variant:
                 build_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
             build, berr = run_tool_safe("build_clip.py", build_args)
-            record_used(c["id"])
             if berr:
+                record_used(c["id"])
                 continue
             # Keep the RAW downloaded source (pre-overlay) for the end-of-game compilation --
             # compiling finished Shorts would double-burn title cards.
@@ -275,8 +290,15 @@ class Watcher:
                 shutil.copy2(p, src_keep)
                 break
             g["src"] = str(src_keep) if src_keep else None
-            g["clip_posted"] = True
-            self.post(FINAL, card, "goal", f"goal_clip:{g['scorer']}", cta_variant=variant)
+            posted = self.post(FINAL, card, "goal", f"goal_clip:{g['scorer']}", cta_variant=variant)
+            if posted:
+                g["clip_posted"] = True
+                record_used(c["id"])
+            elif src_keep:
+                try:
+                    src_keep.unlink()
+                except OSError:
+                    pass
             return
 
     # ---- end of game --------------------------------------------------------------
@@ -342,11 +364,12 @@ class Watcher:
                     if variant:
                         build_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
                     build, berr = run_tool_safe("build_clip.py", build_args)
-                    record_used(c["id"])
                     if not berr:
-                        self.post(FINAL, card, "popular", f"star_recap:{star['name']}", cta_variant=variant)
-                        posted = True
+                        posted = self.post(FINAL, card, "popular", f"star_recap:{star['name']}", cta_variant=variant)
+                        if posted:
+                            record_used(c["id"])
                         break
+                    record_used(c["id"])
                 if not posted:
                     # Visible in the run summary -- a star recap that finds no footage must not
                     # vanish silently (bit us on a local dry run 2026-07-07).
@@ -445,11 +468,13 @@ class Watcher:
                 if variant:
                     build_args += ["--cta-text", variant["cta_text"], "--cta-dur", str(variant["cta_dur"])]
                 build, berr = run_tool_safe("build_clip.py", build_args)
-                record_used(c["id"])
                 if berr:
+                    record_used(c["id"])
                     continue
-                hl["posted"] = True
-                self.post(FINAL, card, "goal", f"tod_highlights:{mid}", cta_variant=variant)
+                posted = self.post(FINAL, card, "goal", f"tod_highlights:{mid}", cta_variant=variant)
+                if posted:
+                    hl["posted"] = True
+                    record_used(c["id"])
                 break
 
     # ---- main loop ----------------------------------------------------------------
@@ -526,8 +551,12 @@ def main():
     ap.add_argument("--once", action="store_true", help="Single poll cycle (testing)")
     ap.add_argument("--date", default=None, help="YYYYMMDD scoreboard date (catch-up on a past day)")
     ap.add_argument("--match", default=None, help="Only process this ESPN event id (targeted catch-up)")
-    ap.add_argument("--platforms", default="youtube,instagram,email",
+    ap.add_argument("--platforms", default="youtube,instagram,tiktok,email",
                     help="Where to post (e.g. 'youtube' to backfill ONE platform after a partial run)")
+    ap.add_argument("--tiktok-privacy", default="PUBLIC_TO_EVERYONE",
+                    choices=["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR",
+                             "PUBLIC_TO_EVERYONE"],
+                    help="TikTok privacy for direct posts.")
     ap.add_argument("--fresh", action="store_true",
                     help="Re-hunt + re-post the --match's goals, ignoring prior used/posted state "
                          "(backfill a platform that a 429 dropped). Pair with --platforms + --match.")

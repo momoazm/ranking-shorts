@@ -51,7 +51,7 @@ on:
       platforms:
         description: "Where to post (e.g. 'youtube' to backfill one platform)"
         type: string
-        default: "youtube,instagram,email"
+        default: "youtube,instagram,tiktok,email"
       fresh:
         description: "Backfill: re-hunt/re-post --match's goals, ignoring prior posted state"
         type: boolean
@@ -180,6 +180,10 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           CALLMEBOT_PHONE: ${{ secrets.CALLMEBOT_PHONE }}
           CALLMEBOT_APIKEY: ${{ secrets.CALLMEBOT_APIKEY }}
         run: |
@@ -194,7 +198,8 @@ jobs:
                   f.write(os.environ["GMAIL_TOKEN_JSON"])
           keys = ["GROQ_API_KEY", "GEMINI_API_KEY", "IG_USER_ID", "IG_ACCESS_TOKEN",
                   "GMAIL_SENDER_EMAIL", "GMAIL_TO", "ZERNIO_API_URL", "ZERNIO_API_KEY",
-                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID", "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY"]
+                  "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID", "CALLMEBOT_PHONE", "CALLMEBOT_APIKEY",
+                  "TIKTOK_ACCESS_TOKEN", "TIKTOK_REFRESH_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET"]
           lines = ["GMAIL_TOKEN_PATH=gmail_token.json"]
           lines += [f"{k}={os.environ[k]}" for k in keys if os.environ.get(k)]
           with open("API.env", "w", encoding="utf-8") as f:
@@ -211,6 +216,11 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_PRIVACY: PUBLIC_TO_EVERYONE
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           IN_PRIVACY: ${{ inputs.privacy || 'public' }}
@@ -218,7 +228,7 @@ jobs:
           IN_NO_SPEED: ${{ inputs.no_speed }}
           IN_DATE: ${{ inputs.date }}
           IN_MATCH: ${{ inputs.match }}
-          IN_PLATFORMS: ${{ inputs.platforms || 'youtube,instagram,email' }}
+          IN_PLATFORMS: ${{ inputs.platforms || 'youtube,instagram,tiktok,email' }}
           IN_FRESH: ${{ inputs.fresh }}
           IN_REDO_MIN: ${{ inputs.redo_min }}
         run: |
