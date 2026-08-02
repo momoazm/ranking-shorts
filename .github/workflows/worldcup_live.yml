@@ -248,7 +248,14 @@ jobs:
         run: |
           # 300 (not 320): the chain gate may nap up to ~30 min before this step; keep
           # nap + setup + watch under the 350-min job timeout (hosted hard cap is 360).
-          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 300 --platforms "$IN_PLATFORMS")
+          PLATFORMS="$IN_PLATFORMS"
+          if ! { [ -n "$TIKTOK_ACCESS_TOKEN" ] || { [ -n "$TIKTOK_REFRESH_TOKEN" ] && [ -n "$TIKTOK_CLIENT_KEY" ] && [ -n "$TIKTOK_CLIENT_SECRET" ]; }; }; then
+            PLATFORMS="${PLATFORMS//,tiktok/}"
+            PLATFORMS="${PLATFORMS//tiktok,/}"
+            PLATFORMS="${PLATFORMS//tiktok/}"
+            echo "::warning::TikTok is not configured; this live watcher will publish only the configured YouTube/Instagram destinations."
+          fi
+          ARGS=(--privacy "$IN_PRIVACY" --max-minutes 300 --platforms "$PLATFORMS")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           if [ "$IN_NO_SPEED" == "true" ]; then ARGS+=(--no-speed); fi
           if [ "$IN_FRESH" == "true" ]; then ARGS+=(--fresh); fi

@@ -92,9 +92,11 @@ class Watcher:
             self.st = {"date": today, "goals": {}, "done_matches": [], "posts": 0, "highlights": {}}
         self.st.setdefault("highlights", {})  # state written before 2026-07-11 lacks the key
         self.actions = []                     # run log for the exit summary
+        self.delivery_failures = []           # required destination failures -> non-zero exit
         self.was_live = set()                 # match ids seen in-progress THIS run (vs catch-up)
         self.last_zernio_time = 0.0           # for spacing Zernio publishes (YouTube AND Instagram)
         self.platforms = {p.strip().lower() for p in args.platforms.split(",") if p.strip()}
+        self.required_platforms = {"youtube", "instagram"} & self.platforms
         self.redo_min = [x.strip() for x in (args.redo_min or "").split(",") if x.strip()]
         # --fresh (catch-up backfill): drop the target match's prior goal-state so its goals are
         # re-hunted + re-posted, and point the finder at a throwaway history so already-"used"
@@ -210,6 +212,14 @@ class Watcher:
             run_tool_safe("email_video.py", ["--video", final_rel, "--subject", f"momoclips live: {card}"])
         if ok:
             self.st["posts"] += 1
+        failures = []
+        for platform in sorted(self.required_platforms):
+            delivery = a["delivery"].get(platform) or {}
+            if delivery.get("skipped") or delivery.get("error"):
+                failures.append({"platform": platform,
+                                 "detail": delivery.get("skipped") or delivery.get("error")})
+        if failures and not self.args.no_upload:
+            self.delivery_failures.append({"what": what, "failures": failures})
         return ok
 
     # ---- per-goal -----------------------------------------------------------------
@@ -524,11 +534,17 @@ class Watcher:
             time.sleep(self.args.poll)
 
         save_state(self.st)
-        emit({"status": "done", "loops": loops, "posts_today": self.st["posts"],
-              "goals_tracked": len(self.st["goals"]),
-              "highlights": {m: ("posted" if h["posted"] else "expired" if h["expired"] else "pending")
-                             for m, h in self.st["highlights"].items()},
-              "done_matches": self.st["done_matches"], "actions": self.actions})
+        payload = {"status": "delivery_failed" if self.delivery_failures else "done",
+                   "loops": loops, "posts_today": self.st["posts"],
+                   "goals_tracked": len(self.st["goals"]),
+                   "highlights": {m: ("posted" if h["posted"] else "expired" if h["expired"] else "pending")
+                                  for m, h in self.st["highlights"].items()},
+                   "done_matches": self.st["done_matches"], "actions": self.actions}
+        if self.delivery_failures:
+            payload["required_delivery_failures"] = self.delivery_failures
+        emit(payload)
+        if self.delivery_failures:
+            raise SystemExit(1)
 
 
 def main():

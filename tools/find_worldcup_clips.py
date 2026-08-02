@@ -32,9 +32,11 @@ Usage:
 Prints JSON: {"source":"youtube","count","candidates":[{"id","title","duration","url","category"}...]}
 """
 import argparse
+import datetime
 import json
 import os
 import random
+import time
 import urllib.parse
 
 from _common import REPO_ROOT, load_env, emit, fail, title_ok, channel_ok, channel_trusted, is_tod
@@ -124,7 +126,7 @@ def search_recent(query, n, sp):
     url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}&sp={sp}"
     opts = {"quiet": True, "no_warnings": True, "noprogress": True,
             "extract_flat": "in_playlist", "skip_download": True,
-            "playlistend": n, "socket_timeout": 30, "extractor_retries": 1}
+            "playlistend": n, "socket_timeout": 15, "extractor_retries": 0}
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
@@ -165,7 +167,7 @@ def enrich_entry(entry):
         return entry
     from yt_dlp import YoutubeDL
     opts = {"quiet": True, "no_warnings": True, "noprogress": True, "skip_download": True,
-            "socket_timeout": 20, "extractor_retries": 1}
+            "socket_timeout": 15, "extractor_retries": 0}
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
@@ -211,6 +213,10 @@ def main():
                     help="Don't prefer official/major broadcasters (Indian-channel block still applies).")
     ap.add_argument("--world-cup-only", action="store_true",
                     help="Disable the post-tournament general-football fallback (for targeted live hunts).")
+    ap.add_argument("--max-search-seconds", type=float,
+                    default=float(os.environ.get("FOOTBALL_PICKER_MAX_SECONDS", "240")),
+                    help="Wall-clock budget for metadata searches; return the best candidates found "
+                         "before the budget instead of letting a blocked query consume the workflow.")
     ap.add_argument("--history", default="state/used_clips.json",
                     help="JSON of already-posted clip ids, to avoid reposting")
     ap.add_argument("--out", default=".tmp/clip_candidates.json")
@@ -218,7 +224,14 @@ def main():
 
     load_env()
     used = load_used(args.history)
-    wanted = [c.strip() for c in args.categories.split(",") if c.strip()]
+    raw_wanted = [c.strip().lower() for c in args.categories.split(",") if c.strip()]
+    # `speed` was an old category name from the live-stream experiment. It has no picker queries
+    # and iShowSpeed is intentionally blocked; dropping it here prevents an obsolete workflow
+    # default from starving the football account after the tournament. Keep the real football
+    # categories in the caller's order so a targeted live hunt remains predictable.
+    wanted = [c for c in raw_wanted if c in QUERIES or c in GENERAL_QUERIES]
+    if not wanted:
+        wanted = ["goal", "popular", "streamer"]
     sp = SP_TODAY if args.window == "today" else SP_WEEK
 
     if args.query:
@@ -238,6 +251,9 @@ def main():
     require = [_fold(w.strip()) for w in (args.require or "").split(",") if w.strip()]
 
     ordered, seen, errors = [], set(), []   # ordered = freshest-first candidates, deduped
+    search_started = time.monotonic()
+    deadline = search_started + max(30.0, args.max_search_seconds)
+    deadline_hit = False
     probe_budget = max(24, args.max * 6)
     unknown_duration = 0
     # The general plan is only a fallback. Do not apply it to targeted goal hunts: those must
@@ -250,6 +266,10 @@ def main():
 
     for current_plan in plans:
         for q, cat in current_plan:
+            if time.monotonic() >= deadline:
+                deadline_hit = True
+                errors.append("football picker search deadline reached")
+                break
             try:
                 entries = search_recent(q, args.per_query, sp)
             except Exception as e:
@@ -274,7 +294,8 @@ def main():
                 # Flat search results often omit metadata. Probe before rejecting them instead of
                 # turning a healthy search into count=0. The budget prevents a bot-walled query
                 # from making a 20-minute workflow probe every result on every poll.
-                if (duration is None or not (en.get("channel") or en.get("uploader"))) and probe_budget > 0:
+                if (duration is None or not (en.get("channel") or en.get("uploader") or
+                                              en.get("timestamp") or en.get("upload_date"))) and probe_budget > 0:
                     en = enrich_entry(en)
                     probe_budget -= 1
                     duration = parse_duration(en.get("duration") or en.get("duration_string"))
@@ -299,7 +320,12 @@ def main():
                 stamp = en.get("timestamp")
                 if not isinstance(stamp, (int, float)):
                     try:
-                        stamp = int(en.get("upload_date", "0") or "0")
+                        raw_date = str(en.get("upload_date", "") or "")
+                        if len(raw_date) == 8 and raw_date.isdigit():
+                            stamp = datetime.datetime.strptime(raw_date, "%Y%m%d").replace(
+                                tzinfo=datetime.timezone.utc).timestamp()
+                        else:
+                            stamp = float(stamp or 0)
                     except (TypeError, ValueError):
                         stamp = 0
                 ordered.append({"id": vid, "title": title, "duration": duration,
@@ -311,6 +337,8 @@ def main():
                                 "is_tod": is_tod(channel, handle)})
             if len(ordered) >= args.max * 3:     # plenty gathered -> stop hitting the API
                 break
+        if deadline_hit:
+            break
         if len(ordered) >= args.max * 3:
             break
 
@@ -333,14 +361,17 @@ def main():
         # Not an error the run should crash on -- "nothing new happened" is a valid outcome.
         emit({"source": "youtube", "count": 0, "candidates": [], "path": args.out,
               "note": "no fresh unused clips", "errors": errors[:6],
-              "unknown_duration_probes": unknown_duration})
+              "unknown_duration_probes": unknown_duration,
+              "search_elapsed_sec": round(max(0.0, time.monotonic() - search_started), 1),
+              "search_deadline_hit": deadline_hit})
         return
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump({"source": "youtube", "candidates": cands}, f, indent=2, ensure_ascii=False)
     emit({"source": "youtube", "count": len(cands), "candidates": cands, "path": args.out,
-          "unknown_duration_probes": unknown_duration})
+          "unknown_duration_probes": unknown_duration,
+          "search_deadline_hit": deadline_hit})
 
 
 if __name__ == "__main__":

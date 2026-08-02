@@ -112,6 +112,10 @@ def main():
                     help="Lock every video to one genre instead of letting the topic model rotate.")
     ap.add_argument("--search", default=None, help="Override the Tenor search query")
     ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
+    ap.add_argument("--required-platforms",
+                    default=os.environ.get("REQUIRED_PLATFORMS", "youtube,instagram"),
+                    help="Comma-separated destinations that must publish or the run fails. "
+                         "Email and TikTok stay optional until their credentials are configured.")
     ap.add_argument("--tiktok-privacy", default=None,
                     choices=["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR",
                              "PUBLIC_TO_EVERYONE"],
@@ -130,6 +134,7 @@ def main():
 
     TMP.mkdir(exist_ok=True)
     platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
+    required_platforms = {p.strip().lower() for p in args.required_platforms.split(",") if p.strip()}
     # Auto-enable Instagram when its credentials are configured. The cloud workflow's --platforms
     # line can't be edited without the 'workflow' OAuth scope, so instead of relying on it we detect
     # Zernio creds (written to API.env from repo secrets) and add the platform here. Harmless when
@@ -367,13 +372,32 @@ def main():
         m, err = run_tool_safe("export_local.py", ["--video", FINAL, "--captions-meta", CAPMETA, "--title", title])
         result["delivery"]["export"] = {"error": err.splitlines()[0][:140]} if err else {"folder": m.get("folder")}
 
+    # A workflow must never look green when one of its promised destinations failed.  Keep the
+    # required set separate from the full platform list so optional integrations (currently
+    # TikTok/email when their secrets are absent) can be reported without blocking YouTube and
+    # Instagram.  If one platform did publish, consume the source once to avoid a duplicate on
+    # the next poll; the non-zero exit still makes the partial delivery visible to Actions.
+    required_failures = []
+    if publishing:
+        for platform in sorted(required_platforms & set(platforms)):
+            delivery = result["delivery"].get(platform) or {}
+            if delivery.get("skipped") or delivery.get("error"):
+                required_failures.append({
+                    "platform": platform,
+                    "detail": delivery.get("skipped") or delivery.get("error"),
+                })
+        if required_failures:
+            result["required_delivery_failures"] = required_failures
+
     # A failed build/upload must be retryable. The old code incremented the daily cap before
     # building and marked source clips used before delivery, so one transient LLM, host, or API
     # failure could make later scheduled runs appear to have "stopped" permanently.
     if published:
-        result["status"] = "uploaded"
+        result["status"] = "partial_upload" if required_failures else "uploaded"
         daily_increment()
         record_used(RANKED)
+    elif required_failures:
+        result["status"] = "delivery_failed"
 
     if not args.keep_tmp:
         import shutil
@@ -386,6 +410,8 @@ def main():
                 pass
 
     emit(result)   # ASCII-safe on Windows cp1252 (titles can contain non-cp1252 chars)
+    if required_failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

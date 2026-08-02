@@ -47,8 +47,12 @@ HISTORY = "state/used_clips.json"
 
 
 def run_tool_safe(name, args):
-    proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
-                          text=True, encoding="utf-8", errors="replace")
+    timeout = 210 if name == "find_worldcup_clips.py" else 900
+    try:
+        proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, f"{name} timed out after {timeout}s"
     out = (proc.stdout or "").strip()
     data = None
     if out:
@@ -169,6 +173,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true", help="Build only; post nothing")
     ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
+    ap.add_argument("--required-platforms",
+                    default=os.environ.get("REQUIRED_PLATFORMS", "youtube,instagram"),
+                    help="Comma-separated destinations that must publish or the run fails. "
+                         "Email and TikTok stay optional until their credentials are configured.")
     ap.add_argument("--tiktok-privacy", default=None,
                     choices=["SELF_ONLY", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR",
                              "PUBLIC_TO_EVERYONE"],
@@ -180,6 +188,9 @@ def main():
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_CLIPS", "8")),
                     help="Daily post cap so a busy match day doesn't flood the channel")
     ap.add_argument("--window", default="today", choices=["today", "week"])
+    ap.add_argument("--max-search-seconds", type=float,
+                    default=float(os.environ.get("FOOTBALL_PICKER_MAX_SECONDS", "240")),
+                    help="Wall-clock budget for the football picker.")
     ap.add_argument("--categories", default="goal,streamer,popular")
     ap.add_argument("--music", default=None, help="Optional music bed (default: keep original clip audio)")
     ap.add_argument("--keep-tmp", action="store_true")
@@ -188,6 +199,7 @@ def main():
     load_env()
     TMP.mkdir(exist_ok=True)
     platforms = [p.strip().lower() for p in args.platforms.split(",") if p.strip()]
+    required_platforms = {p.strip().lower() for p in args.required_platforms.split(",") if p.strip()}
     # Auto-enable Instagram when Zernio creds are present (workflow can't edit --platforms without
     # the 'workflow' OAuth scope) -- mirrors rank_autopost.
     if "instagram" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_INSTAGRAM_ID"):
@@ -201,10 +213,11 @@ def main():
 
     # 1) find a fresh, unused, short clip. count==0 => nothing new happened -> post nothing.
     find, ferr = run_tool_safe("find_worldcup_clips.py",
-                               ["--window", args.window, "--categories", args.categories, "--out", CANDS])
+                               ["--window", args.window, "--categories", args.categories,
+                                "--max-search-seconds", str(args.max_search_seconds), "--out", CANDS])
     if ferr:
         emit({"status": "find_failed", "error": ferr.splitlines()[0][:200]})
-        return
+        raise SystemExit(1)
     cands = (find or {}).get("candidates", [])
     if not cands:
         # Surface the finder's per-query errors so a proxy/bot-check failure is distinguishable
@@ -260,7 +273,7 @@ def main():
     if build is None:
         emit({"status": "all_builds_failed", "tried": len(attempts), "attempts": attempts,
               "elapsed_sec": round(time.time() - t0, 1)})
-        return
+        raise SystemExit(1)
 
     result = {"status": "built", "candidate": cand, "title": yt_title, "card": card,
               "final": FINAL, "byte_size": build.get("byte_size"),
@@ -324,12 +337,29 @@ def main():
         m, err = run_tool_safe("email_video.py", ["--video", FINAL, "--subject", f"momoclips: {card}"])
         result["delivery"]["email"] = {"skipped": err.splitlines()[0][:160]} if err else {"sent_to": m.get("to")}
 
+    # Keep Actions honest: a successful YouTube post must not hide a failed Instagram Reel (or
+    # vice versa).  TikTok/email remain optional integrations until their credentials are present,
+    # but every required destination is surfaced as a non-zero workflow result.
+    required_failures = []
+    if publishing:
+        for platform in sorted(required_platforms & set(platforms)):
+            delivery = result["delivery"].get(platform) or {}
+            if delivery.get("skipped") or delivery.get("error"):
+                required_failures.append({
+                    "platform": platform,
+                    "detail": delivery.get("skipped") or delivery.get("error"),
+                })
+        if required_failures:
+            result["required_delivery_failures"] = required_failures
+
     if published:
-        result["status"] = "uploaded"
+        result["status"] = "partial_upload" if required_failures else "uploaded"
         daily_increment()
         # Do not consume a fresh candidate merely because it built. If all delivery APIs fail,
         # the next scheduled poll can retry the same source instead of reporting no_source.
         record_used(cand["id"])
+    elif required_failures:
+        result["status"] = "delivery_failed"
 
     result["elapsed_sec"] = round(time.time() - t0, 1)
 
@@ -343,6 +373,8 @@ def main():
                 pass
 
     emit(result)
+    if required_failures:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

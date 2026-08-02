@@ -93,7 +93,9 @@ class SpeedWatcher:
         self.st.setdefault("reacted_goals", [])
         self.st.setdefault("clip_no", 0)
         self.actions = []
+        self.delivery_failures = []
         self.platforms = {p.strip().lower() for p in args.platforms.split(",") if p.strip()}
+        self.required_platforms = {"youtube", "instagram"} & self.platforms
         self.last_zernio_time = 0.0
         self.not_live_note_shown = False
 
@@ -179,7 +181,10 @@ class SpeedWatcher:
                 a["delivery"]["instagram"] = ig
             else:
                 a["delivery"]["instagram"] = {"id": media_id}
-            ok = ok or not err
+            # A parsed response is not enough: require the uploader's confirmed terminal
+            # success status and a post id so a queued/partial response cannot make the watcher
+            # report a successful delivery.
+            ok = ok or (not err and (m or {}).get("status") == "uploaded" and bool(media_id))
             if media_id:
                 used_style, used_experiment = None, False
                 if cta_variant:
@@ -196,9 +201,17 @@ class SpeedWatcher:
                                           "--description", description, "--tags", ",".join(tags),
                                           "--privacy", self.args.privacy, "--confirm"])
             a["delivery"]["youtube"] = {"skipped": err.splitlines()[0][:160]} if err else {"url": m.get("url")}
-            ok = ok or not err
+            ok = ok or (not err and (m or {}).get("status") == "uploaded")
         if ok:
             self.st["posts"] += 1
+        failures = []
+        for platform in sorted(self.required_platforms):
+            delivery = a["delivery"].get(platform) or {}
+            if delivery.get("skipped") or delivery.get("error"):
+                failures.append({"platform": platform,
+                                 "detail": delivery.get("skipped") or delivery.get("error")})
+        if failures and not self.args.no_upload:
+            self.delivery_failures.append({"what": what, "failures": failures})
         return ok
 
     # ---- one recorded chunk -------------------------------------------------------
@@ -318,8 +331,14 @@ class SpeedWatcher:
         shutil.rmtree(TMP / "frames", ignore_errors=True)
 
         save_state(self.st)
-        emit({"status": "done", "chunks": chunks, "posts_today": self.st["posts"],
-              "reacted_goals": len(self.st["reacted_goals"]), "actions": self.actions})
+        payload = {"status": "delivery_failed" if self.delivery_failures else "done",
+                   "chunks": chunks, "posts_today": self.st["posts"],
+                   "reacted_goals": len(self.st["reacted_goals"]), "actions": self.actions}
+        if self.delivery_failures:
+            payload["required_delivery_failures"] = self.delivery_failures
+        emit(payload)
+        if self.delivery_failures:
+            raise SystemExit(1)
 
 
 def main():

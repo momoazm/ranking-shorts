@@ -40,9 +40,9 @@ on:
         options: [today, week]
         default: today
       categories:
-        description: "Categories to search. Priority: iShowSpeed first, then other events (goals belong to the LIVE watcher)."
+        description: "Categories to search. Fresh football moments first; goals are also allowed after the tournament."
         type: string
-        default: "speed,popular,streamer"
+        default: "goal,popular,streamer"
 
 # One run at a time; don't cancel a run that may be mid-upload.
 concurrency:
@@ -55,7 +55,7 @@ permissions:
 jobs:
   clip:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -197,9 +197,15 @@ jobs:
           # Goals are owned by the LIVE watcher (worldcup_live.yml) since 2026-07-06: it posts
           # each goal minutes after it happens from the ESPN event feed. Keeping "goal" here too
           # would post the SAME goal twice from two different uploads (dedup is per video id).
-          IN_CATEGORIES: ${{ inputs.categories || 'speed,popular,streamer' }}
+          IN_CATEGORIES: ${{ inputs.categories || 'goal,popular,streamer' }}
         run: |
-          ARGS=(--privacy "$IN_PRIVACY" --window "$IN_WINDOW" --categories "$IN_CATEGORIES" --platforms youtube,instagram,tiktok,email)
+          PLATFORMS="youtube,instagram,email"
+          if [ -n "$TIKTOK_ACCESS_TOKEN" ] || { [ -n "$TIKTOK_REFRESH_TOKEN" ] && [ -n "$TIKTOK_CLIENT_KEY" ] && [ -n "$TIKTOK_CLIENT_SECRET" ]; }; then
+            PLATFORMS="$PLATFORMS,tiktok"
+          else
+            echo "::warning::TikTok is not configured; publishing YouTube + Instagram only. Add the four TikTok secrets to enable it."
+          fi
+          ARGS=(--privacy "$IN_PRIVACY" --window "$IN_WINDOW" --categories "$IN_CATEGORIES" --platforms "$PLATFORMS" --required-platforms youtube,instagram --max-search-seconds 180)
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           echo "clip_autopost.py ${ARGS[*]}"
           python tools/clip_autopost.py "${ARGS[@]}"
