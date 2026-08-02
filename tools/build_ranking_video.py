@@ -20,6 +20,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 
 from _common import REPO_ROOT, load_env, emit, fail
@@ -29,6 +30,7 @@ OUT_W, OUT_H, FPS = 1080, 1920, 30
 TMPDIR = ".tmp/rank"
 SILENCE_DB = -50.0                       # below this mean volume a clip counts as "silent"
 DOWNLOAD_DEADLINE_SEC = 150.0            # one bad source must not consume a whole Actions job
+DOWNLOAD_ATTEMPT_TIMEOUT_SEC = 25.0      # yt-dlp API calls can outlive socket timeouts
 
 
 def ass_time(t):
@@ -99,6 +101,39 @@ def _resolve(out_base):
     return None
 
 
+def _download_attempt(url, out_base, player_client, fmt, use_proxy):
+    """Run one yt-dlp attempt in a killable child process.
+
+    The Python API can remain inside an extractor call after its socket timeout fires.  A child
+    process gives every client/format fallback a real wall-clock ceiling and prevents a blocked
+    source from holding the parent video build forever.
+    """
+    cmd = [sys.executable, "-m", "yt_dlp", "--format", fmt,
+           "--format-sort", "res,vcodec:h264,acodec:m4a", "--merge-output-format", "mp4",
+           "--output", out_base + ".%(ext)s", "--no-playlist", "--quiet", "--no-warnings",
+           "--no-progress", "--force-overwrites", "--ffmpeg-location", os.path.dirname(get_ffmpeg()),
+           "--socket-timeout", "15", "--retries", "0", "--fragment-retries", "0",
+           "--extractor-retries", "0", "--file-access-retries", "0", "--concurrent-fragments", "4"]
+    if player_client:
+        cmd += ["--extractor-args", "youtube:player_client=" + ",".join(player_client)]
+    cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
+    if os.path.isfile(cookie):
+        cmd += ["--cookies", cookie]
+    proxy = os.environ.get("YTDLP_PROXY")
+    if proxy and use_proxy:
+        cmd += ["--proxy", proxy]
+    cmd.append(url)
+    try:
+        proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace",
+                              timeout=DOWNLOAD_ATTEMPT_TIMEOUT_SEC)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"yt-dlp attempt timed out after {DOWNLOAD_ATTEMPT_TIMEOUT_SEC:.0f}s") from e
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip()[-500:]
+        raise RuntimeError(tail or f"yt-dlp exited {proc.returncode}")
+
+
 def download(url, out_base):
     """Download the WHOLE short clip (Shorts are small -> ~5s each, fast & reliable).
 
@@ -119,7 +154,6 @@ def download(url, out_base):
         with open(out, "wb") as f:
             f.write(data)
         return out
-    from yt_dlp import YoutubeDL
     last = None
     deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
     for player_client, fmt, use_proxy in _DL_ATTEMPTS:
@@ -131,8 +165,7 @@ def download(url, out_base):
             except OSError:
                 pass
         try:
-            with YoutubeDL(_ydl_opts(out_base, fmt, player_client, use_proxy)) as ydl:
-                ydl.extract_info(url, download=True)
+            _download_attempt(url, out_base, player_client, fmt, use_proxy)
             path = _resolve(out_base)
             if path:
                 return path
