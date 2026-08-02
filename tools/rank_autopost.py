@@ -424,7 +424,9 @@ def main():
     elif required_failures:
         result["status"] = "delivery_failed"
 
-    if not args.keep_tmp:
+    # No-upload runs are the workflow's media-QA mode: keep the finished MP4 until the
+    # upload-artifact step can collect it. Real publishing runs may still clean scratch files.
+    if not args.keep_tmp and publishing:
         import shutil
         # Wipe the downloaded source clips + intermediates so disk doesn't fill up run to run.
         shutil.rmtree(ROOT / ".tmp" / "rank", ignore_errors=True)

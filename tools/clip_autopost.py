@@ -388,7 +388,9 @@ def main():
 
     result["elapsed_sec"] = round(time.time() - t0, 1)
 
-    if not args.keep_tmp:
+    # No-upload runs are the workflow's media-QA mode: keep the finished MP4 until the
+    # upload-artifact step can collect it. Real publishing runs may still clean scratch files.
+    if not args.keep_tmp and publishing:
         import shutil
         shutil.rmtree(ROOT / ".tmp" / "clip", ignore_errors=True)
         for p in (CANDS, FINAL):
