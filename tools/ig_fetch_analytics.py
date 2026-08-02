@@ -3,7 +3,7 @@ service both projects publish through (upload_instagram.py), not raw Meta
 Graph API, so this reuses the existing ZERNIO_API_KEY rather than a new one.
 
 Used by check_style_experiment.py to compare an experimental post's
-performance against a baseline of recent normal posts on the @momoclips
+performance against a baseline of recent normal posts on the @itsmomoclips
 account.
 
 Zernio Analytics is a paid add-on on some plans -- a 402 here means Moemen

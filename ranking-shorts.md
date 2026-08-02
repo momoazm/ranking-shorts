@@ -6,7 +6,7 @@
 > and `.tmp/` resolve correctly from here. API keys load from the shared `API.env` at the repo root.
 
 ## Channel identity: momoclips
-Both formats below post to the **same channel**, being rebranded to **`@momoclips`** on YouTube
+Both formats below post to the **same channel**, being rebranded to **`@itsmomoclips`** on YouTube
 and **Instagram** (Moemen renames the handles on-platform — Claude can't via API; update the
 `--handle`/refs here once done). The Zernio IDs and YouTube OAuth token don't change with a handle
 rename.
@@ -125,7 +125,7 @@ there is no unlisted/draft privacy like YouTube; the only safe pre-test is the t
 (omit `--confirm`). Long-lived tokens expire ~60 days; refresh before relying on a daily run.
 
 ## Weekly IG style experiment (2026-07-12)
-`clip_autopost.py`, `watch_worldcup.py`, and `watch_speed.py` all post to the same `@momoclips`
+`clip_autopost.py`, `watch_worldcup.py`, and `watch_speed.py` all post to the same `@itsmomoclips`
 Instagram account, so they share one weekly experiment slot (`tools/pick_weekly_style.py`,
 `state/style_experiment.json`, rotation keyed by ISO week number: `default_cta` → `cta_daily` →
 `cta_directional`). Each build call site *peeks* the queued variant before rendering (so the CTA
@@ -152,7 +152,7 @@ win. **Never auto-applies a winning CTA** — it's a notification; Moemen decide
   navy `#0B1622`, cream `#F2E9D8`, Cinzel/Poppins) and `brand/logo.png`. Never re-derive
   colors/fonts.
 - **Never upload without explicit confirmation** at the gate. Show title, description, tags,
-  resolved privacy, target channel (`@momoclips`), duration, byte size, and have me eyeball
+  resolved privacy, target channel (`@itsmomoclips`), duration, byte size, and have me eyeball
   `.tmp/final.mp4` (overlay in sync, audio clean, no visible looping artifacts).
   `upload_youtube.py` / `upload_tiktok.py` / `upload_instagram.py` are the **only irreversible
   steps.**

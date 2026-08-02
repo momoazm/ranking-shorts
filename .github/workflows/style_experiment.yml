@@ -1,6 +1,6 @@
 name: Weekly style experiment check
 
-# Resolves last week's experimental follow-CTA post on @momoclips (queued
+# Resolves last week's experimental follow-CTA post on @itsmomoclips (queued
 # automatically by tools/pick_weekly_style.py -- rotation is deterministic by
 # ISO week number, so nothing needs to be "queued" here) against a baseline of
 # recent normal posts, and WhatsApps Moemen if it clearly won. See

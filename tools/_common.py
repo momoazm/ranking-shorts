@@ -222,7 +222,7 @@ def zernio_create_post(api_url, payload, api_key, max_tries=5):
 
 # --- Instagram post log (weekly style-experiment tracking) ----------------
 # Durable, append-only record of every successful Instagram publish across the three
-# posting call sites that all share the @momoclips account (clip_autopost.py,
+# posting call sites that all share the @itsmomoclips account (clip_autopost.py,
 # watch_worldcup.py, watch_speed.py), so check_style_experiment.py can later pull an
 # experimental post's id plus a baseline of recent normal posts and compare
 # performance via Zernio analytics.

@@ -2,7 +2,7 @@
 
 Every ~20 min (via .github/workflows/worldcup_clips.yml) this asks "did a fresh World-Cup
 moment get uploaded?" and, if so, turns the top one into a finished branded Short and posts
-it to YouTube + Instagram (@momoclips). If nothing new is found it posts nothing -- that's
+it to YouTube + Instagram (@itsmomoclips). If nothing new is found it posts nothing -- that's
 the "only trigger when something happened" behaviour.
 
 Pipeline (each step = one tool, cwd = project root):
@@ -224,7 +224,7 @@ def main():
         return
 
     # Weekly style experiment (2026-07-12): peek (don't claim yet) this week's rotated
-    # follow-CTA variant for @momoclips -- shared across clip_autopost/watch_worldcup/
+    # follow-CTA variant for @itsmomoclips -- shared across clip_autopost/watch_worldcup/
     # watch_speed, whichever lands a real post first that week claims it. See
     # tools/pick_weekly_style.py.
     exp_variant, is_experiment = None, False

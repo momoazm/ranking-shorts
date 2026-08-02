@@ -1,5 +1,5 @@
 """Deterministically pick this ISO week's experimental follow-CTA variant for the
-@momoclips account, and gate it to exactly ONE post so an experiment never
+@itsmomoclips account, and gate it to exactly ONE post so an experiment never
 overrides the whole week's output.
 
 Rotation is keyed by ISO week number, so calling it more than once in the same

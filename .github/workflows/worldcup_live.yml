@@ -207,6 +207,19 @@ jobs:
           EOF
           rm -f cookies.txt
 
+      - name: Verify destination accounts
+        if: steps.gate.outputs.watch == 'true' && inputs.no_upload != true
+        env:
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
+        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME"
+
       - name: Watch the match window (goals / Speed / end-of-game)
         if: steps.gate.outputs.watch == 'true'
         env:
@@ -220,6 +233,7 @@ jobs:
           TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
           TIKTOK_PRIVACY: PUBLIC_TO_EVERYONE
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy

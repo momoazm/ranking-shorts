@@ -162,6 +162,20 @@ jobs:
           EOF
           rm -f cookies.txt
 
+      - name: Verify destination accounts
+        if: steps.gate.outputs.watch == 'true' && inputs.no_upload != true
+        env:
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          IN_PLATFORMS: ${{ inputs.platforms || 'instagram' }}
+        run: |
+          ARGS=(--instagram itsmomoclips)
+          case ",${IN_PLATFORMS}," in
+            *,youtube,*) ARGS+=(--youtube itsmomoclip) ;;
+          esac
+          python tools/verify_accounts.py "${ARGS[@]}"
+
       - name: Watch iShowSpeed's stream and post his reactions
         if: steps.gate.outputs.watch == 'true'
         env:

@@ -1,4 +1,4 @@
-"""Weekly job: resolve any experimental Instagram post on @momoclips that's now
+"""Weekly job: resolve any experimental Instagram post on @itsmomoclips that's now
 old enough to judge, compare it against a baseline of recent normal posts, and
 WhatsApp Moemen if it clearly won.
 
@@ -88,7 +88,7 @@ def main():
             continue
 
         # Baseline: the last N NON-experiment posts logged before this one (across all three
-        # posting call sites -- they all share the same @momoclips account/state file).
+        # posting call sites -- they all share the same @itsmomoclips account/state file).
         idx = posts.index(entry)
         baseline_entries = [p for p in posts[:idx] if not p.get("experiment")][-args.baseline:]
         base_views, base_eng = [], []

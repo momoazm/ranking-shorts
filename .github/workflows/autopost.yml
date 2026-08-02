@@ -157,6 +157,7 @@ jobs:
           TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
           TIKTOK_PRIVACY: PUBLIC_TO_EVERYONE
         run: |
           python3 - <<'EOF'
@@ -172,6 +173,7 @@ jobs:
                   f.write(os.environ["GMAIL_TOKEN_JSON"])
           keys = ["GROQ_API_KEY", "GEMINI_API_KEY", "TAVILY_API_KEY", "EXA_API_KEY",
                   "TIKTOK_ACCESS_TOKEN", "TIKTOK_REFRESH_TOKEN", "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET",
+                  "TIKTOK_EXPECTED_USERNAME",
                   "IG_USER_ID", "IG_ACCESS_TOKEN", "GMAIL_SENDER_EMAIL", "GMAIL_TO",
                   "ZERNIO_API_URL", "ZERNIO_API_KEY", "ZERNIO_YOUTUBE_ID", "ZERNIO_INSTAGRAM_ID"]
           lines = ["GMAIL_TOKEN_PATH=gmail_token.json"]
@@ -182,6 +184,22 @@ jobs:
           # A stale cookies.txt would push yt-dlp onto a gated client; remove any leftover.
           rm -f cookies.txt
 
+      - name: Verify destination accounts
+        if: ${{ inputs.no_upload != true }}
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}    # injected directly too, so the LLM never depends on the file
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
+        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME"
+
       - name: Build + publish one Ranking Short
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}    # injected directly too, so the LLM never depends on the file
@@ -190,6 +208,11 @@ jobs:
           ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
           ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
           ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
           # Cloud sourcing constraints -- see the header comment.
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy

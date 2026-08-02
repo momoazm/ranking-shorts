@@ -4,7 +4,7 @@
 MOMO content engine). A character-dialogue format also exists in the tooling as an option.
 
 - **Status:** Active (primary focus)
-- **momoclips (2026-07-04):** channel rebranding to @momoclips (YouTube + Instagram) + a new
+- **momoclips (2026-07-04):** channel rebranding to @itsmomoclips (YouTube + Instagram) + a new
   single-clip World-Cup format (`clip_autopost.py`), triggered by ~20-min polling. Go-live is
   GATED — see the header of `.github/workflows/worldcup_clips.yml`. The #5->#1 countdown
   (`rank_autopost.py`) still exists (paused for the WC).
@@ -36,7 +36,7 @@ MOMO content engine). A character-dialogue format also exists in the tooling as 
   audio-energy peaks + a Groq→Gemini vision label. All Speed capture was removed from
   `watch_worldcup.py` to avoid double-posting. Built via the `/new-watcher` skill's pattern.
 - **Weekly IG style experiment (2026-07-12):** whichever of `clip_autopost.py` /
-  `watch_worldcup.py` / `watch_speed.py` lands the FIRST successful @momoclips Instagram post in
+  `watch_worldcup.py` / `watch_speed.py` lands the FIRST successful @itsmomoclips Instagram post in
   a new ISO week tries a rotated follow-CTA variant (`tools/pick_weekly_style.py`); a new Monday
   cron (`style_experiment.yml` → `tools/check_style_experiment.py`) compares it to recent posts
   via Zernio analytics and WhatsApps Moemen (CallMeBot) if it clearly won. Notification only —

@@ -3,7 +3,7 @@ name: momoclips - World Cup single clips
 # Polls YouTube every ~20 min for a FRESH World-Cup moment (viral clips / fan+streamer
 # reactions -- goals moved to the LIVE watcher worldcup_live.yml on 2026-07-06, and no
 # third-party iShowSpeed uploads), builds ONE branded vertical Short from it, and posts to YouTube +
-# Instagram (@momoclips). Dedup (state/used_clips.json) means the same clip is never reposted;
+# Instagram (@itsmomoclips). Dedup (state/used_clips.json) means the same clip is never reposted;
 # if nothing new is found the run posts nothing -- that's the "trigger only when something
 # happened" behaviour. Runs on GitHub-hosted ubuntu; yt-dlp routes through WARP (YouTube
 # bot-checks datacenter IPs). See tools/clip_autopost.py.
@@ -160,6 +160,19 @@ jobs:
           EOF
           rm -f cookies.txt
 
+      - name: Verify destination accounts
+        if: ${{ inputs.no_upload != true }}
+        env:
+          ZERNIO_API_KEY: ${{ secrets.ZERNIO_API }}
+          ZERNIO_YOUTUBE_ID: ${{ secrets.ZERNIO_YOUTUBE_ID }}
+          ZERNIO_INSTAGRAM_ID: ${{ secrets.ZERNIO_INSTAGRAM_ID }}
+          TIKTOK_ACCESS_TOKEN: ${{ secrets.TIKTOK_ACCESS_TOKEN }}
+          TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
+        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME"
+
       - name: Poll + post one fresh World Cup clip
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -172,6 +185,7 @@ jobs:
           TIKTOK_REFRESH_TOKEN: ${{ secrets.TIKTOK_REFRESH_TOKEN }}
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
+          TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
           TIKTOK_PRIVACY: PUBLIC_TO_EVERYONE
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
