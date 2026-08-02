@@ -20,6 +20,7 @@ import json
 import os
 import re
 import subprocess
+import time
 
 from _common import REPO_ROOT, load_env, emit, fail
 from _media import run_ffmpeg, get_ffmpeg
@@ -27,6 +28,7 @@ from _media import run_ffmpeg, get_ffmpeg
 OUT_W, OUT_H, FPS = 1080, 1920, 30
 TMPDIR = ".tmp/rank"
 SILENCE_DB = -50.0                       # below this mean volume a clip counts as "silent"
+DOWNLOAD_DEADLINE_SEC = 150.0            # one bad source must not consume a whole Actions job
 
 
 def ass_time(t):
@@ -48,7 +50,7 @@ def _ydl_opts(out_base, fmt, player_client=None, use_proxy=True):
             "no_warnings": True, "noprogress": True, "overwrites": True,
             "ffmpeg_location": os.path.dirname(get_ffmpeg()),
             # Fast-fail on slow/bad videos so one hang can't stall the whole run (it gets skipped).
-            "socket_timeout": 30, "retries": 2, "fragment_retries": 2, "extractor_retries": 1,
+            "socket_timeout": 15, "retries": 0, "fragment_retries": 0, "extractor_retries": 0,
             "concurrent_fragment_downloads": 4}
     if player_client:
         opts["extractor_args"] = {"youtube": {"player_client": player_client}}
@@ -112,14 +114,17 @@ def download(url, out_base):
         import urllib.request
         out = out_base + ".mp4"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             data = r.read()
         with open(out, "wb") as f:
             f.write(data)
         return out
     from yt_dlp import YoutubeDL
     last = None
+    deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
     for player_client, fmt, use_proxy in _DL_ATTEMPTS:
+        if time.monotonic() >= deadline:
+            break
         for f in glob.glob(out_base + ".*"):           # clear partials from a prior attempt
             try:
                 os.remove(f)

@@ -56,7 +56,10 @@ _MOMENT_MARKER = re.compile(
 
 
 def run_tool_safe(name, args):
-    timeout = 210 if name == "find_worldcup_clips.py" else 900
+    # A source can be discoverable but still refuse its media stream.  Keep discovery bounded,
+    # and give one 9:16 render enough time for FFmpeg without letting a single candidate consume
+    # the whole 45-minute Actions job before the next candidate is tried.
+    timeout = 210 if name == "find_worldcup_clips.py" else 300 if name == "build_clip.py" else 900
     try:
         proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
                               text=True, encoding="utf-8", errors="replace", timeout=timeout)
