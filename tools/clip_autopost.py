@@ -26,6 +26,7 @@ explicit, accepted risk (decision log 2026-07-04). Nothing here vets rights.
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -44,6 +45,14 @@ CANDS = ".tmp/clip_candidates.json"
 FINAL = ".tmp/final.mp4"
 DAILY_COUNT = ".tmp/clip_daily_count.json"
 HISTORY = "state/used_clips.json"
+
+_MOMENT_MARKER = re.compile(
+    r"\b(?:goal|goals|scored|scores|save|saves|penalty|celebrat(?:e|es|ion)|winner|winning|"
+    r"free\s+kick|red\s+card|yellow\s+card|assist|dribble|skill|nutmeg|tackle|volley|"
+    r"header|bicycle|screamer|reaction|reacts|fan|fans|pitch\s+invasion|last[-\s]minute|"
+    r"comeback|upset|equalizer|equaliser|stoppage|final\s+whistle|miss(?:ed)?|own\s+goal)\b",
+    re.IGNORECASE,
+)
 
 
 def run_tool_safe(name, args):
@@ -148,7 +157,20 @@ def screen_candidates(cands):
         print(f"::warning::candidate screen failed ({str(e)[:120]}); using unscreened candidates",
               file=sys.stderr)
         return cands
-    return [cands[i] for i in idxs]
+    screened = [cands[i] for i in idxs]
+    if screened:
+        return screened
+
+    # LLM title screens can over-reject fresh football uploads when titles are short, slangy,
+    # or use a broadcaster's generic match wording. Keep a narrow deterministic rescue so a
+    # healthy picker does not turn into a permanent no-video loop: title_ok/channel_ok already
+    # removed news/listicles, and this marker gate still requires a recognizable football moment.
+    fallback = [c for c in cands if _MOMENT_MARKER.search(c.get("title", ""))]
+    if fallback:
+        print("::warning::semantic screen rejected every candidate; using moment-marker fallback",
+              file=sys.stderr)
+        return fallback
+    return []
 
 
 def build_meta(cand, handle):
