@@ -36,10 +36,35 @@ RANK_STORY = ".tmp/rank_story.json"
 CAPMETA = ".tmp/captions_meta.json"
 DAILY_COUNT = ".tmp/daily_count.json"
 
+# Every network- or media-heavy child must have a bounded wall-clock budget.  Without this,
+# yt-dlp or a public host can leave the Actions job "in progress" until the workflow's much
+# larger job timeout, which looks like a silent upload stall and blocks the next scheduled run.
+TOOL_TIMEOUTS = {
+    "rank_topic.py": 120,
+    "find_streamer_clips.py": 240,
+    "find_ranking_clips.py": 240,
+    "find_worldcup_clips.py": 240,
+    "rank_clips.py": 180,
+    "refine_title.py": 120,
+    "fetch_trending_music.py": 180,
+    "build_ranking_video.py": 900,
+    "build_captions.py": 180,
+    "host_public.py": 240,
+    "upload_youtube.py": 360,
+    "upload_instagram.py": 360,
+    "upload_tiktok.py": 360,
+    "email_video.py": 300,
+    "export_local.py": 180,
+}
+
 
 def run_tool_safe(name, args):
-    proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
-                          text=True, encoding="utf-8", errors="replace")
+    timeout = TOOL_TIMEOUTS.get(name, 300)
+    try:
+        proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return None, f"{name} timed out after {timeout}s"
     out = (proc.stdout or "").strip()
     data = None
     if out:
