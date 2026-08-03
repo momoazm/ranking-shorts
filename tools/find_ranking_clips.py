@@ -66,15 +66,25 @@ YOUTUBE_QUERIES = {
     "dogs": ["funny dog moments shorts", "dogs being funny shorts", "dog fails shorts"],
     "worldcup": ["funny football moments shorts", "funny World Cup moments shorts"],
 }
+YOUTUBE_SHORT_CHANNELS = {
+    # Keep the main feed comedy-first: PeopleAreAwesome is a stunt channel,
+    # so it belongs in a different niche rather than the funny/fails ranking.
+    "fails": ["FailArmy", "ViralHog"],
+    "cats": ["ViralHog", "PeopleAreAwesome"],
+    "babies": ["ViralHog", "PeopleAreAwesome"],
+    "dogs": ["ViralHog", "PeopleAreAwesome"],
+    "worldcup": [],
+}
 _YOUTUBE_BAD = re.compile(
     r"\b(full\s+episode|podcast|trailer|music\s+video|official\s+audio|lyrics|news|analysis|"
-    r"reaction\s+compilation|compilation|montage|top\s*\d+|best\s+of\s+\d{4})\b",
+    r"reaction\s+compilation|compilation|montage|top\s*\d+|best\s+of\s+\d{4}|"
+    r"\d+\s+(?:fails|clips?|moments?))\b",
     re.IGNORECASE,
 )
 
 
-def _youtube_search(query, limit):
-    """Run yt-dlp search in a killable child so a bot-wall cannot hold the workflow."""
+def _youtube_json(target, limit):
+    """Run one yt-dlp metadata extraction in a killable child."""
     cmd = [sys.executable, "-m", "yt_dlp", "--flat-playlist", "--dump-single-json",
            "--skip-download", "--no-playlist", "--quiet", "--no-warnings", "--no-progress",
            "--socket-timeout", "15", "--retries", "0", "--extractor-retries", "0",
@@ -85,36 +95,46 @@ def _youtube_search(query, limit):
     proxy = os.environ.get("YTDLP_PROXY")
     if proxy:
         cmd += ["--proxy", proxy]
-    cmd.append(f"ytsearch{limit}:{query}")
+    cmd.append(target)
     try:
         proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True,
                               encoding="utf-8", errors="replace", timeout=70)
     except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"YouTube search timed out for {query!r}") from e
+        raise RuntimeError(f"YouTube metadata timed out for {target!r}") from e
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip()[-400:]
         raise RuntimeError(tail or f"yt-dlp search exited {proc.returncode}")
     try:
         data = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"yt-dlp search returned invalid JSON: {e}") from e
+        raise RuntimeError(f"yt-dlp metadata returned invalid JSON: {e}") from e
     return data.get("entries") or []
 
 
+def _youtube_search(query, limit):
+    """Run yt-dlp search in a killable child so a bot-wall cannot hold the workflow."""
+    return _youtube_json(f"ytsearch{limit}:{query}", limit)
+
+
+def _youtube_short_feed(handle, limit):
+    """Read a creator's /shorts feed; unlike generic search, this is a standalone-moment pool."""
+    return _youtube_json(f"https://www.youtube.com/@{handle}/shorts", limit)
+
+
 def _youtube_candidates(genre, limit, query_override=None):
-    queries = [query_override] if query_override else list(YOUTUBE_QUERIES.get(genre, YOUTUBE_QUERIES["fails"]))
-    random.shuffle(queries)
-    by_id, errors = {}, []
-    for query in queries:
+    by_id, errors, feed_counts = {}, [], {}
+    channels = list(YOUTUBE_SHORT_CHANNELS.get(genre, YOUTUBE_SHORT_CHANNELS["fails"]))
+    random.shuffle(channels)
+    for handle in channels:
         try:
-            entries = _youtube_search(query, max(12, min(30, limit)))
+            entries = _youtube_short_feed(handle, max(12, min(30, limit)))
         except Exception as e:
-            errors.append(f"{query}: {str(e)[:120]}")
+            errors.append(f"@{handle}/shorts: {str(e)[:120]}")
             continue
         for item in entries:
             vid = item.get("id")
             title = html.unescape(str(item.get("title") or "").strip())
-            channel = str(item.get("channel") or item.get("uploader") or "").strip()
+            channel = str(item.get("channel") or item.get("uploader") or handle).strip()
             if not vid or vid in by_id or not title or not title_ok(title):
                 continue
             if _YOUTUBE_BAD.search(title) or not channel_ok(channel):
@@ -126,7 +146,9 @@ def _youtube_candidates(genre, limit, query_override=None):
             # Prefer self-contained Shorts/moments. Long-form uploads and two-second teasers do
             # not make a useful countdown segment, and a hard upper bound prevents the builder
             # from downloading an entire compilation by accident.
-            if not duration or not (3.0 <= duration <= 90.0):
+            # The /shorts feed is already a duration-bounded standalone pool, but yt-dlp's flat
+            # entries often omit duration. Search results must expose a known <=90s duration.
+            if duration and not (3.0 <= duration <= (180.0 if handle else 90.0)):
                 continue
             by_id[vid] = {
                 "id": vid,
@@ -139,8 +161,47 @@ def _youtube_candidates(genre, limit, query_override=None):
                 "like_count": item.get("like_count"),
                 "upload_date": item.get("upload_date"),
                 "source": "youtube",
-                "search_query": query,
+                "source_feed": f"@{handle}/shorts",
             }
+            feed_counts[handle.lower()] = feed_counts.get(handle.lower(), 0) + 1
+
+    # If the creator feeds are temporarily unavailable, search for short self-contained moments
+    # as a rescue. Search is deliberately secondary because its relevance results favor long
+    # compilations even when the query contains the word "Shorts".
+    feed_capacity = sum(min(3, count) for count in feed_counts.values())
+    if feed_capacity < 5:
+        queries = [query_override] if query_override else list(YOUTUBE_QUERIES.get(genre, YOUTUBE_QUERIES["fails"]))
+        random.shuffle(queries)
+        for query in queries:
+            try:
+                entries = _youtube_search(query, max(30, min(50, limit * 2)))
+            except Exception as e:
+                errors.append(f"{query}: {str(e)[:120]}")
+                continue
+            for item in entries:
+                vid = item.get("id")
+                title = html.unescape(str(item.get("title") or "").strip())
+                channel = str(item.get("channel") or item.get("uploader") or "").strip()
+                if not vid or vid in by_id or not title or not title_ok(title):
+                    continue
+                if _YOUTUBE_BAD.search(title) or not channel_ok(channel):
+                    continue
+                try:
+                    duration = float(item.get("duration") or 0)
+                except (TypeError, ValueError):
+                    duration = 0.0
+                if not duration or not (3.0 <= duration <= 90.0):
+                    continue
+                by_id[vid] = {
+                    "id": vid, "title": title, "duration": round(duration, 2),
+                    "url": item.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}",
+                    "channel": channel, "uploader": item.get("uploader") or channel,
+                    "view_count": item.get("view_count"), "like_count": item.get("like_count"),
+                    "upload_date": item.get("upload_date"), "source": "youtube",
+                    "search_query": query,
+                }
+            if len(by_id) >= limit:
+                break
     if len(by_id) < 5:
         fail(f"Only {len(by_id)} usable YouTube funny candidates -- need >=5.", reasons=errors[:6])
         return []
@@ -155,11 +216,11 @@ def _youtube_candidates(genre, limit, query_override=None):
         length = 1.0 if 6 <= dur <= 55 else 0.4
         return quality + length + random.random() * 0.15
 
-    # Keep at most two results per channel so one repost farm cannot fill the whole countdown.
+    # Keep at most three results per channel so one repost farm cannot fill the whole countdown.
     picked, per_channel = [], {}
     for candidate in sorted(by_id.values(), key=score, reverse=True):
         key = candidate["channel"].lower() or candidate["id"]
-        if per_channel.get(key, 0) >= 2:
+        if per_channel.get(key, 0) >= 3:
             continue
         per_channel[key] = per_channel.get(key, 0) + 1
         picked.append(candidate)
