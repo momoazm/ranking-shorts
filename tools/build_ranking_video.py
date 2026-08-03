@@ -4,7 +4,8 @@ Style (per the user's spec):
   * FUNNY clips, shown with their ORIGINAL audio (no AI narrator).
   * the WHOLE frame is shown — fit into 9:16 over a blurred fill, NO crop-zoom.
   * a trending background-music bed is mixed in under the clip audio.
-  * each clip is capped so the whole video is <= 3 minutes.
+  * each clip is capped so the whole video is <= 3 minutes and long sources are windowed around
+    their strongest audible/action beat.
   * a countdown overlay (#N + the video title) sits on each clip.
 
 Resilient: entries whose download/normalize fails are skipped and ranks renumbered (need >=3).
@@ -45,8 +46,7 @@ def esc(text):
 def _ydl_opts(out_base, fmt, player_client=None, use_proxy=True):
     from _media import get_ffmpeg
     opts = {"format": fmt, "merge_output_format": "mp4",
-            # BEST QUALITY (2026-07-09): highest resolution first, H.264 only as a same-res
-            # tie-break (light decode at <=1080; higher comes as VP9/AV1). See _DL_ATTEMPTS.
+            # BEST QUALITY: highest resolution first, H.264 only as a same-res tie-break.
             "format_sort": ["res", "vcodec:h264", "acodec:m4a"],
             "outtmpl": out_base + ".%(ext)s", "noplaylist": True, "quiet": True,
             "no_warnings": True, "noprogress": True, "overwrites": True,
@@ -78,17 +78,18 @@ _DL_ATTEMPTS = [
     # serving web-client requests from the WARP egress a degraded <=360p ladder even WITH a
     # valid POT (both clipping-auto scheduled runs died on the 1080p floor). `tv` is the least
     # bot-walled POT-covered client (it's yt-dlp's own default for exactly that reason).
-    # BEST QUALITY (2026-07-09): DASH merge up to 1920 tall (source Shorts are already 9:16, so
-    # 1080x1920 is full quality; format_sort makes it highest-res + h264-tiebreak).
-    (["tv"], "bv*[height<=1920]+ba/b[height<=1920]", True),
-    (["web"], "bv*[height<=1920]+ba/b[height<=1920]", True),
+    # DASH merge up to 2160 tall. The final canvas is 1080x1920, but a 2160p horizontal source
+    # gives the vertical crop more pixels before downscaling, which is especially valuable for
+    # wide challenge footage.
+    (["tv"], "bv*[height<=2160]+ba/b[height<=2160]", True),
+    (["web"], "bv*[height<=2160]+ba/b[height<=2160]", True),
     # DIRECT runner IP (no WARP): BgUtils' primary design case is POT-on-datacenter-IP; when the
     # WARP egress range itself is flagged, dropping the proxy is what un-degrades the ladder.
-    (["tv", "web"], "bv*[height<=1920]+ba/b[height<=1920]", False),
+    (["tv", "web"], "bv*[height<=2160]+ba/b[height<=2160]", False),
     # Graceful fallbacks so a clip still ships: progressive/muxed (single stream, <=720) through
     # the proxy, then the non-POT clients as last-ditch.
-    (["web"], "b[height<=1920][ext=mp4]/b[height<=1920]/b", True),
-    (None, "bv*[height<=1920]+ba/b[height<=1920]/b", True),
+    (["web"], "b[height<=2160][ext=mp4]/b[height<=2160]/b", True),
+    (None, "bv*[height<=2160]+ba/b[height<=2160]/b", True),
     (["android"], "b/best", True),
     (["ios"], "b/best", False),
 ]
@@ -188,6 +189,47 @@ def mean_volume_db(src, offset, dur):
     return float(m.group(1)) if m else None
 
 
+def _loudness_stats(src, offset, dur):
+    """Return (mean_db, max_db) for a candidate window, or None for silent/no-audio media."""
+    try:
+        p = subprocess.run([get_ffmpeg(), "-hide_banner", "-nostats", "-ss", f"{offset:.2f}",
+                            "-t", f"{dur:.2f}", "-i", src, "-map", "0:a:0?",
+                            "-af", "volumedetect", "-f", "null", "-"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           timeout=20)
+    except Exception:
+        return None
+    mean = re.search(r"mean_volume:\s*(-?\d+(?:\.\d+)?) dB", p.stderr or "")
+    peak = re.search(r"max_volume:\s*(-?\d+(?:\.\d+)?) dB", p.stderr or "")
+    if not mean:
+        return None
+    return float(mean.group(1)), float(peak.group(1)) if peak else float(mean.group(1))
+
+
+def best_moment_offset(src, source_duration, window_duration):
+    """Choose a short window around the strongest audible payoff instead of always taking EOF.
+
+    Reddit/YouTube Shorts often already contain one moment, so short sources stay intact. For a
+    longer source, a few evenly-spaced windows are scored by average loudness plus the peak. This
+    is deliberately deterministic and cheap: it catches the laugh/shout/reaction beat without
+    pretending that a title-only model knows the exact frame of the punchline.
+    """
+    if not source_duration or source_duration <= window_duration + 0.8:
+        return 0.0
+    slack = max(0.0, source_duration - window_duration)
+    starts = sorted({round(slack * f, 2) for f in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)})
+    best_start, best_score = starts[-1], None
+    for start in starts:
+        stats = _loudness_stats(src, start, window_duration)
+        if not stats:
+            continue
+        mean, peak = stats
+        score = mean + 0.22 * peak
+        if best_score is None or score > best_score:
+            best_start, best_score = start, score
+    return float(best_start)
+
+
 def normalize(src, offset, dur, out, loop=0):
     """Whole frame FIT into 9:16 over a blurred fill (no crop-zoom).
 
@@ -218,7 +260,7 @@ def normalize(src, offset, dur, out, loop=0):
     chain = vf + ";" + ";".join(a)
 
     run_ffmpeg([*inputs, "-filter_complex", chain, "-map", "[v]", "-map", "[a]", "-t", f"{dur:.2f}",
-                "-ar", "44100", "-ac", "2", "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+                "-ar", "44100", "-ac", "2", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
                 "-c:a", "aac", "-b:a", "160k", out])
 
 
@@ -307,7 +349,7 @@ def main():
                          "audible. 0 = no duck (background stays at full level).")
     ap.add_argument("--max-total", type=float, default=58.0, help="Hard cap on total length (under 1 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
-                    help="Max seconds shown per clip; longer clips show their END (the payoff)")
+                    help="Max seconds shown per clip; longer clips are scored for their main payoff")
     ap.add_argument("--teaser", dest="teaser", action="store_true", default=True,
                     help="Cold-open hook: flash ~1.2s of the #1 clip + 'WAIT FOR #1' before the "
                          "#5 countdown starts (default ON -- biggest retention lever).")
@@ -358,12 +400,14 @@ def main():
         if dsrc and dsrc < 0.8:                         # skip only truly degenerate/blank clips
             errors.append(f"too short #{e.get('rank', i)}: {dsrc:.1f}s")
             continue
-        target = min(cap, max(dsrc or cap, MIN_SHOW))  # each rank gets >= MIN_SHOW of screen time
-        if dsrc and dsrc < target:                     # short gif -> loop it to fill the target
+        target = min(cap, dsrc or cap)
+        if dsrc and dsrc < MIN_SHOW:                   # only loop truly tiny GIF-like sources
+            target = min(cap, MIN_SHOW)
             loop, offset, dur = math.ceil(target / dsrc), 0.0, target
-        else:                                          # long enough -> show its END (the payoff)
-            loop, dur = 0, min(cap, dsrc or cap)
-            offset = max(0.0, (dsrc - dur)) if (dsrc and dsrc > dur) else 0.0
+        else:
+            loop, dur = 0, target
+            # Keep a complete Short intact; on longer sources find the main audible/funny beat.
+            offset = best_moment_offset(src, dsrc, dur) if dsrc else 0.0
         clip = os.path.join(TMPDIR, f"clip_{i}.mp4")
         try:
             normalize(src, offset, dur, clip, loop)
@@ -394,15 +438,17 @@ def main():
     # with a "WAIT FOR #1" hook BEFORE the #5 countdown, so the payoff is promised in frame one --
     # the single biggest retention lever for countdown Shorts. clips[-1] (rank #1) was already
     # normalized to END on the source's payoff moment (see the "show its END" trim above), so the
-    # teaser grabs clips[-1]'s OWN END (-sseof) rather than its start -- otherwise, for a long #1
-    # clip, the first 1.2s of that payoff window can land well before the actual climax.
+    # teaser grabs clips[-1]'s OWN selected payoff window rather than the raw source start/end.
     teaser_dur, teaser_clip = 0.0, None
     if args.teaser and clips:
         td = min(float(args.teaser_dur), max(0.5, segments[-1]["end"] - segments[-1]["start"]))
         cand = os.path.join(TMPDIR, "teaser.mp4")
         try:
-            run_ffmpeg(["-sseof", f"-{td:.2f}", "-i", clips[-1], "-ar", "44100", "-ac", "2",
-                        "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
+            last_dur = segments[-1]["end"] - segments[-1]["start"]
+            teaser_start = max(0.0, (last_dur - td) * 0.55)
+            run_ffmpeg(["-ss", f"{teaser_start:.2f}", "-t", f"{td:.2f}", "-i", clips[-1],
+                        "-ar", "44100", "-ac", "2",
+                        "-c:v", "libx264", "-preset", "medium", "-crf", "18",
                         "-c:a", "aac", "-b:a", "160k", cand])
             teaser_dur, teaser_clip = td, cand
         except Exception as ex:                         # teaser is best-effort: skip, never block
@@ -479,8 +525,8 @@ def main():
         amap = "[ca]"
 
     ff += ["-filter_complex", chain, "-map", "[v]", "-map", amap, "-t", f"{total:.2f}",
-           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-profile:v", "high", "-preset", "veryfast",
-           "-crf", "20", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", args.out]
+           "-c:v", "libx264", "-pix_fmt", "yuv420p", "-profile:v", "high", "-preset", "medium",
+           "-crf", "18", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", args.out]
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     try:
         run_ffmpeg(ff)

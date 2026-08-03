@@ -17,13 +17,16 @@ Prints JSON: {"count","subreddit","candidates":[{"id","title","duration","url"},
 import argparse
 import html
 import json
+import math
 import os
 import random
 import re
+import subprocess
+import sys
 import time
 import urllib.request
 
-from _common import load_env, emit, fail
+from _common import channel_ok, load_env, emit, fail, title_ok, REPO_ROOT
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
@@ -47,6 +50,122 @@ GENRE_SUBS = {
 # hosted, covers every big streamer's WC moments); the creator subs are supply fallbacks.
 WORLDCUP_STREAMER_SUBS = ["LivestreamFail", "livestreamfails", "FaZeClan"]  # no iShowSpeed (user rule 2026-07-06)
 DEFAULT_SUBS = ["Whatcouldgowrong", "instantkarma", "IdiotsInCars", "KidsAreFuckingStupid", "cats"]
+
+# GitHub-hosted runners cannot reliably fetch Reddit media.  YouTube Shorts are the cloud-safe
+# funny-source path: the search result itself is usually the finished moment, while yt-dlp still
+# gives us a real source URL and view/length metadata for ranking and quality checks.
+YOUTUBE_QUERIES = {
+    "fails": [
+        "funny fails shorts",
+        "instant karma funny shorts",
+        "funny moments caught on camera shorts",
+        "best funny fail moments shorts",
+    ],
+    "cats": ["funny cat moments shorts", "cats being funny shorts", "cat fails shorts"],
+    "babies": ["funny baby moments shorts", "kids funny moments shorts"],
+    "dogs": ["funny dog moments shorts", "dogs being funny shorts", "dog fails shorts"],
+    "worldcup": ["funny football moments shorts", "funny World Cup moments shorts"],
+}
+_YOUTUBE_BAD = re.compile(
+    r"\b(full\s+episode|podcast|trailer|music\s+video|official\s+audio|lyrics|news|analysis|"
+    r"reaction\s+compilation|compilation|montage|top\s*\d+|best\s+of\s+\d{4})\b",
+    re.IGNORECASE,
+)
+
+
+def _youtube_search(query, limit):
+    """Run yt-dlp search in a killable child so a bot-wall cannot hold the workflow."""
+    cmd = [sys.executable, "-m", "yt_dlp", "--flat-playlist", "--dump-single-json",
+           "--skip-download", "--no-playlist", "--quiet", "--no-warnings", "--no-progress",
+           "--socket-timeout", "15", "--retries", "0", "--extractor-retries", "0",
+           "--playlist-end", str(limit)]
+    cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
+    if os.path.isfile(cookie):
+        cmd += ["--cookies", cookie]
+    proxy = os.environ.get("YTDLP_PROXY")
+    if proxy:
+        cmd += ["--proxy", proxy]
+    cmd.append(f"ytsearch{limit}:{query}")
+    try:
+        proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True,
+                              encoding="utf-8", errors="replace", timeout=70)
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"YouTube search timed out for {query!r}") from e
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip()[-400:]
+        raise RuntimeError(tail or f"yt-dlp search exited {proc.returncode}")
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"yt-dlp search returned invalid JSON: {e}") from e
+    return data.get("entries") or []
+
+
+def _youtube_candidates(genre, limit, query_override=None):
+    queries = [query_override] if query_override else list(YOUTUBE_QUERIES.get(genre, YOUTUBE_QUERIES["fails"]))
+    random.shuffle(queries)
+    by_id, errors = {}, []
+    for query in queries:
+        try:
+            entries = _youtube_search(query, max(12, min(30, limit)))
+        except Exception as e:
+            errors.append(f"{query}: {str(e)[:120]}")
+            continue
+        for item in entries:
+            vid = item.get("id")
+            title = html.unescape(str(item.get("title") or "").strip())
+            channel = str(item.get("channel") or item.get("uploader") or "").strip()
+            if not vid or vid in by_id or not title or not title_ok(title):
+                continue
+            if _YOUTUBE_BAD.search(title) or not channel_ok(channel):
+                continue
+            try:
+                duration = float(item.get("duration") or 0)
+            except (TypeError, ValueError):
+                duration = 0.0
+            # Prefer self-contained Shorts/moments. Long-form uploads and two-second teasers do
+            # not make a useful countdown segment, and a hard upper bound prevents the builder
+            # from downloading an entire compilation by accident.
+            if not duration or not (3.0 <= duration <= 90.0):
+                continue
+            by_id[vid] = {
+                "id": vid,
+                "title": title,
+                "duration": round(duration, 2) if duration else None,
+                "url": item.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}",
+                "channel": channel,
+                "uploader": item.get("uploader") or channel,
+                "view_count": item.get("view_count"),
+                "like_count": item.get("like_count"),
+                "upload_date": item.get("upload_date"),
+                "source": "youtube",
+                "search_query": query,
+            }
+    if len(by_id) < 5:
+        fail(f"Only {len(by_id)} usable YouTube funny candidates -- need >=5.", reasons=errors[:6])
+        return []
+
+    def score(c):
+        views = max(0, int(c.get("view_count") or 0))
+        likes = max(0, int(c.get("like_count") or 0))
+        dur = c.get("duration") or 45
+        # Views/likes are supporting signals only; the LLM still chooses the actual clips. Keep
+        # short, self-contained moments ahead of long search noise and add tiny jitter for variety.
+        quality = math.log10(views + 1) + 0.35 * math.log10(likes + 1)
+        length = 1.0 if 6 <= dur <= 55 else 0.4
+        return quality + length + random.random() * 0.15
+
+    # Keep at most two results per channel so one repost farm cannot fill the whole countdown.
+    picked, per_channel = [], {}
+    for candidate in sorted(by_id.values(), key=score, reverse=True):
+        key = candidate["channel"].lower() or candidate["id"]
+        if per_channel.get(key, 0) >= 2:
+            continue
+        per_channel[key] = per_channel.get(key, 0) + 1
+        picked.append(candidate)
+        if len(picked) >= limit:
+            break
+    return picked
 
 
 def fetch_rss(subreddit, period, attempts=4):
@@ -107,6 +226,8 @@ def main():
                     help="For --genre worldcup: 'streamer' pulls from livestream-clip subs "
                          "(FaZe/livestream fails; no iShowSpeed) instead of the football feeds. "
                          "fan/match/mixed/unset all use the football feeds.")
+    ap.add_argument("--source", choices=["auto", "reddit", "youtube"], default="auto",
+                    help="Candidate source. auto selects YouTube when NO_REDDIT_SOURCES=1.")
     ap.add_argument("--period", default=None, choices=["day", "week", "month", "year", "all"],
                     help="Reddit top period (default: random week/month/year for variety)")
     ap.add_argument("--max", type=int, default=20, help="Max candidates to return")
@@ -120,6 +241,22 @@ def main():
     args = ap.parse_args()
 
     load_env()
+    source = args.source
+    if source == "auto":
+        source = "youtube" if os.environ.get("NO_REDDIT_SOURCES") == "1" else "reddit"
+
+    if source == "youtube":
+        cands = _youtube_candidates(args.genre or "fails", args.max, args.search or args.query)
+        if not cands:
+            return
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+        with open(args.out, "w", encoding="utf-8") as f:
+            json.dump({"source": "youtube", "genre": args.genre or "fails",
+                       "candidates": cands}, f, indent=2, ensure_ascii=False)
+        emit({"count": len(cands), "source": "youtube", "genre": args.genre or "fails",
+              "candidates": cands, "path": args.out})
+        return
+
     if args.subreddits:
         subs = [s.strip() for s in args.subreddits.split(",") if s.strip()]
     elif args.genre == "worldcup" and args.angle == "streamer":

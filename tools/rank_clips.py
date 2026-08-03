@@ -31,7 +31,17 @@ def classify_angle(cands, angle):
     """Return (matching_indices, err) -- err is set only on a real LLM/parse failure, NOT when too
     few candidates match (callers decide what "too few" means for their purpose: filter_by_angle
     below treats <5 as fatal, but a probe call just wants the raw count)."""
-    listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
+    def candidate_line(i, c):
+        meta = []
+        if c.get("channel"):
+            meta.append(f"channel={c['channel']}")
+        if c.get("duration"):
+            meta.append(f"duration={c['duration']}s")
+        if c.get("view_count"):
+            meta.append(f"views={c['view_count']}")
+        return f"[{i}] {c['title']}" + (f" ({', '.join(meta)})" if meta else "")
+
+    listing = "\n".join(candidate_line(i, c) for i, c in enumerate(cands))
     schema = ('Return ONE JSON object: {"matches": [<int indices that clearly fit>]}\n'
               f"From the CANDIDATES list, return the indices of every candidate whose title clearly "
               f"fits: {ANGLE_DESC[angle]} Output JSON only.")
@@ -118,6 +128,10 @@ accidents/mishaps -- someone falls, crashes, slips, things go wrong; avoid merel
 unless nothing better exists). NEVER pick a clip whose title suggests death/injury, grief or tribute,
 politics, war, or serious news -- skip those candidates even if no other clips are left; this matters
 most for sports-adjacent feeds (e.g. r/soccer) which mix serious news in with the funny clips. Each
+For YouTube Shorts, metadata is only a supporting signal: prefer a self-contained, specific action
+with an obvious funny payoff over a high-view generic title. Do not choose repost compilations,
+montages, commentary-only videos, or clips whose title does not identify a real moment. The selected
+clip should contain the main funny beat, not just the setup.
 `label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
 words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", "Pure Pain",
 "Certified Bruh", "Massive L", "Caught in 4K". Use each candidate_index at most once. Output JSON only."""

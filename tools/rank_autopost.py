@@ -131,9 +131,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
-    # TEMPORARY (2026-06-25): forcing World Cup content while the 2026 tournament is live
-    # (~through 2026-07-19). Set to None (or pass --force-genre "") to go back to normal rotation.
-    ap.add_argument("--force-genre", default="worldcup", choices=["", "fails", "cats", "babies", "dogs", "worldcup"],
+    # The tournament-specific override is retired. Keep the main ranking feed on funny moments;
+    # football has its own isolated workflows and must not leak back into this account's countdowns.
+    ap.add_argument("--force-genre", default="fails", choices=["", "fails", "cats", "babies", "dogs", "worldcup"],
                     help="Lock every video to one genre instead of letting the topic model rotate.")
     ap.add_argument("--search", default=None, help="Override the Tenor search query")
     ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
@@ -165,6 +165,9 @@ def main():
     # Zernio creds (written to API.env from repo secrets) and add the platform here. Harmless when
     # not publishing -- the instagram delivery branch below is gated on `publishing`.
     load_env()
+    source = os.environ.get("RANKING_SOURCE", "").strip().lower()
+    if source not in {"reddit", "youtube"}:
+        source = "youtube" if os.environ.get("NO_REDDIT_SOURCES") == "1" else "reddit"
     if "instagram" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_INSTAGRAM_ID"):
         platforms.append("instagram")
     t0 = time.time()
@@ -251,7 +254,7 @@ def main():
         else:
             fallback_reason = f"worldcup: {ferr or 'no angle could source >=5 clips'}"
     else:
-        find_args = ["--out", CANDS]
+        find_args = ["--out", CANDS, "--source", source]
         if args.search:
             find_args += ["--search", args.search]
         elif topic.get("genre"):
@@ -272,7 +275,7 @@ def main():
                                "disabled by NO_REDDIT_SOURCES on this runner)")
         # couldn't source/fit the requested theme -> regenerate a generic "fails" topic to match
         print(f"::warning::{fallback_reason}", file=sys.stderr)
-        run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
+        run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
 
     _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
@@ -281,7 +284,7 @@ def main():
         # enough candidates) -- drop the theme for this run rather than crash
         fallback_reason = fallback_reason or f"rank_clips({requested_genre}): {rerr}"
         print(f"::warning::{fallback_reason}", file=sys.stderr)
-        run_tool("find_ranking_clips.py", ["--genre", "fails", "--out", CANDS])
+        run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
         run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
     elif rerr:

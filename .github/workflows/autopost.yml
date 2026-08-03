@@ -17,9 +17,8 @@ name: ranking-shorts
 # silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
 
 on:
-  # The tournament pause was never removed after the final, so this workflow had no scheduled
-  # trigger after 2026-07-07. Resume the normal ranking schedule now; football single clips use
-  # the separate worldcup workflows.
+  # The tournament override is retired: this workflow is the normal funny/fails ranking feed again.
+  # Football single clips remain isolated in the separate worldcup workflows.
   schedule:
     # Fires at :50 the hour before each slot; the hold step releases at the exact target minute.
     - cron: "50 1,10,13,16,19,22 * * *"
@@ -213,6 +212,7 @@ jobs:
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           NO_REDDIT_SOURCES: "1"
+          RANKING_SOURCE: youtube
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
           PLATFORMS="youtube,instagram,email"
@@ -221,7 +221,8 @@ jobs:
           else
             echo "::warning::TikTok is not configured; publishing YouTube + Instagram only. Add the four TikTok secrets to enable it."
           fi
-          ARGS=(--privacy public --platforms "$PLATFORMS" --required-platforms youtube,instagram)
+          ARGS=(--privacy public --platforms "$PLATFORMS" --required-platforms youtube,instagram
+                --force-genre fails --niche "funny fails and funny moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           python tools/rank_autopost.py "${ARGS[@]}"
 
