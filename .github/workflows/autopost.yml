@@ -221,7 +221,7 @@ jobs:
           else
             echo "::warning::TikTok is not configured; publishing YouTube + Instagram only. Add the four TikTok secrets to enable it."
           fi
-          ARGS=(--privacy public --platforms "$PLATFORMS" --required-platforms youtube,instagram
+          ARGS=(--privacy public --keep-tmp --platforms "$PLATFORMS" --required-platforms youtube,instagram
                 --force-genre streamer --niche "funny streamer clips, live reactions, and creator moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           python tools/rank_autopost.py "${ARGS[@]}"
