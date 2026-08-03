@@ -1,23 +1,22 @@
-"""Find candidate WORLD-CUP STREAMER clips (FaZe / Marlon etc.) via YouTube search.
+"""Find candidate streamer/creator clips via YouTube search.
 
-iShowSpeed is allowed again (user decision 2026-07-08, reverses the 2026-07-06 ban) -- Speed
-queries are back here and `_common.title_ok` no longer hard-blocks him.
+The main ranking workflow uses this as a dedicated source pool for funny live-stream moments,
+reactions, meltdowns, and chat interactions. `_common.title_ok` supplies the deterministic
+English/safety screen, including the repository's current iShowSpeed block.
 
-Why YouTube instead of Reddit for this angle: the streamer subs (r/LivestreamFail ...) are
-drama-heavy and mostly NOT World-Cup related, and their post titles are too vague for the ranker's
-title-based relevance/safety filter to work. A YouTube search ("FaZe World Cup") returns
-clips that are actually on-theme AND descriptively titled, so rank_clips.py's `streamer` classifier
-can reliably confirm World-Cup relevance and screen out anything off-topic/unsafe.
+Why YouTube instead of Reddit: streamer subs are drama-heavy and their post titles are often too
+vague for the ranker's relevance/safety filter. YouTube search returns short, descriptively titled
+creator moments that can be ranked for an obvious funny payoff.
 
-This only works because the ranking pipeline now runs on a SELF-HOSTED runner (Moemen's home IP) --
-GitHub's cloud IPs are bot-checked by YouTube, which is why the default Reddit source exists. On a
-blocked IP this tool will return few/no candidates and the orchestrator falls back to fan/match.
+The GitHub workflow supplies a WARP proxy and a BgUtils proof-of-origin token provider so this
+YouTube source remains usable on cloud runners. If YouTube is blocked or the pool is too thin, the
+streamer-mode orchestrator fails clearly instead of falling back to football or generic fails.
 
 We keep only SHORT videos (a known duration within [--min-dur, --max-dur]); build_ranking_video.py
 downloads the WHOLE file per clip, so an hours-long watchalong VOD must never slip through.
 
 Usage:
-    python tools/find_streamer_clips.py [--queries "a;b"] [--min-dur 3] [--max-dur 240]
+    python tools/find_streamer_clips.py [--queries "a;b"] [--min-dur 3] [--max-dur 180]
         [--max 30] [--out .tmp/rank_candidates.json]
 
 Prints JSON: {"source":"youtube","count","candidates":[{"id","title","duration","url"}, ...]}
@@ -29,18 +28,28 @@ import random
 
 from _common import REPO_ROOT, load_env, emit, fail, title_ok
 
-# WC-streamer search queries. EDIT THIS LIST to change who we target. Kept World-Cup-scoped so
-# results stay on-theme and descriptively titled (the ranker filters by title). The generic last
-# query covers streamers not named here so a thin roster never starves supply.
+# Streamer search queries. Keep these focused on standalone creator moments rather than full VODs,
+# podcasts, or compilations. The generic queries ensure the pool does not depend on one creator.
 STREAMER_QUERIES = [
-    # iShowSpeed un-blocked 2026-07-08 (reverses the 2026-07-06 ban).
-    "iShowSpeed World Cup football reaction",
-    "iShowSpeed at the World Cup 2026",
-    "FaZe World Cup football reaction",
-    "Marlon streamer World Cup watchalong",
-    "streamer reacts World Cup goal",
-    "streamers watch World Cup live football",
+    "Kai Cenat funny moments shorts",
+    "Jynxzi funny moments shorts",
+    "CaseOh funny moments shorts",
+    "xQc funny moments shorts",
+    "Adin Ross funny streamer clips",
+    "Twitch streamer funniest reaction shorts",
+    "streamer rage funny clip shorts",
+    "streamer chat interaction funny clip",
 ]
+
+STREAMER_HINTS = (
+    "streamer", "twitch", "kai cenat", "jynxzi", "caseoh", "xqc", "adin ross",
+    "pokimane", "ludwig", "hasan", "tarik", "nmplol", "sodapoppin", "faze",
+)
+
+
+def streamer_signal(title, channel):
+    text = f"{title} {channel}".lower()
+    return any(hint in text for hint in STREAMER_HINTS)
 
 
 def load_used(path):
@@ -75,7 +84,7 @@ def main():
                     help="Semicolon-separated search queries (overrides the built-in roster).")
     ap.add_argument("--per-query", type=int, default=15, help="Results fetched per query")
     ap.add_argument("--min-dur", type=float, default=3.0, help="Skip clips shorter than this (blank/degenerate)")
-    ap.add_argument("--max-dur", type=float, default=240.0,
+    ap.add_argument("--max-dur", type=float, default=180.0,
                     help="Skip clips longer than this -- the whole file is downloaded per clip, so "
                          "long VODs/watchalongs must be excluded.")
     ap.add_argument("--max", type=int, default=30, help="Max candidates to return")
@@ -104,24 +113,29 @@ def main():
             vid = en.get("id")
             dur = en.get("duration")
             title = (en.get("title") or "").strip()
+            channel = (en.get("channel") or en.get("uploader") or "").strip()
             if not vid or not title or vid in seen or vid in used:
                 continue
-            # English-audience screen (shared with find_worldcup_clips): drop non-Latin-script
-            # titles and news/analysis/talk markers before they ever reach the ranker.
+            # English-audience screen: drop non-Latin-script, news/analysis/talk, list, and
+            # blocked-creator markers before they ever reach the ranker.
             if not title_ok(title):
+                continue
+            if not streamer_signal(title, channel):
                 continue
             # Require a KNOWN, short duration: unknown usually means a live stream, and a long VOD
             # would download the whole file. Both must be excluded before the build step.
             if not isinstance(dur, (int, float)) or not (args.min_dur <= dur <= args.max_dur):
                 continue
             seen[vid] = {"id": vid, "title": title, "duration": float(dur),
-                         "url": f"https://www.youtube.com/watch?v={vid}"}
+                         "url": f"https://www.youtube.com/watch?v={vid}",
+                         "channel": channel, "uploader": en.get("uploader") or channel,
+                         "source": "youtube"}
         if len(seen) >= args.max:                           # enough on-theme short clips -> stop
             break
 
     cands = list(seen.values())
     if len(cands) < 5:
-        fail(f"Only {len(cands)} World-Cup streamer clips from YouTube -- need >=5.", reasons=errors[:6])
+        fail(f"Only {len(cands)} usable streamer clips from YouTube -- need >=5.", reasons=errors[:6])
         return
 
     random.shuffle(cands)                                   # vary which clips reach the ranker

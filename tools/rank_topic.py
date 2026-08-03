@@ -16,13 +16,14 @@ import random
 from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
-GENRES = ["fails", "cats", "babies", "dogs", "worldcup"]
+GENRES = ["fails", "cats", "babies", "dogs", "streamer", "worldcup"]
 WORLDCUP_ANGLES = ["fan", "match", "streamer"]   # the LOCKABLE angles -- random.choice picks one
 WORLDCUP_ANGLE_CHOICES = WORLDCUP_ANGLES + ["mixed"]   # "mixed" = last-resort, no angle lock at all
 
 SCHEMA = """Return ONE JSON object with exactly these keys:
 {
-  "genre": string,         // EXACTLY one of: fails, cats, babies, dogs, worldcup -- pick the MOST TRENDING/viral right now.
+  "genre": string,         // EXACTLY one of: fails, cats, babies, dogs, streamer, worldcup -- pick the MOST TRENDING/viral right now.
+                           //   "streamer" = funny moments, reactions, and meltdowns from live streamers/creators.
                            //   "worldcup" = World Cup clips, committed to ONE single angle (see "angle" below).
   "angle": string,         // ONLY when genre is "worldcup": EXACTLY "fan", "match", or "streamer" -- pick ONE, never mix:
                            //   - "fan": crowd/supporters only -- chants, celebrations, reactions in the stands.
@@ -48,8 +49,11 @@ SCHEMA = """Return ONE JSON object with exactly these keys:
   "hook": string           // a 1-sentence opener for the description, written as a curiosity gap
 }
 You make single-genre "Ranking" Shorts from real funny clips. Choose the ONE genre from the allowed
-list that is most trending and rewatchable. The TITLE is the thumbnail/feed hook -- topic framing
-beats production, so make it a curiosity gap that promises the #1 payoff, never a flat label.
+list that is most trending and rewatchable. For "streamer", keep every title about a specific
+creator/live-stream moment (reaction, fail, rage, surprise, or chat interaction), never a podcast,
+news segment, compilation, or generic gameplay montage. The TITLE is the thumbnail/feed hook --
+topic framing beats production, so make it a curiosity gap that promises the #1 payoff, never a flat
+label.
 Output JSON only."""
 
 

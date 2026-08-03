@@ -135,7 +135,16 @@ clip should contain the main funny beat, not just the setup.
 `label` is a SHORT punchy Gen-Z meme caption for that clip (1-3
 words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", "Pure Pain",
 "Certified Bruh", "Massive L", "Caught in 4K". Use each candidate_index at most once. Output JSON only."""
-    prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n\n"
+    genre_guard = ""
+    if topic.get("genre") == "streamer":
+        genre_guard = (
+            "STREAMER MODE: every selected candidate must clearly be a specific live-streamer or "
+            "creator moment. Prefer an obvious reaction, fail, rage, surprise, chat interaction, "
+            "or punchline. Reject podcasts, news/interviews, compilations, generic gameplay, and "
+            "titles that do not identify a creator or streamer.\n\n"
+        )
+    prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n"
+              f"GENRE: {topic.get('genre')}\n\n{genre_guard}"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
     try:

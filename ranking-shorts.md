@@ -6,10 +6,9 @@
 > and `.tmp/` resolve correctly from here. API keys load from the shared `API.env` at the repo root.
 
 ## Channel identity: momoclips
-Both formats below post to the **same channel**, being rebranded to **`@itsmomoclips`** on YouTube
-and **Instagram** (Moemen renames the handles on-platform — Claude can't via API; update the
-`--handle`/refs here once done). The Zernio IDs and YouTube OAuth token don't change with a handle
-rename.
+Both formats below post through the connected momoclips destinations: Zernio currently verifies
+**YouTube `@itsmomoclip`** and **Instagram `@itsmomoclips`**. Keep the Zernio IDs and the visual
+`@itsmomoclips` watermark aligned with those verified destinations.
 
 ## What this project does
 
@@ -61,16 +60,17 @@ Pipeline: `find_worldcup_clips → build_clip → host_public → upload_youtube
 (decision log 2026-07-04, extended to livestream capture 2026-07-07).
 
 **B) `#5 → #1` ranking countdowns (`rank_autopost.py`)** — the original format (below). Still
-present; single-clips are the active World-Cup play.
+present; the ranking account now uses a dedicated streamer/creator feed, while single-clips remain
+isolated in the separate World-Cup workflows.
 
 Produces finished **vertical (1080×1920) faceless Shorts** and uploads them as
 **unlisted/public drafts only after explicit approval**.
 
-**One format: the `#5 → #1` countdown.** Each video stitches together short, real funny clips
-(fails, cats, dogs, kids, etc.) into a countdown:
+**One format: the `#5 → #1` countdown.** Each video stitches together five short, real streamer/creator clips
+(streamer/creator reactions, fails, chat interactions, surprises, or meltdowns) into a countdown:
 
-- Clips are sourced from **Reddit** (CI-friendly, no cookies/bot-check), with YouTube/Tenor as
-  fallbacks. Each clip plays with its **ORIGINAL audio** — there is no AI narrator.
+- Clips are sourced from the dedicated **YouTube streamer search pool** with deterministic
+  English/safety screens. Each clip plays with its **ORIGINAL audio** — there is no AI narrator.
 - The **whole frame is shown** — fit into 9:16 over a blurred fill, **no crop-zoom**.
 - A **countdown overlay** sits on each clip (`#N` + a short funny label) alongside a compact
   leaderboard that reveals from `#5` up to `#1`.
@@ -81,16 +81,14 @@ Produces finished **vertical (1080×1920) faceless Shorts** and uploads them as
 ## Pipeline (each step = one tool, cwd = project root)
 
 ```
-rank_topic → find_ranking_clips → rank_clips → build_ranking_video → build_captions → deliver
+rank_topic → find_streamer_clips → rank_clips → build_ranking_video → build_captions → deliver
 ```
 
 - **`rank_topic.py`** — auto-picks a trending ranking topic/niche.
-- **`find_ranking_clips.py`** — pulls candidate clips from Reddit RSS (one feed request per run;
-  funny/wholesome subreddits per genre). yt-dlp downloads each post. While the 2026 World Cup is
-  live the pipeline is forced to the `worldcup` genre, which has **three angles** — `fan`
-  (crowd/stands), `match` (on-pitch action), and `streamer` (FaZe / Marlon etc. -- no iShowSpeed -- at the
-  World Cup, sourced from livestream-clip subs via `--angle streamer`). `rank_autopost.py`
-  randomizes which angle it tries each run, so all three rotate; falls back to `mixed` then `fails`.
+- **`find_streamer_clips.py`** — searches YouTube for short, specific creator moments, screens
+  out list/compilation/news titles and blocked channels, deduplicates against
+  `state/used_clips.json`, and requires at least five candidates. The ranking workflow does not
+  call the football picker or the generic funny/fails Reddit finder.
 - **`rank_clips.py`** — the LLM ranks the best ~5 candidates and writes a short funny label per rank.
 - **`build_ranking_video.py`** — trims, fits to 9:16 over blurred fill, mixes original audio + music
   bed, burns the countdown/leaderboard overlay, assembles `.tmp/final.mp4`.
@@ -152,7 +150,8 @@ win. **Never auto-applies a winning CTA** — it's a notification; Moemen decide
   navy `#0B1622`, cream `#F2E9D8`, Cinzel/Poppins) and `brand/logo.png`. Never re-derive
   colors/fonts.
 - **Never upload without explicit confirmation** at the gate. Show title, description, tags,
-  resolved privacy, target channel (`@itsmomoclips`), duration, byte size, and have me eyeball
+  resolved privacy, target destinations (YouTube `@itsmomoclip`, Instagram `@itsmomoclips`), duration,
+  byte size, and have me eyeball
   `.tmp/final.mp4` (overlay in sync, audio clean, no visible looping artifacts).
   `upload_youtube.py` / `upload_tiktok.py` / `upload_instagram.py` are the **only irreversible
   steps.**

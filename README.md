@@ -4,10 +4,9 @@
 MOMO content engine). A character-dialogue format also exists in the tooling as an option.
 
 - **Status:** Active (primary focus)
-- **momoclips (2026-07-04):** channel rebranding to @itsmomoclips (YouTube + Instagram) + a new
-  single-clip World-Cup format (`clip_autopost.py`), triggered by ~20-min polling. Go-live is
-  GATED — see the header of `.github/workflows/worldcup_clips.yml`. The #5->#1 countdown
-  (`rank_autopost.py`) still exists (paused for the WC).
+- **momoclips (2026-07-04):** the #5->#1 countdown (`rank_autopost.py`) now runs as a dedicated
+  streamer/creator-clips feed. The single-clip World-Cup format (`clip_autopost.py`) remains in
+  the isolated `worldcup_clips.yml` workflow and is not used by the ranking feed.
 - **Sourcing (2026-07-08):** priority tiers = the GAME itself > other events; **TOD-by-beIN**
   (`@tod_bybein`) is the preferred FIFA source with a TOD-only bottom-branding crop; `popular`
   broadened to trending off-pitch moments. All 3 workflows now run the BgUtils **PO-token

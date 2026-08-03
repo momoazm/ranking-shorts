@@ -1,14 +1,14 @@
 name: ranking-shorts
 
-# Builds & posts a #5->#1 RANKING Short on a GitHub-hosted Ubuntu runner -- no laptop /
-# self-hosted runner needed.
+# Builds & posts a #5->#1 streamer-clips RANKING Short on a GitHub-hosted Ubuntu runner -- no
+# laptop / self-hosted runner needed.
 #
 # Sourcing on cloud IPs (probed 2026-07-03):
 #   - YouTube: bot-checks datacenter IPs, but works through Cloudflare WARP's free local
 #     SOCKS proxy (YTDLP_PROXY below).
-#   - Reddit (v.redd.it): 403-blocks EVERY cloud path (plain IP, WARP, direct DASH files),
-#     so NO_REDDIT_SOURCES=1 restricts sourcing to the YouTube "streamer" pool. Adding a
-#     paid residential proxy later = set YTDLP_PROXY to its URL and drop NO_REDDIT_SOURCES.
+#   - Reddit (v.redd.it): 403-blocks EVERY cloud path (plain IP, WARP, direct DASH files).
+#     This workflow therefore uses the dedicated YouTube streamer pool and never falls back to
+#     the generic funny/fails or football pickers.
 #
 # Exact-time posting: GitHub cron can drift 5-30+ min, so each cron fires ~40 min EARLY
 # and the "Hold until slot" step sleeps until the exact slot minute.
@@ -17,8 +17,8 @@ name: ranking-shorts
 # silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
 
 on:
-  # The tournament override is retired: this workflow is the normal funny/fails ranking feed again.
-  # Football single clips remain isolated in the separate worldcup workflows.
+  # The ranking account is dedicated to streamer moments. Football single clips remain isolated
+  # in the separate worldcup workflows, and MrBeast sourcing remains in clipping-auto.
   schedule:
     # Fires at :50 the hour before each slot; the hold step releases at the exact target minute.
     - cron: "50 1,10,13,16,19,22 * * *"
@@ -208,11 +208,11 @@ jobs:
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
-          # Cloud sourcing constraints -- see the header comment.
+          # Dedicated streamer sourcing -- see the header comment.
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           NO_REDDIT_SOURCES: "1"
-          RANKING_SOURCE: youtube
+          RANKING_SOURCE: streamer
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
           PLATFORMS="youtube,instagram,email"
@@ -222,7 +222,7 @@ jobs:
             echo "::warning::TikTok is not configured; publishing YouTube + Instagram only. Add the four TikTok secrets to enable it."
           fi
           ARGS=(--privacy public --platforms "$PLATFORMS" --required-platforms youtube,instagram
-                --force-genre fails --niche "funny fails and funny moments")
+                --force-genre streamer --niche "funny streamer clips, live reactions, and creator moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           python tools/rank_autopost.py "${ARGS[@]}"
 

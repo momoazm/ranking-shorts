@@ -131,9 +131,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
-    # The tournament-specific override is retired. Keep the main ranking feed on funny moments;
-    # football has its own isolated workflows and must not leak back into this account's countdowns.
-    ap.add_argument("--force-genre", default="fails", choices=["", "fails", "cats", "babies", "dogs", "worldcup"],
+    # The main workflow forces the dedicated streamer genre; football has its own isolated
+    # workflows and MrBeast sourcing belongs to clipping-auto.
+    ap.add_argument("--force-genre", default="fails", choices=["", "fails", "cats", "babies", "dogs", "streamer", "worldcup"],
                     help="Lock every video to one genre instead of letting the topic model rotate.")
     ap.add_argument("--search", default=None, help="Override the Tenor search query")
     ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
@@ -166,7 +166,7 @@ def main():
     # not publishing -- the instagram delivery branch below is gated on `publishing`.
     load_env()
     source = os.environ.get("RANKING_SOURCE", "").strip().lower()
-    if source not in {"reddit", "youtube"}:
+    if source not in {"reddit", "youtube", "streamer"}:
         source = "youtube" if os.environ.get("NO_REDDIT_SOURCES") == "1" else "reddit"
     if "instagram" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_INSTAGRAM_ID"):
         platforms.append("instagram")
@@ -184,6 +184,11 @@ def main():
     # World Cup theme because the chosen angle often turned out unsourceable after the fact.
     if args.force_genre == "worldcup":
         topic = {"genre": "worldcup"}   # defer the actual title/angle LLM call until angle is known
+    elif args.force_genre == "streamer" or source == "streamer":
+        # Streamer mode is a dedicated source pool. Do not let the generic funny/fails finder or
+        # its fallback rescue turn this account back into a mixed ranking feed.
+        topic = run_tool("rank_topic.py", ["--niche", args.niche,
+                                            "--force-genre", "streamer", "--out", TOPIC])
     elif args.force_genre:
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", args.force_genre, "--out", TOPIC])
     else:
@@ -192,7 +197,12 @@ def main():
     requested_genre = topic.get("genre")
     fallback_reason = None
 
-    if topic.get("genre") == "worldcup":
+    if topic.get("genre") == "streamer":
+        _f, ferr = run_tool_safe("find_streamer_clips.py",
+                                 ["--max", "30", "--history", HISTORY, "--out", CANDS])
+        if ferr:
+            raise RuntimeError(f"streamer source failed: {ferr}")
+    elif topic.get("genre") == "worldcup":
         # Three angles now. fan/match share ONE football source pool; "streamer" (FaZe/
         # Marlon etc. at the World Cup) has its OWN pool -- those clips aren't on the football feeds.
         # Randomize which pool we try first so streamer videos get a fair share across runs instead of
@@ -338,6 +348,7 @@ def main():
     result = {"status": "built", "title": title, "final": FINAL,
               "byte_size": build.get("byte_size"), "duration_sec": build.get("duration_sec"),
               "entries": build.get("entries"), "elapsed_sec": round(time.time() - t0, 1),
+              "source_mode": source,
               "requested_genre": requested_genre, "used_genre": topic.get("genre"),
               "fallback_reason": fallback_reason, "delivery": {}}
 
