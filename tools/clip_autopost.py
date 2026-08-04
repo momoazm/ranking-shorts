@@ -275,27 +275,56 @@ def main():
     # can 403 on its video data (geo/format-locked streams on some uploads) even though search
     # + WARP work, so a single bad clip must not waste the whole poll. Each attempted source is
     # marked used (pass or fail) so it's never retried on the next poll.
-    cand = card = yt_title = description = ig_caption = tags = build = None
-    attempts = []
-    for c in cands[: max(1, min(5, len(cands)))]:
-        _card, _yt, _desc, _cap, _tags = build_meta(c, args.handle)
-        build_args = ["--url", c["url"], "--title", _card, "--handle", args.handle,
-                      "--source-handle", c.get("handle", ""), "--out", FINAL]
-        if args.music:
-            build_args += ["--music", args.music]
-        if is_experiment:
-            build_args += ["--cta-text", exp_variant["cta_text"], "--cta-dur", str(exp_variant["cta_dur"])]
-        b, berr = run_tool_safe("build_clip.py", build_args)
-        if not berr:
-            cand, card, yt_title, description, ig_caption, tags, build = c, _card, _yt, _desc, _cap, _tags, b
-            break
-        # A source that cannot be downloaded/rendered is a bad candidate; remember it so the
-        # picker advances. Successful builds are only marked after a confirmed platform post.
-        record_used(c["id"])
-        attempts.append({"id": c["id"], "error": berr.splitlines()[0][:160]})
-        print(f"::warning::build_clip failed for {c['id']}: {berr.splitlines()[0][:160]}", file=sys.stderr)
+    def try_build(candidates):
+        local_attempts = []
+        for c in candidates[: max(1, min(5, len(candidates)))]:
+            _card, _yt, _desc, _cap, _tags = build_meta(c, args.handle)
+            build_args = ["--url", c["url"], "--title", _card, "--handle", args.handle,
+                          "--source-handle", c.get("handle", ""), "--out", FINAL]
+            if args.music:
+                build_args += ["--music", args.music]
+            if is_experiment:
+                build_args += ["--cta-text", exp_variant["cta_text"], "--cta-dur", str(exp_variant["cta_dur"])]
+            b, berr = run_tool_safe("build_clip.py", build_args)
+            if not berr:
+                return (c, _card, _yt, _desc, _cap, _tags, b), local_attempts
+            # A source that cannot be downloaded/rendered is a bad candidate; remember it so the
+            # picker advances. Successful builds are only marked after a confirmed platform post.
+            record_used(c["id"])
+            local_attempts.append({"id": c["id"], "error": berr.splitlines()[0][:160]})
+            print(f"::warning::build_clip failed for {c['id']}: {berr.splitlines()[0][:160]}", file=sys.stderr)
+        return None, local_attempts
 
-    if build is None:
+    winner, attempts = try_build(cands)
+
+    # A semantic screen can leave only one candidate, and YouTube can then bot-block that video's
+    # media even though search itself worked. Re-run discovery after recording the failed ids;
+    # the finder's history filter supplies a fresh pool without weakening the footage/title screen.
+    # This is bounded so a genuinely empty or blocked search still fails clearly.
+    for recovery_round in range(2):
+        if winner is not None:
+            break
+        retry_find, retry_err = run_tool_safe(
+            "find_worldcup_clips.py",
+            ["--window", args.window, "--categories", args.categories,
+             "--max-search-seconds", str(args.max_search_seconds), "--max", "8", "--out", CANDS],
+        )
+        if retry_err:
+            print(f"::warning::candidate recovery {recovery_round + 1} failed: {retry_err.splitlines()[0][:160]}",
+                  file=sys.stderr)
+            break
+        retry_candidates = (retry_find or {}).get("candidates", [])
+        if not retry_candidates:
+            break
+        retry_candidates = screen_candidates(retry_candidates)
+        if not retry_candidates:
+            break
+        winner, retry_attempts = try_build(retry_candidates)
+        attempts.extend(retry_attempts)
+
+    if winner is not None:
+        cand, card, yt_title, description, ig_caption, tags, build = winner
+    else:
         emit({"status": "all_builds_failed", "tried": len(attempts), "attempts": attempts,
               "elapsed_sec": round(time.time() - t0, 1)})
         raise SystemExit(1)

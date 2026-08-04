@@ -143,6 +143,7 @@ jobs:
       - name: Reconstruct secrets (never committed)
         if: steps.gate.outputs.watch == 'true'
         env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ZERNIO_API_URL: ${{ secrets.ZERNIO_API_URL }}
@@ -160,7 +161,14 @@ jobs:
           with open("API.env", "w", encoding="utf-8") as f:
               f.write("\n".join(lines) + "\n")
           EOF
-          rm -f cookies.txt
+          # Optional Netscape-format cookies provide a last-resort authenticated yt-dlp session
+          # for YouTube capture on a runner IP that is bot-walled.
+          if [ -n "${YT_COOKIES:-}" ]; then
+            printf '%s\n' "$YT_COOKIES" > cookies.txt
+            chmod 600 cookies.txt
+          else
+            rm -f cookies.txt
+          fi
 
       - name: Verify destination accounts
         if: steps.gate.outputs.watch == 'true' && inputs.no_upload != true
