@@ -8,7 +8,8 @@
 ## Channel identity: momoclips
 Both formats below post through the connected momoclips destinations: Zernio currently verifies
 **YouTube `@itsmomoclip`** and **Instagram `@itsmomoclips`**. Keep the Zernio IDs and the visual
-`@itsmomoclips` watermark aligned with those verified destinations.
+`@itsmomoclip` YouTube watermark aligned with the verified YouTube destination; use the plural
+Instagram handle only in Reel captions.
 
 ## What this project does
 

@@ -551,7 +551,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true", help="Build everything, post nothing")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
-    ap.add_argument("--handle", default="@itsmomoclips")
+    ap.add_argument("--handle", default="@itsmomoclip",
+                    help="YouTube watermark/description handle (verified channel: @Itsmomoclip)")
     ap.add_argument("--poll", type=float, default=75.0, help="Seconds between scoreboard polls")
     ap.add_argument("--lead-min", type=float, default=25.0)
     ap.add_argument("--max-minutes", type=float, default=320.0, help="Hard job-length cap")

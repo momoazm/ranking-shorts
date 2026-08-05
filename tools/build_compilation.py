@@ -33,7 +33,7 @@ def main():
     ap.add_argument("--clip", action="append", required=True,
                     help="Source clip path (repeat; order = playback order)")
     ap.add_argument("--title", required=True)
-    ap.add_argument("--handle", default="@itsmomoclips")
+    ap.add_argument("--handle", default="@itsmomoclip", help="YouTube watermark handle")
     ap.add_argument("--max-total", type=float, default=58.0, help="Hard cap (<60s Shorts rule)")
     ap.add_argument("--cta", dest="cta", action="store_true", default=True,
                     help="Follow CTA pop-in over the last --cta-dur seconds (default ON; no SFX).")

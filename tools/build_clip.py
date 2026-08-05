@@ -4,14 +4,14 @@ Distinct from build_ranking_video.py (which stitches a #5->#1 countdown): this t
 World-Cup moment -- a goal, a fan/streamer reaction, a viral clip -- and turns it into a
 finished 1080x1920 Short: the whole frame fit into 9:16 over a blurred fill (no crop-zoom),
 original clip audio kept (the commentary/crowd IS the appeal -- no SFX, per the project's
-audio rule), with a compact on-brand title card and an @itsmomoclips watermark burned on.
+audio rule), with a compact on-brand title card and an @itsmomoclip watermark burned on.
 
 Reuses the proven download() + normalize() from build_ranking_video (same 9:16 blurred-fill
 fit, same "keep original audio / silence when quiet" behaviour, same yt-dlp WARP-proxy path).
 
 Usage:
     python tools/build_clip.py --url <youtube_url> --title "RONALDO GOAL" \
-        [--handle @itsmomoclips] [--max-secs 58] [--music path.mp3] [--out .tmp/final.mp4]
+        [--handle @itsmomoclip] [--max-secs 58] [--music path.mp3] [--out .tmp/final.mp4]
 
 Prints JSON: {"path","duration_sec","byte_size","title","source_url","width","height"}
 """
@@ -46,6 +46,9 @@ def clean_title(raw):
       -> 'Lionel Messi Goal vs Cape Verde'
     """
     t = raw.replace("™", " ").replace("®", " ")
+    # Fix the common source-title typo before it reaches the burned card and
+    # posted metadata (observed on the public Spain/Pedro Porro Short).
+    t = re.sub(r"\bheros\b", "heroes", t, flags=re.IGNORECASE)
     # Case-insensitive removal of FIFA/World-Cup boilerplate + junk phrases.
     for pat in (r"fifa\s+world\s+cup\s*20\d\d", r"world\s+cup\s*20\d\d", r"fifa\s+world\s+cup",
                 r"full\s+match", r"highlights?", r"#\w+", r"\(\s*4k\s*\)", r"\b4k\b", r"\bhd\b"):
@@ -138,7 +141,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True, help="Source YouTube (or direct media) URL")
     ap.add_argument("--title", required=True, help="Overlay/card title (already punchy)")
-    ap.add_argument("--handle", default="@itsmomoclips", help="Watermark handle")
+    ap.add_argument("--handle", default="@itsmomoclip", help="YouTube watermark handle")
     ap.add_argument("--max-secs", type=float, default=58.0, help="Hard cap (<60s Shorts length)")
     ap.add_argument("--music", default=None, help="Optional music bed path (default: keep original audio only)")
     ap.add_argument("--music-volume", type=float, default=0.12)

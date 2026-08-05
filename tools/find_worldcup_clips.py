@@ -36,6 +36,7 @@ import datetime
 import json
 import os
 import random
+import re
 import time
 import urllib.parse
 
@@ -103,6 +104,19 @@ GENERAL_QUERIES = {
         "soccer funny moment today",
     ],
 }
+
+# Keep non-association-football sports out of the shared source pool before
+# any downstream workflow sees them.  The final semantic gate is stricter,
+# but this early block also protects the ranking workflow's World-Cup rescue
+# path, which consumes this finder directly.
+_NON_SOCCER_SOURCE = re.compile(
+    r"\b(?:nfl|nba|mlb|nhl|ncaa|american\s+football|college\s+football|super\s+bowl|"
+    r"touchdown|quarterback|running\s+back|wide\s+receiver|linebacker|falcons|patriots|"
+    r"chiefs|cowboys|ravens|eagles|packers|49ers|bears|lions|vikings|steelers|jets|"
+    r"bills|dolphins|broncos|texans|commanders|saints|buccaneers|raiders|chargers|"
+    r"titans|colts|jaguars|panthers|bengals|browns|cardinals|seahawks|giants)\b",
+    re.IGNORECASE,
+)
 
 
 def load_used(path):
@@ -314,6 +328,8 @@ def main():
                 # can. Hard-block bad channels for every category.
                 channel = (en.get("channel") or en.get("uploader") or "").strip()
                 handle = (en.get("uploader_id") or "").strip()
+                if _NON_SOCCER_SOURCE.search(f"{title} {channel} {handle}"):
+                    continue
                 if not channel_ok(f"{channel} {handle}"):
                     continue
                 seen.add(vid)

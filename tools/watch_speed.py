@@ -345,7 +345,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true", help="Build everything, post nothing")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
-    ap.add_argument("--handle", default="@itsmomoclips")
+    ap.add_argument("--handle", default="@itsmomoclip",
+                    help="YouTube watermark/description handle (verified channel: @Itsmomoclip)")
     ap.add_argument("--channel", default=DEFAULT_CHANNEL)
     ap.add_argument("--platforms", default="instagram",
                     help="Where to post his reactions (football account = instagram)")

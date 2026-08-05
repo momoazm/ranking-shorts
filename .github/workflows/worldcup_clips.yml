@@ -82,7 +82,7 @@ jobs:
         run: |
           pip install --upgrade pip
           if ! pip install -r requirements.txt; then
-            pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
+            pip install python-dotenv groq openai google-generativeai edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
           fi
           pip install --upgrade yt-dlp
           # PO-token provider plugin (auto-discovered by yt-dlp) -- beats the datacenter bot-wall.

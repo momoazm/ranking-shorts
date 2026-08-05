@@ -46,13 +46,52 @@ FINAL = ".tmp/final.mp4"
 DAILY_COUNT = ".tmp/clip_daily_count.json"
 HISTORY = "state/used_clips.json"
 
-_MOMENT_MARKER = re.compile(
+# A title is only eligible for this football account when it contains both an
+# association-football context and a specific moment.  Bare words such as
+# "football", "reaction", or "final" are intentionally insufficient: the
+# previous marker-only rescue admitted an NFL Falcons reaction and a generic
+# "Final" upload.
+_NON_SOCCER_MARKER = re.compile(
+    r"\b(?:nfl|nba|mlb|nhl|ncaa|american\s+football|college\s+football|super\s+bowl|"
+    r"touchdown|quarterback|running\s+back|wide\s+receiver|linebacker|"
+    r"falcons|patriots|chiefs|cowboys|ravens|eagles|packers|49ers|bears|lions|vikings|"
+    r"steelers|jets|bills|dolphins|broncos|texans|commanders|saints|buccaneers|raiders|"
+    r"chargers|titans|colts|jaguars|panthers|bengals|browns|cardinals|seahawks|giants)\b",
+    re.IGNORECASE,
+)
+_SOCCER_CONTEXT = re.compile(
+    r"\b(?:soccer|world\s+cup|fifa|premier\s+league|champions\s+league|la\s+liga|"
+    r"serie\s+a|bundesliga|ligue\s*1|copa|euro(?:s|pean)?|messi|ronaldo|mbapp[eé]|"
+    r"bellingham|neymar|vin[ií]cius|haaland|salah|pedri|de\s+bruyne|spain|england|"
+    r"france|germany|portugal|argentina|brazil|italy|mexico|usa|morocco|croatia|"
+    r"netherlands|chelsea|arsenal|liverpool|barcelona|real\s+madrid|manchester|"
+    r"juventus|bayern|psg)\b",
+    re.IGNORECASE,
+)
+_SOCCER_MOMENT = re.compile(
     r"\b(?:goal|goals|scored|scores|save|saves|penalty|celebrat(?:e|es|ion)|winner|winning|"
     r"free\s+kick|red\s+card|yellow\s+card|assist|dribble|skill|nutmeg|tackle|volley|"
     r"header|bicycle|screamer|reaction|reacts|fan|fans|pitch\s+invasion|last[-\s]minute|"
     r"comeback|upset|equalizer|equaliser|stoppage|final\s+whistle|miss(?:ed)?|own\s+goal)\b",
     re.IGNORECASE,
 )
+_GENERIC_MOMENT_TITLE = re.compile(
+    r"^(?:final|goal|goals|match|game|highlights?|moment|reaction|fans?|football|soccer)"
+    r"(?:\s+(?:final|goal|goals|match|game|highlights?|moment|reaction|fans?|football|soccer)){0,2}$",
+    re.IGNORECASE,
+)
+
+
+def football_title_ok(title, channel=""):
+    """Return True only for a specific, association-football moment title."""
+    text = " ".join(str(title or "").split()).strip()
+    source = " ".join(str(channel or "").split()).strip()
+    if not text or _NON_SOCCER_MARKER.search(f"{text} {source}"):
+        return False
+    normalized = re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    if _GENERIC_MOMENT_TITLE.fullmatch(normalized):
+        return False
+    return bool(_SOCCER_CONTEXT.search(text) and _SOCCER_MOMENT.search(text))
 
 
 def run_tool_safe(name, args):
@@ -132,51 +171,54 @@ CATEGORY_META = {
 
 
 def screen_candidates(cands):
-    """LLM relevance gate: keep only candidates whose title clearly describes ACTUAL World-Cup
-    footage in English. The finder's keyword search can't tell a real goal clip from a news
-    studio talking about goals (a Hindi Zee News record-discussion segment got posted on
-    2026-07-05) -- this is the semantic check the deterministic title filter can't do.
-    On a whole-chain LLM failure returns cands unchanged (the deterministic filter already ran;
-    better to post a probably-fine clip than to silently stop posting)."""
-    listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
+    """Keep only specific, English association-football footage.
+
+    The deterministic gate runs before and after the LLM so a provider outage
+    cannot turn into an unscreened upload.  A false reject is a quiet poll; a
+    false accept is a wrong-audience post, so this path fails closed.
+    """
+    safe_cands = [c for c in cands if football_title_ok(
+        c.get("title", ""), c.get("channel", "") or c.get("handle", ""))]
+    if not safe_cands:
+        return []
+    listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(safe_cands))
     prompt = (
         f"CANDIDATES:\n{listing}\n\n"
         'Return ONE JSON object: {"matches": [<int indices>]}\n'
         "Return the indices of every candidate whose title clearly describes ACTUAL FOOTAGE of "
-        "ONE SINGLE specific football/soccer moment (World Cup content is welcome but not "
-        "required): a goal, save, skill, celebration, streamer/fan reaction, or viral "
-        "on-the-ground moment. EXCLUDE: ranked lists and Top-N countdowns, "
+        "ONE SINGLE specific association-football/soccer moment (World Cup content is welcome "
+        "but not required): a goal, save, skill, celebration, streamer/fan reaction, or viral "
+        "on-the-ground moment. EXCLUDE: American football/NFL and every other non-soccer sport, "
+        "ranked lists and Top-N countdowns, "
         "'most/best X in history' or all-time stat/record pieces, player-vs-player comparisons, "
         "compilations and montages, news reports and news-channel segments, studio "
         "discussion/analysis, previews, predictions, interviews, press conferences, podcasts, "
-        "anything featuring the streamer iShowSpeed, and anything whose title is not primarily "
-        "in English. Output JSON only.")
+        "anything featuring the streamer iShowSpeed, generic titles such as 'Final', and anything "
+        "whose title is not primarily in English. Output JSON only.")
     try:
         out = llm_complete(prompt, system="You screen clip titles for a strict content filter. Strict JSON.",
                            json_mode=True, temperature=0.2)
         idxs = sorted({i for i in parse_json(out["text"]).get("matches", [])
-                       if isinstance(i, int) and 0 <= i < len(cands)})
+                       if isinstance(i, int) and 0 <= i < len(safe_cands)})
     except Exception as e:
-        print(f"::warning::candidate screen failed ({str(e)[:120]}); using unscreened candidates",
+        print(f"::warning::candidate screen failed ({str(e)[:120]}); rejecting candidates",
               file=sys.stderr)
-        return cands
-    screened = [cands[i] for i in idxs]
+        return []
+    screened = [safe_cands[i] for i in idxs]
     if screened:
         return screened
 
-    # LLM title screens can over-reject fresh football uploads when titles are short, slangy,
-    # or use a broadcaster's generic match wording. Keep a narrow deterministic rescue so a
-    # healthy picker does not turn into a permanent no-video loop: title_ok/channel_ok already
-    # removed news/listicles, and this marker gate still requires a recognizable football moment.
-    fallback = [c for c in cands if _MOMENT_MARKER.search(c.get("title", ""))]
-    if fallback:
-        print("::warning::semantic screen rejected every candidate; using moment-marker fallback",
+    # LLM title screens can over-reject fresh uploads when titles are short or slangy.  Rescue
+    # only candidates that already passed the strict deterministic gate; never widen to a generic
+    # reaction/fan marker as the old fallback did.
+    if safe_cands:
+        print("::warning::semantic screen rejected every candidate; using strict soccer fallback",
               file=sys.stderr)
-        return fallback
+        return safe_cands
     return []
 
 
-def build_meta(cand, handle):
+def build_meta(cand, handle, instagram_handle="@itsmomoclips"):
     """Make the burned card title + the YouTube/IG posted text from a candidate."""
     raw = cand.get("title", "").strip()
     cat = cand.get("category", "popular")
@@ -190,7 +232,7 @@ def build_meta(cand, handle):
     hashtags = " ".join(f"#{t}" for t in dict.fromkeys(tags))
     subject = "football clips" if cat == "football" else "World Cup clips"
     description = f"{card}\n\n{hashtags}\n\nFollow {handle} for daily {subject}."
-    ig_caption = f"{card} {emoji}\n\nFollow {handle} for daily {subject} ⚽\U0001F525\n\n{hashtags}"
+    ig_caption = f"{card} {emoji}\n\nFollow {instagram_handle} for daily {subject} ⚽\U0001F525\n\n{hashtags}"
     return card, yt_title, description, ig_caption, tags
 
 
@@ -209,7 +251,10 @@ def main():
                          "SELF_ONLY otherwise).")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"],
                     help="YouTube privacy (default public -- Moemen's go-ahead 2026-07-05)")
-    ap.add_argument("--handle", default="@itsmomoclips")
+    ap.add_argument("--handle", default="@itsmomoclip",
+                    help="YouTube watermark/description handle (verified channel: @Itsmomoclip)")
+    ap.add_argument("--instagram-handle", default="@itsmomoclips",
+                    help="Instagram handle used in the Reel caption")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_CLIPS", "8")),
                     help="Daily post cap so a busy match day doesn't flood the channel")
     ap.add_argument("--window", default="today", choices=["today", "week"])
@@ -278,7 +323,7 @@ def main():
     def try_build(candidates):
         local_attempts = []
         for c in candidates[: max(1, min(5, len(candidates)))]:
-            _card, _yt, _desc, _cap, _tags = build_meta(c, args.handle)
+            _card, _yt, _desc, _cap, _tags = build_meta(c, args.handle, args.instagram_handle)
             build_args = ["--url", c["url"], "--title", _card, "--handle", args.handle,
                           "--source-handle", c.get("handle", ""), "--out", FINAL]
             if args.music:

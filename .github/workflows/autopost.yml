@@ -95,7 +95,7 @@ jobs:
             # faster-whisper (ctranslate2) has no wheels on some Python versions.
             # The RANKING pipeline never needs it, so fall back to the ranking-critical subset.
             echo "::warning::full requirements failed; installing the ranking-critical subset (no faster-whisper)"
-            pip install python-dotenv groq edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
+            pip install python-dotenv groq openai google-generativeai edge-tts imageio-ffmpeg google-api-python-client google-auth google-auth-httplib2 requests httpx tavily-python exa-py yt-dlp
           fi
           # YouTube breaks old yt-dlp builds constantly; force the latest every run.
           pip install --upgrade yt-dlp

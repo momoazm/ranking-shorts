@@ -225,7 +225,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--title", required=True, help="Card title, e.g. 'SPEED REACTS - MBAPPE GOAL'")
     ap.add_argument("--channel", default=DEFAULT_CHANNEL)
-    ap.add_argument("--handle", default="@itsmomoclips")
+    ap.add_argument("--handle", default="@itsmomoclip", help="YouTube watermark handle")
     ap.add_argument("--record", type=float, default=240.0, help="Seconds of live edge to capture")
     ap.add_argument("--window", type=float, default=42.0, help="Length of the loudest cut (<58s)")
     ap.add_argument("--check-only", action="store_true", help="Just report whether he is live")

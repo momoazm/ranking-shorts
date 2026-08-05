@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import random
+import re
 
 from _common import REPO_ROOT, load_env, emit, fail, title_ok
 
@@ -46,32 +47,41 @@ STREAMER_QUERIES = [
 # results often omit a creator name from the title or channel metadata, which is why they are not
 # part of the strict first pass.
 STREAMER_FALLBACK_QUERIES = [
-    "funny Twitch moments",
-    "viral streamer reaction clips",
-    "streamer rage moments short",
-    "live streamer funniest clips",
+    "funny Twitch streamer moments shorts",
+    "viral streamer reaction clips shorts",
+    "streamer rage moments shorts",
+    "live streamer funniest clips shorts",
+    "Kai Cenat reaction clips shorts",
+    "Jynxzi rage moments shorts",
+    "CaseOh funniest clips shorts",
+    "xQc reaction clips shorts",
 ]
 
 STREAMER_HINTS = (
-    "streamer", "twitch", "kai cenat", "jynxzi", "caseoh", "xqc", "adin ross",
+    "streamer", "twitch", "kai cenat", "kaicenat", "jynxzi", "caseoh", "xqc", "adin ross", "adinross",
     "pokimane", "ludwig", "hasan", "tarik", "nmplol", "sodapoppin", "faze",
 )
 
-STREAMER_CONTENT_HINTS = (
-    "funny", "reaction", "rage", "chat", "moment", "clip", "live", "stream",
-    "fail", "scream", "meltdown",
+_NON_STREAMER_SPORT = re.compile(
+    r"\b(?:nfl|nba|mlb|nhl|ncaa|baseball|basketball|american\s+football|soccer|football|"
+    r"hockey|cricket|pitcher|pitching|home\s+run|touchdown|quarterback|premier\s+league|"
+    r"champions\s+league|world\s+cup)\b",
+    re.IGNORECASE,
 )
+_PROMO_TITLE = re.compile(r"^\s*(?:follow|subscribe|join|watch\s+me|link\s+in\s+bio)\b", re.IGNORECASE)
+_NON_CLIP_TITLE = re.compile(r"\b(?:official\s+music\s+video|music\s+video|diss\s+track|lyrics?|album|song)\b", re.IGNORECASE)
 
-
-def streamer_signal(title, channel):
-    text = f"{title} {channel}".lower()
-    return any(hint in text for hint in STREAMER_HINTS)
-
-
-def streamer_content_signal(title):
-    """Allow a broad fallback result only when its title describes a clip-worthy moment."""
-    text = (title or "").lower()
-    return any(hint in text for hint in STREAMER_CONTENT_HINTS)
+def streamer_signal(title, channel, handle=""):
+    text = f"{title} {channel} {handle}".lower()
+    known_creator = any(hint in text for hint in STREAMER_HINTS
+                        if hint not in {"streamer", "twitch"})
+    if known_creator or "streamer" in text:
+        return True
+    # A bare "Twitch" in a title is not evidence (athlete compilations use it too). When
+    # that is the only signal, require uploader metadata itself to look like a creator
+    # channel so a generic sports channel cannot pass on query context alone.
+    meta = f"{channel} {handle}".lower()
+    return "twitch" in text and any(marker in meta for marker in ("clips", "live", "stream", "twitch"))
 
 
 def load_used(path):
@@ -127,25 +137,28 @@ def main():
 
     seen, errors = {}, []       # seen = id -> candidate (deduped across queries)
 
-    def add_entries(entries, allow_broad_fallback=False):
+    def add_entries(entries):
         """Add safe, known-duration candidates from one streamer-focused search."""
         for en in entries:
             vid = en.get("id")
             dur = en.get("duration")
             title = (en.get("title") or "").strip()
             channel = (en.get("channel") or en.get("uploader") or "").strip()
+            handle = (en.get("uploader_id") or en.get("channel_id") or "").strip()
             if not vid or not title or vid in seen or vid in used:
                 continue
             # English-audience screen: drop non-Latin-script, news/analysis/talk, list, and
             # blocked-creator markers before they ever reach the ranker.
             if not title_ok(title):
                 continue
-            # The strict pass requires a creator/streamer signal in the title or channel. The
-            # fallback pass is still streamer-focused by query, but permits generic creator titles
-            # such as "funny reaction" when YouTube omitted the channel metadata. It must still
-            # describe a clip-worthy moment; generic gaming/VOD results do not pass this gate.
-            if not streamer_signal(title, channel) and not (
-                    allow_broad_fallback and streamer_content_signal(title)):
+            if (_NON_STREAMER_SPORT.search(f"{title} {channel} {handle}")
+                    or _PROMO_TITLE.search(title) or _NON_CLIP_TITLE.search(title)):
+                continue
+            # Every result must carry an explicit creator/streamer signal in its title or channel.
+            # Search-query context is not evidence: the previous broad fallback admitted an NFL
+            # Falcons fan reaction simply because the word "reaction" appeared in its title.
+            # If YouTube omits both signals, skip it and keep the workflow fail-closed.
+            if not streamer_signal(title, channel, handle):
                 continue
             # Require a KNOWN, short duration: unknown usually means a live stream, and a long VOD
             # would download the whole file. Both must be excluded before the build step.
@@ -154,6 +167,7 @@ def main():
             seen[vid] = {"id": vid, "title": title, "duration": float(dur),
                          "url": f"https://www.youtube.com/watch?v={vid}",
                          "channel": channel, "uploader": en.get("uploader") or channel,
+                         "handle": handle,
                          "source": "youtube"}
 
     for q in queries:
@@ -179,7 +193,7 @@ def main():
             except Exception as e:
                 errors.append(f"{q}: {str(e)[:80]}")
                 continue
-            add_entries(entries, allow_broad_fallback=True)
+            add_entries(entries)
             if len(seen) >= args.max:
                 break
 
