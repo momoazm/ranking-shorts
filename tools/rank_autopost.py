@@ -288,7 +288,13 @@ def main():
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
 
-    _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+    rank_args = ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED]
+    # Rank a few reserves in streamer mode.  The builder downloads the selected entries in order
+    # and can skip a deleted/bot-blocked source; reserves let it still produce a real Top-5 instead
+    # of silently shrinking the countdown to four clips.
+    if topic.get("genre") == "streamer":
+        rank_args += ["--count", "8"]
+    _r, rerr = run_tool_safe("rank_clips.py", rank_args)
     if rerr and topic.get("genre") != "fails" and not no_reddit_rescue:
         # last-resort safety net (e.g. re-classification flake right after the probe confirmed
         # enough candidates) -- drop the theme for this run rather than crash
@@ -296,7 +302,8 @@ def main():
         print(f"::warning::{fallback_reason}", file=sys.stderr)
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
-        run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+        fallback_rank_args = ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED]
+        run_tool("rank_clips.py", fallback_rank_args)
     elif rerr:
         raise RuntimeError(rerr)
 

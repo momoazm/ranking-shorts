@@ -75,6 +75,8 @@ def main():
     ap.add_argument("--candidates", default=".tmp/rank_candidates.json")
     ap.add_argument("--topic", default=".tmp/rank_topic.json")
     ap.add_argument("--out", default=".tmp/ranked.json")
+    ap.add_argument("--count", type=int, default=5,
+                    help="Number of ranked entries to return (5 for a normal Top-5; larger values provide build reserves).")
     ap.add_argument("--classify-angle", default=None, choices=list(ANGLE_DESC),
                     help="Probe mode: just count/list candidates fitting this angle, no ranking. "
                          "Lets the caller pick a sourceable angle BEFORE committing to a topic title.")
@@ -109,20 +111,21 @@ def main():
             return
 
     listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
-    schema = """Return ONE JSON object:
-{
-  "entries": [   // EXACTLY 5 items, ordered rank 5 (shown FIRST -- the hook) to rank 1 (shown LAST -- the best payoff)
-    {"rank": 5, "candidate_index": <int index from the list>, "label": "<short funny meme caption, 1-3 words>"},
-    {"rank": 4, ...}, {"rank": 3, ...}, {"rank": 2, ...}, {"rank": 1, ...}
+    target_count = max(5, args.count)
+    schema = f"""Return ONE JSON object:
+{{
+  "entries": [   // EXACTLY {target_count} items, ordered rank {target_count} (shown FIRST -- the hook) to rank 1 (shown LAST -- the best payoff)
+    {{"rank": {target_count}, "candidate_index": <int index from the list>, "label": "<short funny meme caption, 1-3 words>"}},
+    ...,
+    {{"rank": 1, "candidate_index": <int index from the list>, "label": "<short funny meme caption, 1-3 words>"}}
   ]
-}
-Pick the 5 candidates that best MATCH THE TOPIC. HOOK RULE (critical for retention -- a countdown
-lives or dies on its first 2 seconds): rank #5 is the FIRST clip the viewer sees after the cold-open
+}}
+Pick the {target_count} candidates that best MATCH THE TOPIC. HOOK RULE (critical for retention -- a countdown
+lives or dies on its first 2 seconds): rank #{target_count} is the FIRST clip the viewer sees after the cold-open
 teaser, so it MUST be the single most instantly eye-catching / high-action / "wait, WHAT?!" clip of
-the five -- the strongest opener, NOT the weakest. Rank #1 (shown last) stays the overall BEST payoff
-(the teaser promises it). Order the middle three (ranks #4 -> #2) by the criterion, ascending. So:
-pick the 5 best clips, put the best payoff at #1, put the most immediately gripping clip at #5, and
-rank the middle three by the criterion. IMPORTANT: prefer
+the selected set -- the strongest opener, NOT the weakest. Rank #1 (shown last) stays the overall BEST payoff
+(the teaser promises it). Order the middle ranks by the criterion, ascending. Put the best payoff at #1,
+put the most immediately gripping clip at #{target_count}, and rank the middle clips by the criterion. IMPORTANT: prefer
 clips whose title shows the actual event the topic promises (for a "fails" topic pick real fails/
 accidents/mishaps -- someone falls, crashes, slips, things go wrong; avoid merely cute or calm clips
 unless nothing better exists). NEVER pick a clip whose title suggests death/injury, grief or tribute,
@@ -167,10 +170,10 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
         clean.append({"rank": e.get("rank"), "candidate_index": idx, "id": c["id"],
                       "title": c["title"], "url": c["url"], "duration": c.get("duration"),
                       "label": str(e.get("label", "")).strip()[:16]})
-    if len(clean) < 5:
+    if len(clean) < target_count:
         fail(f"Ranking produced only {len(clean)} valid entries.", entries=clean)
         return
-    clean = clean[:5]
+    clean = clean[:target_count]
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:

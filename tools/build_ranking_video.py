@@ -8,7 +8,8 @@ Style (per the user's spec):
     their strongest audible/action beat.
   * a countdown overlay (#N + the video title) sits on each clip.
 
-Resilient: entries whose download/normalize fails are skipped and ranks renumbered (need >=3).
+Resilient: entries whose download/normalize fails are skipped and ranks renumbered, using ranked
+reserve entries when available; a ranking workflow still requires a complete Top-5.
 
 Usage:
     python tools/build_ranking_video.py --ranked .tmp/ranked.json [--music .tmp/music.mp3] \
@@ -421,12 +422,12 @@ def main():
         if len(clips) >= 5:                            # five is enough for a Top-5
             break
 
-    if len(clips) < 3:
+    if len(clips) < 5:
         hint = ""
         if any("bot" in e.lower() or "sign in" in e.lower() for e in errors):
             hint = (" -- YouTube is blocking downloads from this IP (bot-check). On GitHub Actions "
                     "set the YT_COOKIES secret to a valid Netscape cookies.txt.")
-        fail(f"Only {len(clips)} usable clips — need >=3.{hint}", reasons=errors[:8])
+        fail(f"Only {len(clips)} usable clips — need >=5 for a Top-5 countdown.{hint}", reasons=errors[:8])
         return
 
     n = len(clips)
