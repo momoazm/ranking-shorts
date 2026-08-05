@@ -32,9 +32,12 @@ CLIP_TMP = ".tmp/clip"
 
 
 def esc(text):
-    """ASS-safe: strip braces/backslashes/newlines that would break the filter."""
-    return (str(text).replace("\\", " ").replace("{", "(").replace("}", ")")
-            .replace("\n", " ").strip())
+    """ASS-safe text, shared with the ranking builder.
+
+    In addition to escaping ASS control characters, remove emoji/symbol glyphs
+    that the runner's Arial/libass stack cannot render and would show as tofu.
+    """
+    return brv.esc(text)
 
 
 def clean_title(raw):

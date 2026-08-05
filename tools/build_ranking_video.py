@@ -24,6 +24,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 
 from _common import REPO_ROOT, load_env, emit, fail
 from _media import run_ffmpeg, get_ffmpeg
@@ -41,7 +42,14 @@ def ass_time(t):
 
 
 def esc(text):
-    return str(text).replace("\\", " ").replace("{", "(").replace("}", ")").replace("\n", " ").strip()
+    # The runner's ASS font is intentionally conservative.  Drop emoji and
+    # other symbol glyphs that libass/Arial renders as visible tofu squares,
+    # while keeping normal Unicode letters and punctuation in the title.
+    safe = "".join(ch for ch in str(text)
+                    if ord(ch) <= 0xFFFF
+                    and ch not in "\ufe0e\ufe0f\u200d"
+                    and unicodedata.category(ch) not in {"So", "Sk"})
+    return safe.replace("\\", " ").replace("{", "(").replace("}", ")").replace("\n", " ").strip()
 
 
 def _ydl_opts(out_base, fmt, player_client=None, use_proxy=True):
