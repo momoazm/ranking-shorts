@@ -12,7 +12,7 @@ openai>=1.40                 # OpenAI-compatible client for Cerebras / OpenRoute
 
 # Voiceover: Edge-TTS (free, keyless) + optional Fish Audio character voices (paid, FISH_AUDIO_API_KEY)
 edge-tts>=6.1
-fish-audio-sdk>=2024.1
+fish-audio-sdk>=1.0.0
 
 # Caption alignment (local, free; CPU-friendly, downloads a Whisper model on first run)
 faster-whisper>=1.0
