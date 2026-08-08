@@ -1,4 +1,8 @@
-name: momoclips - World Cup single clips
+name: momoclips - World Cup single clips (retired)
+
+# RETIRED: this workflow used the ranking account's destinations for football single clips.
+# Keep the file for history/manual inspection, but do not let it publish until a separate
+# football destination account is configured.
 
 # Polls YouTube every ~20 min for a FRESH World-Cup moment (viral clips / fan+streamer
 # reactions -- goals moved to the LIVE watcher worldcup_live.yml on 2026-07-06, and no
@@ -8,21 +12,10 @@ name: momoclips - World Cup single clips
 # happened" behaviour. Runs on GitHub-hosted ubuntu; yt-dlp routes through WARP (YouTube
 # bot-checks datacenter IPs). See tools/clip_autopost.py.
 #
-# LIVE (2026-07-04): the 20-min schedule is ENABLED -- it auto-posts every 20 min when a fresh
-# clip is found (dedup + daily cap MAX_DAILY_CLIPS=8 keep it from flooding). Scheduled runs post
-# YouTube = PUBLIC by default (Moemen's go-ahead 2026-07-05); Instagram has no unlisted, so IG
-# Reels are public on every live run anyway.
-# Copyright: official goal footage is heavily Content-ID-claimed; posting it is an accepted risk
-# (decision log 2026-07-04). To PAUSE: re-comment the schedule, or disable the workflow in the
-# GitHub Actions UI.
+# The schedule was removed on 2026-08-08. The job is also hard-skipped below so an accidental
+# manual dispatch cannot leak non-ranking content to the streamer-only account.
 
 on:
-  schedule:
-    # Hourly (2026-07-10; was */20). GitHub silently drops most ticks when the account asks
-    # for hundreds/day -- the */15+*/15+*/20 trio was delivered as ~3 batched runs/day EACH,
-    # which also delayed clipping-auto's and follower-race's daily crons by hours. Fewer,
-    # spaced ticks actually get DELIVERED more often; posts still dedupe on used_clips.json.
-    - cron: "29 * * * *"
   workflow_dispatch:
     inputs:
       privacy:
@@ -54,6 +47,7 @@ permissions:
 
 jobs:
   clip:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

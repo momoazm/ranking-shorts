@@ -17,8 +17,8 @@ name: ranking-shorts
 # silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
 
 on:
-  # The ranking account is dedicated to streamer moments. Football single clips remain isolated
-  # in the separate worldcup workflows, and MrBeast sourcing remains in clipping-auto.
+  # The ranking account is dedicated to streamer moments. World Cup/single-clip workflows are
+  # retired for this destination; MrBeast sourcing remains in clipping-auto.
   schedule:
     # Fires at :50 the hour before each slot; the hold step releases at the exact target minute.
     - cron: "50 1,10,13,16,19,22 * * *"
@@ -220,6 +220,9 @@ jobs:
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           NO_REDDIT_SOURCES: "1"
           RANKING_SOURCE: streamer
+          # A scheduled slot with no five-clip streamer pool is a clean no-post, not a red run.
+          # Manual dispatches keep failing loudly so source/config problems remain diagnosable.
+          NO_SOURCE_OK: ${{ github.event_name == 'schedule' && '1' || '0' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
           PLATFORMS="youtube,instagram,email"

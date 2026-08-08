@@ -1,4 +1,8 @@
-name: momoclips - World Cup LIVE watcher
+name: momoclips - World Cup LIVE watcher (retired)
+
+# RETIRED: this workflow used the ranking account's destinations for football live coverage.
+# Keep the file for history/manual inspection, but do not let it publish until a separate
+# football destination account is configured.
 
 # EVENT-DRIVEN World-Cup coverage (Moemen's spec 2026-07-06). Every 15 min a ~30s GATE step
 # asks ESPN's free scoreboard JSON "is a match live or kicking off within ~25 min?". If not,
@@ -8,19 +12,10 @@ name: momoclips - World Cup LIVE watcher
 #                (our own capture of his stream -- clip_speed_reaction.py)
 #   FULL TIME -> star-player performance recap + brace/hat-trick goal compilation + a Short
 #                from TOD-by-beIN's official match-highlights upload when it lands (2026-07-11)
-# Posts are PUBLIC by default (channel went public 2026-07-05). state/worldcup_watch.json
-# (cached, shared with the 20-min poller's cache) makes everything idempotent across runs.
-# To PAUSE: disable this workflow in the Actions UI.
+# The schedule was removed on 2026-08-08. The job is also hard-skipped below so an accidental
+# manual dispatch cannot leak non-ranking content to the streamer-only account.
 
 on:
-  schedule:
-    # SEED ticks only (2026-07-10). The */15 cron stalled TWICE (~3 delivered runs/day instead
-    # of ~96 -> EGY-ARG missed 07-08, MAR-FRA missed 07-09): GitHub silently drops most ticks
-    # when an account requests hundreds/day. Coverage no longer depends on cron punctuality --
-    # any ONE delivered tick starts a RELAY CHAIN (gate --chain): the run naps to a near kickoff
-    # and watches, or sleeps ~50 min and re-dispatches itself (dispatch events are delivered
-    # reliably). 12 cheap seeds/day just make sure a chain gets seeded.
-    - cron: "11 */2 * * *"
   workflow_dispatch:
     inputs:
       relay:
@@ -73,6 +68,7 @@ permissions:
 
 jobs:
   watch:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:

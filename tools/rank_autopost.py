@@ -196,11 +196,25 @@ def main():
 
     requested_genre = topic.get("genre")
     fallback_reason = None
+    account_streamer_only = source == "streamer" or args.force_genre == "streamer"
+    if account_streamer_only and requested_genre != "streamer":
+        raise RuntimeError("Streamer-only account received a non-streamer topic; refusing to publish.")
 
     if topic.get("genre") == "streamer":
         _f, ferr = run_tool_safe("find_streamer_clips.py",
                                  ["--max", "30", "--history", HISTORY, "--out", CANDS])
         if ferr:
+            # A scheduled slot with no source is an honest no-op: do not turn a temporary
+            # YouTube search shortage into a red Actions run, and never rescue it with generic
+            # fails/football clips because this account is streamer-only.
+            if os.environ.get("NO_SOURCE_OK") == "1":
+                payload = {"status": "no_source", "content_policy": "streamer-only",
+                           "source_mode": source, "requested_genre": requested_genre,
+                           "detail": ferr}
+                if _f and isinstance(_f, dict) and _f.get("count") is not None:
+                    payload["candidate_count"] = _f["count"]
+                emit(payload)
+                return
             raise RuntimeError(f"streamer source failed: {ferr}")
     elif topic.get("genre") == "worldcup":
         # Three angles now. fan/match share ONE football source pool; "streamer" (FaZe/
@@ -332,6 +346,10 @@ def main():
 
     build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
                   "--title", topic["title"], "--out", FINAL]
+    if topic.get("genre") == "streamer":
+        # A streamer ranking is always a real #5 -> #1 countdown, never a silently shortened
+        # Top-3/Top-4 after a download or normalization failure.
+        build_args += ["--min-clips", "5"]
     if music_path:
         build_args += ["--music", music_path]
     build = run_tool("build_ranking_video.py", build_args)
@@ -350,6 +368,7 @@ def main():
               "entries": build.get("entries"), "elapsed_sec": round(time.time() - t0, 1),
               "source_mode": source,
               "requested_genre": requested_genre, "used_genre": topic.get("genre"),
+              "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
               "fallback_reason": fallback_reason, "delivery": {}}
 
     # 6) deliver. Host the finished MP4 once for the public-url platforms, then use the local

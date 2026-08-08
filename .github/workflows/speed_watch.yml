@@ -1,9 +1,8 @@
-name: momoclips - iShowSpeed LIVE watcher
+name: momoclips - iShowSpeed LIVE watcher (retired)
 
 # DISABLED 2026-07-12 (Moemen's call: no iShowSpeed content on momoclips at all). Manually
-# disabled in the Actions UI (gh workflow disable) -- the cron below no longer fires. The file
-# is kept (not deleted) in case the decision reverses; re-enable with `gh workflow enable
-# speed_watch.yml` if so.
+# disabled in the Actions UI and hard-skipped below. The file is kept (not deleted) in case the
+# decision reverses; remove the retirement guard only after a separate destination is configured.
 #
 # PARALLEL to worldcup_live.yml (Moemen's spec 2026-07-09). Same cheap ESPN gate: every 15 min a
 # ~30s step asks "is a World Cup match live or kicking off within ~25 min?" -- because that's the
@@ -16,12 +15,6 @@ name: momoclips - iShowSpeed LIVE watcher
 # no longer captures Speed (no double-posting). state/speed_watch.json (cached) keeps it idempotent.
 
 on:
-  schedule:
-    # SEED ticks only (2026-07-10; offset from worldcup_live's seeds). GitHub silently drops
-    # most high-frequency cron ticks (the */15 delivered ~3 runs/day -> MAR-FRA reaction was
-    # missed). Any ONE delivered tick now starts a RELAY CHAIN (gate --chain) that carries
-    # coverage to every kickoff today by re-dispatching itself; see worldcup_live.yml.
-    - cron: "41 */2 * * *"
   workflow_dispatch:
     inputs:
       relay:
@@ -56,6 +49,7 @@ permissions:
 
 jobs:
   watch:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 350
     steps:

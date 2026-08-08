@@ -11,7 +11,7 @@ import argparse
 import json
 import os
 
-from _common import load_env, emit, fail
+from _common import channel_ok, load_env, emit, fail
 from _llm import llm_complete, parse_json
 
 ANGLE_DESC = {
@@ -82,7 +82,8 @@ def main():
 
     load_env()
     try:
-        cands = json.load(open(args.candidates, encoding="utf-8"))["candidates"]
+        candidate_doc = json.load(open(args.candidates, encoding="utf-8"))
+        cands = candidate_doc["candidates"]
     except (OSError, json.JSONDecodeError, KeyError) as e:
         fail(f"Could not read candidates: {e}")
         return
@@ -100,6 +101,27 @@ def main():
     except (OSError, json.JSONDecodeError, KeyError) as e:
         fail(f"Could not read topic: {e}")
         return
+
+    if topic.get("genre") == "streamer":
+        streamer_hints = (
+            "streamer", "twitch", "kai cenat", "kaicenat", "jynxzi", "caseoh", "xqc",
+            "adin ross", "adinlive", "pokimane", "ludwig", "hasan", "hasanabi", "tarik",
+            "nmplol", "sodapoppin", "faze", "clix", "fanum", "plaqueboymax", "ddg",
+        )
+        invalid = []
+        for c in cands:
+            identity = str(c.get("streamer_identity") or c.get("channel") or "").strip()
+            haystack = f"{c.get('title', '')} {identity} {c.get('uploader', '')}".lower()
+            if (c.get("content_policy") != "streamer-only"
+                    or c.get("content_type") != "streamer_clip"
+                    or not identity
+                    or not channel_ok(identity)
+                    or not any(hint in haystack for hint in streamer_hints)):
+                invalid.append(c.get("id") or c.get("title") or "unknown")
+        if invalid:
+            fail("Streamer-only ranking received candidates without a verified streamer identity.",
+                 content_policy="streamer-only", invalid_candidates=invalid[:10])
+            return
 
     angle = topic.get("angle") if topic.get("genre") == "worldcup" else None
     if angle in ANGLE_DESC:
@@ -164,9 +186,15 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
             continue
         seen.add(idx)
         c = cands[idx]
-        clean.append({"rank": e.get("rank"), "candidate_index": idx, "id": c["id"],
+        clean.append({"rank": 5 - len(clean), "candidate_index": idx, "id": c["id"],
                       "title": c["title"], "url": c["url"], "duration": c.get("duration"),
-                      "label": str(e.get("label", "")).strip()[:16]})
+                      "label": str(e.get("label", "")).strip()[:16],
+                      "channel": c.get("channel") or c.get("uploader"),
+                      "uploader": c.get("uploader") or c.get("channel"),
+                      "source": c.get("source"), "source_feed": c.get("source_feed"),
+                      "content_type": c.get("content_type"),
+                      "streamer_identity": c.get("streamer_identity"),
+                      "content_policy": c.get("content_policy")})
     if len(clean) < 5:
         fail(f"Ranking produced only {len(clean)} valid entries.", entries=clean)
         return
@@ -174,7 +202,10 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"title": topic.get("title"), "hook": topic.get("hook"), "entries": clean},
+        json.dump({"title": topic.get("title"), "hook": topic.get("hook"),
+                   "genre": topic.get("genre"),
+                   "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
+                   "entries": clean},
                   f, indent=2, ensure_ascii=False)
     emit({"count": len(clean), "entries": [{"rank": e["rank"], "title": e["title"][:50]} for e in clean],
           "provider": out["provider"], "path": args.out})

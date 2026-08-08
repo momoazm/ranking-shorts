@@ -10,9 +10,10 @@ groq>=0.11
 google-generativeai>=0.8     # Gemini (script fallback + optional TTS fallback)
 openai>=1.40                 # OpenAI-compatible client for Cerebras / OpenRouter / Mistral endpoints
 
-# Voiceover: Edge-TTS (free, keyless) + optional Fish Audio character voices (paid, FISH_AUDIO_API_KEY)
+# Voiceover: Edge-TTS (free, keyless). Fish Audio is optional and installed only for the paid
+# character-voice engine; keeping it out of the base set prevents unrelated CI jobs from failing
+# when the optional SDK has no compatible wheel.
 edge-tts>=6.1
-fish-audio-sdk>=2024.1
 
 # Caption alignment (local, free; CPU-friendly, downloads a Whisper model on first run)
 faster-whisper>=1.0
