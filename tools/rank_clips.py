@@ -70,6 +70,24 @@ def filter_by_angle(cands, angle):
     return [cands[i] for i in idxs], None
 
 
+def extract_ranking_entries(data):
+    """Return the model's selected rows while tolerating harmless wrapper-key drift."""
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        raise ValueError("LLM JSON response was not an object or array")
+    entries = data.get("entries")
+    if entries is None:
+        for key in ("ranking", "rankings", "ranked_clips", "clips", "items", "results"):
+            candidate = data.get(key)
+            if isinstance(candidate, list):
+                entries = candidate
+                break
+    if not isinstance(entries, list):
+        raise ValueError("LLM JSON response did not contain an entries array")
+    return entries
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", default=".tmp/rank_candidates.json")
@@ -169,11 +187,20 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
               f"GENRE: {topic.get('genre')}\n\n{genre_guard}"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
+    ranking_system = "You rank clips for viral countdown Shorts. English. Strict JSON."
     try:
-        out = llm_complete(prompt, system="You rank clips for viral countdown Shorts. English. Strict JSON.",
-                           json_mode=True, temperature=0.85)
-        data = parse_json(out["text"])
-        entries = data["entries"]
+        out = llm_complete(prompt, system=ranking_system, json_mode=True, temperature=0.85)
+        try:
+            entries = extract_ranking_entries(parse_json(out["text"]))
+        except Exception as first_error:
+            # Some providers honor JSON mode but still vary the top-level key. A single
+            # low-temperature retry keeps a transient schema miss from failing the whole
+            # media build; the candidate/content-policy guards below still reject unsafe rows.
+            retry_prompt = (prompt + "\n\nYour previous response was not usable. Return ONLY one JSON object "
+                            'with exactly this top-level key: "entries". The value must be an '
+                            "array of exactly five objects, each with candidate_index and label.")
+            out = llm_complete(retry_prompt, system=ranking_system, json_mode=True, temperature=0.2)
+            entries = extract_ranking_entries(parse_json(out["text"]))
     except Exception as e:
         fail(f"Ranking failed: {e}")
         return
@@ -181,7 +208,14 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
     clean = []
     seen = set()
     for e in entries:
+        if not isinstance(e, dict):
+            continue
         idx = e.get("candidate_index")
+        if idx is None:
+            for key in ("index", "clip_index", "candidate"):
+                if isinstance(e.get(key), int):
+                    idx = e[key]
+                    break
         if not isinstance(idx, int) or not (0 <= idx < len(cands)) or idx in seen:
             continue
         seen.add(idx)
