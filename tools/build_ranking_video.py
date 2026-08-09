@@ -350,6 +350,8 @@ def main():
     ap.add_argument("--max-total", type=float, default=58.0, help="Hard cap on total length (under 1 min)")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips are scored for their main payoff")
+    ap.add_argument("--min-clips", type=int, default=3,
+                    help="Minimum number of source clips that must render successfully")
     ap.add_argument("--teaser", dest="teaser", action="store_true", default=True,
                     help="Cold-open hook: flash ~1.2s of the #1 clip + 'WAIT FOR #1' before the "
                          "#5 countdown starts (default ON -- biggest retention lever).")
@@ -375,6 +377,19 @@ def main():
     except (OSError, json.JSONDecodeError, KeyError) as e:
         fail(f"Could not read --ranked: {e}")
         return
+
+    if args.min_clips < 1:
+        fail("--min-clips must be at least 1")
+        return
+    if data.get("content_policy") == "streamer-only":
+        invalid = [e.get("id") or e.get("title") or "unknown" for e in entries
+                   if e.get("content_type") != "streamer_clip"
+                   or not e.get("streamer_identity")
+                   or e.get("content_policy") != "streamer-only"]
+        if invalid:
+            fail("Streamer-only ranking contains an unverified entry.",
+                 content_policy="streamer-only", invalid_entries=invalid[:10])
+            return
 
     os.makedirs(TMPDIR, exist_ok=True)
     # Reserve room for the cold-open teaser so teaser + clips still fit under max-total.
@@ -421,12 +436,12 @@ def main():
         if len(clips) >= 5:                            # five is enough for a Top-5
             break
 
-    if len(clips) < 3:
+    if len(clips) < args.min_clips:
         hint = ""
         if any("bot" in e.lower() or "sign in" in e.lower() for e in errors):
             hint = (" -- YouTube is blocking downloads from this IP (bot-check). On GitHub Actions "
                     "set the YT_COOKIES secret to a valid Netscape cookies.txt.")
-        fail(f"Only {len(clips)} usable clips — need >=3.{hint}", reasons=errors[:8])
+        fail(f"Only {len(clips)} usable clips — need >={args.min_clips}.{hint}", reasons=errors[:8])
         return
 
     n = len(clips)

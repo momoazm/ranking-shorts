@@ -26,7 +26,7 @@ import json
 import os
 import random
 
-from _common import REPO_ROOT, load_env, emit, fail, title_ok
+from _common import REPO_ROOT, channel_ok, load_env, emit, fail, title_ok
 
 # Streamer search queries. Keep these focused on standalone creator moments rather than full VODs,
 # podcasts, or compilations. The generic queries ensure the pool does not depend on one creator.
@@ -36,15 +36,27 @@ STREAMER_QUERIES = [
     "CaseOh funny moments shorts",
     "xQc funny moments shorts",
     "Adin Ross funny streamer clips",
+    "Clix funny moments shorts",
+    "Ludwig funny moments shorts",
+    "HasanAbi funny streamer clips",
+    "Tarik funny moments shorts",
+    "Nmplol funny moments shorts",
     "Twitch streamer funniest reaction shorts",
     "streamer rage funny clip shorts",
     "streamer chat interaction funny clip",
 ]
 
-# A second-pass roster used only when the creator-specific pass produces fewer than the five
-# clips needed for a #5 -> #1 video. These queries still describe streamer content, but their
-# results often omit a creator name from the title or channel metadata, which is why they are not
-# part of the strict first pass.
+# Official creator Shorts feeds are a safer rescue than generic search: the feed itself is scoped to
+# standalone Shorts, so a flat result with no duration is still bounded before the builder downloads
+# it. Handles that no longer exist are harmless; the finder records the error and moves on.
+STREAMER_SHORT_HANDLES = [
+    "KaiCenat", "Jynxzi", "CaseOh", "xQc", "AdinLive", "Clix", "Ludwig", "HasanAbi",
+    "tarik", "nmplol", "sodapoppin", "FaZeClan",
+]
+
+# A final search roster used only when creator-specific queries and Shorts feeds are thin. These
+# remain strict streamer searches: a result still needs an explicit streamer/creator identity in
+# its title or channel. We never admit a generic funny/fails or football result here.
 STREAMER_FALLBACK_QUERIES = [
     "funny Twitch moments",
     "viral streamer reaction clips",
@@ -53,25 +65,41 @@ STREAMER_FALLBACK_QUERIES = [
 ]
 
 STREAMER_HINTS = (
-    "streamer", "twitch", "kai cenat", "jynxzi", "caseoh", "xqc", "adin ross",
-    "pokimane", "ludwig", "hasan", "tarik", "nmplol", "sodapoppin", "faze",
+    "streamer", "twitch", "kai cenat", "kaicenat", "jynxzi", "caseoh", "xqc", "adin ross",
+    "adinlive", "pokimane", "ludwig", "hasan", "hasanabi", "tarik", "nmplol",
+    "sodapoppin", "faze", "clix", "fanum", "plaqueboymax", "ddg",
 )
-
-STREAMER_CONTENT_HINTS = (
-    "funny", "reaction", "rage", "chat", "moment", "clip", "live", "stream",
-    "fail", "scream", "meltdown",
-)
-
 
 def streamer_signal(title, channel):
     text = f"{title} {channel}".lower()
     return any(hint in text for hint in STREAMER_HINTS)
 
 
-def streamer_content_signal(title):
-    """Allow a broad fallback result only when its title describes a clip-worthy moment."""
-    text = (title or "").lower()
-    return any(hint in text for hint in STREAMER_CONTENT_HINTS)
+def parse_duration(value, duration_string=None):
+    """Return seconds from yt-dlp's numeric or human-readable flat metadata."""
+    if isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0:
+        return float(value)
+    if isinstance(value, str):
+        try:
+            parsed = float(value)
+            if parsed > 0:
+                return parsed
+        except ValueError:
+            pass
+    text = str(duration_string or "").strip()
+    if not text or ":" not in text:
+        return None
+    try:
+        parts = [int(part) for part in text.split(":")]
+    except ValueError:
+        return None
+    if len(parts) == 2:
+        minutes, seconds = parts
+        return float(minutes * 60 + seconds)
+    if len(parts) == 3:
+        hours, minutes, seconds = parts
+        return float(hours * 3600 + minutes * 60 + seconds)
+    return None
 
 
 def load_used(path):
@@ -83,12 +111,12 @@ def load_used(path):
         return set()
 
 
-def search(query, n):
-    """Flat YouTube search -> list of {id,title,duration} dicts (no download, fast)."""
+def search(target, n):
+    """Flat YouTube search/feed -> list of metadata dicts (no media download)."""
     from yt_dlp import YoutubeDL
     opts = {"quiet": True, "no_warnings": True, "noprogress": True,
             "extract_flat": "in_playlist", "skip_download": True,
-            "socket_timeout": 30, "extractor_retries": 1}
+            "socket_timeout": 30, "extractor_retries": 1, "playlistend": n}
     cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
     if os.path.isfile(cookie):
         opts["cookiefile"] = cookie
@@ -96,7 +124,8 @@ def search(query, n):
     if proxy:
         opts["proxy"] = proxy
     with YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(f"ytsearch{n}:{query}", download=False)
+        target = target if target.startswith(("http://", "https://")) else f"ytsearch{n}:{target}"
+        info = ydl.extract_info(target, download=False)
     return info.get("entries") or []
 
 
@@ -127,34 +156,39 @@ def main():
 
     seen, errors = {}, []       # seen = id -> candidate (deduped across queries)
 
-    def add_entries(entries, allow_broad_fallback=False):
-        """Add safe, known-duration candidates from one streamer-focused search."""
+    def add_entries(entries, source_feed=None, feed_is_short=False):
+        """Add candidates that carry an explicit streamer identity and a bounded source contract."""
         for en in entries:
             vid = en.get("id")
-            dur = en.get("duration")
             title = (en.get("title") or "").strip()
             channel = (en.get("channel") or en.get("uploader") or "").strip()
+            if not channel and source_feed:
+                channel = source_feed.split("/", 1)[0].lstrip("@")
             if not vid or not title or vid in seen or vid in used:
                 continue
             # English-audience screen: drop non-Latin-script, news/analysis/talk, list, and
             # blocked-creator markers before they ever reach the ranker.
             if not title_ok(title):
                 continue
-            # The strict pass requires a creator/streamer signal in the title or channel. The
-            # fallback pass is still streamer-focused by query, but permits generic creator titles
-            # such as "funny reaction" when YouTube omitted the channel metadata. It must still
-            # describe a clip-worthy moment; generic gaming/VOD results do not pass this gate.
-            if not streamer_signal(title, channel) and not (
-                    allow_broad_fallback and streamer_content_signal(title)):
+            # This is the account-level content gate. Search wording alone is not proof: every
+            # selected item must identify a streamer/creator in title or channel, and the channel
+            # itself must pass the shared safety screen (including the iShowSpeed block).
+            if not streamer_signal(title, channel) or not channel_ok(channel):
                 continue
-            # Require a KNOWN, short duration: unknown usually means a live stream, and a long VOD
-            # would download the whole file. Both must be excluded before the build step.
-            if not isinstance(dur, (int, float)) or not (args.min_dur <= dur <= args.max_dur):
+            dur = parse_duration(en.get("duration"), en.get("duration_string"))
+            # Search results must expose a known short duration. A creator /shorts feed is the one
+            # safe exception: the feed contract itself bounds the source to a standalone Short, and
+            # the builder still probes the downloaded file before rendering it.
+            if dur is None and not feed_is_short:
                 continue
-            seen[vid] = {"id": vid, "title": title, "duration": float(dur),
-                         "url": f"https://www.youtube.com/watch?v={vid}",
+            if dur is not None and not (args.min_dur <= dur <= args.max_dur):
+                continue
+            seen[vid] = {"id": vid, "title": title, "duration": dur,
+                         "url": en.get("webpage_url") or f"https://www.youtube.com/watch?v={vid}",
                          "channel": channel, "uploader": en.get("uploader") or channel,
-                         "source": "youtube"}
+                         "source": "youtube", "source_feed": source_feed or "youtube-search",
+                         "content_type": "streamer_clip", "streamer_identity": channel,
+                         "content_policy": "streamer-only"}
 
     for q in queries:
         try:
@@ -166,10 +200,25 @@ def main():
         if len(seen) >= args.max:                           # enough on-theme short clips -> stop
             break
 
-    # YouTube often omits the channel name from flat search results. If the strict creator pool
-    # is too thin, widen discovery with streamer-only queries while retaining the English/title,
-    # known-duration, dedupe, and short-video safety gates above. Custom query callers keep the
-    # strict semantics they requested.
+    # Prefer creator Shorts feeds over any generic rescue. Flat feed entries may omit duration, but
+    # the /shorts URL is a stronger standalone-source contract than a search-result query string.
+    if len(seen) < 5 and not custom_queries:
+        handles = list(STREAMER_SHORT_HANDLES)
+        random.shuffle(handles)
+        for handle in handles:
+            feed = f"@{handle}/shorts"
+            try:
+                entries = search(f"https://www.youtube.com/@{handle}/shorts", args.per_query)
+            except Exception as e:
+                errors.append(f"{feed}: {str(e)[:80]}")
+                continue
+            add_entries(entries, source_feed=feed, feed_is_short=True)
+            if len(seen) >= args.max:
+                break
+
+    # If the creator-specific pass and feeds are thin, try more streamer wording while retaining
+    # the same hard identity, safety, and duration gates above. Custom query callers keep the
+    # strict semantics they requested and do not search unrelated feeds.
     if len(seen) < 5 and not custom_queries:
         fallback_queries = list(STREAMER_FALLBACK_QUERIES)
         random.shuffle(fallback_queries)
@@ -179,21 +228,24 @@ def main():
             except Exception as e:
                 errors.append(f"{q}: {str(e)[:80]}")
                 continue
-            add_entries(entries, allow_broad_fallback=True)
+            add_entries(entries)
             if len(seen) >= args.max:
                 break
 
     cands = list(seen.values())
     if len(cands) < 5:
-        fail(f"Only {len(cands)} usable streamer clips from YouTube -- need >=5.", reasons=errors[:6])
+        fail(f"Only {len(cands)} usable streamer clips from YouTube -- need >=5.",
+             reasons=errors[:6], content_policy="streamer-only")
         return
 
     random.shuffle(cands)                                   # vary which clips reach the ranker
     cands = cands[: args.max]
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"source": "youtube", "candidates": cands}, f, indent=2, ensure_ascii=False)
-    emit({"source": "youtube", "count": len(cands), "candidates": cands, "path": args.out})
+        json.dump({"source": "youtube", "genre": "streamer", "content_policy": "streamer-only",
+                   "candidates": cands}, f, indent=2, ensure_ascii=False)
+    emit({"source": "youtube", "genre": "streamer", "content_policy": "streamer-only",
+          "count": len(cands), "candidates": cands, "path": args.out})
 
 
 if __name__ == "__main__":

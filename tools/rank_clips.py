@@ -11,7 +11,7 @@ import argparse
 import json
 import os
 
-from _common import load_env, emit, fail
+from _common import channel_ok, load_env, emit, fail
 from _llm import llm_complete, parse_json
 
 ANGLE_DESC = {
@@ -70,6 +70,24 @@ def filter_by_angle(cands, angle):
     return [cands[i] for i in idxs], None
 
 
+def extract_ranking_entries(data):
+    """Return the model's selected rows while tolerating harmless wrapper-key drift."""
+    if isinstance(data, list):
+        return data
+    if not isinstance(data, dict):
+        raise ValueError("LLM JSON response was not an object or array")
+    entries = data.get("entries")
+    if entries is None:
+        for key in ("ranking", "rankings", "ranked_clips", "clips", "items", "results"):
+            candidate = data.get(key)
+            if isinstance(candidate, list):
+                entries = candidate
+                break
+    if not isinstance(entries, list):
+        raise ValueError("LLM JSON response did not contain an entries array")
+    return entries
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", default=".tmp/rank_candidates.json")
@@ -82,7 +100,8 @@ def main():
 
     load_env()
     try:
-        cands = json.load(open(args.candidates, encoding="utf-8"))["candidates"]
+        candidate_doc = json.load(open(args.candidates, encoding="utf-8"))
+        cands = candidate_doc["candidates"]
     except (OSError, json.JSONDecodeError, KeyError) as e:
         fail(f"Could not read candidates: {e}")
         return
@@ -100,6 +119,27 @@ def main():
     except (OSError, json.JSONDecodeError, KeyError) as e:
         fail(f"Could not read topic: {e}")
         return
+
+    if topic.get("genre") == "streamer":
+        streamer_hints = (
+            "streamer", "twitch", "kai cenat", "kaicenat", "jynxzi", "caseoh", "xqc",
+            "adin ross", "adinlive", "pokimane", "ludwig", "hasan", "hasanabi", "tarik",
+            "nmplol", "sodapoppin", "faze", "clix", "fanum", "plaqueboymax", "ddg",
+        )
+        invalid = []
+        for c in cands:
+            identity = str(c.get("streamer_identity") or c.get("channel") or "").strip()
+            haystack = f"{c.get('title', '')} {identity} {c.get('uploader', '')}".lower()
+            if (c.get("content_policy") != "streamer-only"
+                    or c.get("content_type") != "streamer_clip"
+                    or not identity
+                    or not channel_ok(identity)
+                    or not any(hint in haystack for hint in streamer_hints)):
+                invalid.append(c.get("id") or c.get("title") or "unknown")
+        if invalid:
+            fail("Streamer-only ranking received candidates without a verified streamer identity.",
+                 content_policy="streamer-only", invalid_candidates=invalid[:10])
+            return
 
     angle = topic.get("angle") if topic.get("genre") == "worldcup" else None
     if angle in ANGLE_DESC:
@@ -147,11 +187,20 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
               f"GENRE: {topic.get('genre')}\n\n{genre_guard}"
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
+    ranking_system = "You rank clips for viral countdown Shorts. English. Strict JSON."
     try:
-        out = llm_complete(prompt, system="You rank clips for viral countdown Shorts. English. Strict JSON.",
-                           json_mode=True, temperature=0.85)
-        data = parse_json(out["text"])
-        entries = data["entries"]
+        out = llm_complete(prompt, system=ranking_system, json_mode=True, temperature=0.85)
+        try:
+            entries = extract_ranking_entries(parse_json(out["text"]))
+        except Exception as first_error:
+            # Some providers honor JSON mode but still vary the top-level key. A single
+            # low-temperature retry keeps a transient schema miss from failing the whole
+            # media build; the candidate/content-policy guards below still reject unsafe rows.
+            retry_prompt = (prompt + "\n\nYour previous response was not usable. Return ONLY one JSON object "
+                            'with exactly this top-level key: "entries". The value must be an '
+                            "array of exactly five objects, each with candidate_index and label.")
+            out = llm_complete(retry_prompt, system=ranking_system, json_mode=True, temperature=0.2)
+            entries = extract_ranking_entries(parse_json(out["text"]))
     except Exception as e:
         fail(f"Ranking failed: {e}")
         return
@@ -159,14 +208,27 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
     clean = []
     seen = set()
     for e in entries:
+        if not isinstance(e, dict):
+            continue
         idx = e.get("candidate_index")
+        if idx is None:
+            for key in ("index", "clip_index", "candidate"):
+                if isinstance(e.get(key), int):
+                    idx = e[key]
+                    break
         if not isinstance(idx, int) or not (0 <= idx < len(cands)) or idx in seen:
             continue
         seen.add(idx)
         c = cands[idx]
-        clean.append({"rank": e.get("rank"), "candidate_index": idx, "id": c["id"],
+        clean.append({"rank": 5 - len(clean), "candidate_index": idx, "id": c["id"],
                       "title": c["title"], "url": c["url"], "duration": c.get("duration"),
-                      "label": str(e.get("label", "")).strip()[:16]})
+                      "label": str(e.get("label", "")).strip()[:16],
+                      "channel": c.get("channel") or c.get("uploader"),
+                      "uploader": c.get("uploader") or c.get("channel"),
+                      "source": c.get("source"), "source_feed": c.get("source_feed"),
+                      "content_type": c.get("content_type"),
+                      "streamer_identity": c.get("streamer_identity"),
+                      "content_policy": c.get("content_policy")})
     if len(clean) < 5:
         fail(f"Ranking produced only {len(clean)} valid entries.", entries=clean)
         return
@@ -174,7 +236,10 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
-        json.dump({"title": topic.get("title"), "hook": topic.get("hook"), "entries": clean},
+        json.dump({"title": topic.get("title"), "hook": topic.get("hook"),
+                   "genre": topic.get("genre"),
+                   "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
+                   "entries": clean},
                   f, indent=2, ensure_ascii=False)
     emit({"count": len(clean), "entries": [{"rank": e["rank"], "title": e["title"][:50]} for e in clean],
           "provider": out["provider"], "path": args.out})

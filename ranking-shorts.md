@@ -6,9 +6,19 @@
 > and `.tmp/` resolve correctly from here. API keys load from the shared `API.env` at the repo root.
 
 ## Channel identity: momoclips
-Both formats below post through the connected momoclips destinations: Zernio currently verifies
-**YouTube `@itsmomoclip`** and **Instagram `@itsmomoclips`**. Keep the Zernio IDs and the visual
-`@itsmomoclips` watermark aligned with those verified destinations.
+The active ranking format posts through the connected momoclips destinations: Zernio currently
+verifies **YouTube `@itsmomoclip`** and **Instagram `@itsmomoclips`**. Keep the Zernio IDs and the
+visual `@itsmomoclips` watermark aligned with those verified destinations. The retired football
+workflow files must not use these destinations.
+
+## Current destination policy (2026-08-08)
+
+The verified ranking destinations are streamer-only. The scheduled `autopost.yml` workflow is the
+only publisher for these accounts: it builds a strict five-entry streamer/creator `#5 -> #1`
+countdown. The World Cup single-clip, World Cup LIVE, and iShowSpeed workflow files remain in the
+repository for history, but their schedules are removed and their jobs are hard-skipped until a
+separate destination account is configured. A thin or blocked source pool produces a structured
+no-post result; it never falls back to football or generic fails clips.
 
 ## What this project does
 
