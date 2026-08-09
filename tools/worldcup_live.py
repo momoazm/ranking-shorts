@@ -215,6 +215,13 @@ def main():
             return
         emit({"count": len(matches), "matches": matches})
     except Exception as e:
+        # The scoreboard is an external dependency. A feed outage must not turn a scheduled
+        # gate into a red workflow or accidentally trigger a relay/post path. Return a
+        # structured no-watch result so callers can finish cleanly and do nothing.
+        if args.mode == "gate":
+            emit({"watch": False, "action": "exit", "status": "feed_unavailable",
+                  "source": "espn", "error": str(e)[:300]})
+            return
         fail(str(e)[:300])
 
 
