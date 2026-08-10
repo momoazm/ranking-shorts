@@ -96,9 +96,25 @@ def run_tool(name, args):
 
 def load_json(path):
     try:
-        return json.load(open(ROOT / path, encoding="utf-8"))
+        with open(ROOT / path, encoding="utf-8") as handle:
+            return json.load(handle)
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def _is_streamer_source_starvation(error):
+    """Recognize a failed build caused by too few downloadable streamer clips."""
+    text = str(error or "").lower()
+    return "usable clips" in text and "need >=5" in text
+
+
+def _streamer_no_source_payload(source, requested_genre, detail, candidate_count=None):
+    payload = {"status": "no_source", "content_policy": "streamer-only",
+               "source_mode": source, "requested_genre": requested_genre,
+               "detail": str(detail)}
+    if candidate_count is not None:
+        payload["candidate_count"] = int(candidate_count)
+    return payload
 
 
 HISTORY = "state/used_clips.json"
@@ -352,7 +368,24 @@ def main():
         build_args += ["--min-clips", "5"]
     if music_path:
         build_args += ["--music", music_path]
-    build = run_tool("build_ranking_video.py", build_args)
+    build, build_err = run_tool_safe("build_ranking_video.py", build_args)
+    if build_err:
+        # The source finder can return valid streamer metadata while YouTube blocks every
+        # media download route a few seconds later. Scheduled/no-upload diagnostics should
+        # report that as an honest no-post, not a red Actions failure. Never use this escape
+        # hatch for a real non-streamer build or for unrelated renderer bugs.
+        if (os.environ.get("NO_SOURCE_OK") == "1"
+                and topic.get("genre") == "streamer"
+                and _is_streamer_source_starvation(build_err)):
+            candidate_data = load_json(CANDS)
+            emit(_streamer_no_source_payload(
+                source, requested_genre, build_err,
+                len(candidate_data.get("candidates", [])) if isinstance(candidate_data, dict) else None,
+            ))
+            return
+        raise RuntimeError(build_err)
+    if not isinstance(build, dict):
+        raise RuntimeError("build_ranking_video.py returned no build result")
 
     # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
     title = topic["title"]
