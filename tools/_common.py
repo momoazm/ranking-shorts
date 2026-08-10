@@ -185,18 +185,25 @@ def is_tod(channel_name="", handle=""):
 # 429'd on the YouTube side. This retries the CREATE call on 429/5xx with backoff (honoring a
 # Retry-After header when present) so a burst self-throttles instead of dropping posts.
 def zernio_create_post(api_url, payload, api_key, max_tries=5):
-    """POST to Zernio /posts, retrying on 429/5xx. Returns (post_dict, error_str)."""
+    """POST to Zernio /posts, retrying on 429/5xx. Returns (post_dict, error_str).
+
+    One logical create must keep the same idempotency key across network retries. Zernio
+    documents ``x-request-id`` as the safe retry key; generating a new UUID for every attempt
+    can turn a response timeout into multiple provider posts.
+    """
     import httpx
     import time as _t
     import uuid as _uuid
     backoff, last = 20, None
+    request_id = str(_uuid.uuid4())
     for attempt in range(max_tries):
-        headers = {"Authorization": f"Bearer {api_key}", "x-request-id": str(_uuid.uuid4())}
+        headers = {"Authorization": f"Bearer {api_key}", "x-request-id": request_id}
         try:
             r = httpx.post(api_url, json=payload, headers=headers, timeout=60)
         except Exception as e:                       # network blip -> retry
             last = str(e)
-            _t.sleep(backoff); backoff *= 2
+            if attempt < max_tries - 1:
+                _t.sleep(min(backoff, 120)); backoff *= 2
             continue
         if r.status_code == 429 or r.status_code >= 500:
             body = r.text[:200]
@@ -214,10 +221,56 @@ def zernio_create_post(api_url, payload, api_key, max_tries=5):
         try:
             r.raise_for_status()
         except Exception as e:                       # 4xx other than 429 -> not retryable
-            body = getattr(getattr(e, "response", None), "text", "")
+            body = (getattr(getattr(e, "response", None), "text", "") or r.text)[:320]
             return None, f"Zernio post create failed: {e} {body}".strip()
-        return r.json().get("post", {}), None
+        body = r.json()
+        return (body.get("post") or body.get("existingPost") or {}), None
     return None, f"Zernio post create failed after {max_tries} tries ({last})"
+
+
+def zernio_retry_post(api_url, post_id, api_key, max_tries=2):
+    """Retry a Zernio post whose platform status is failed/partial.
+
+    Zernio retries only the failed platforms, so this is safe after a partial cross-post and
+    avoids creating a second post. Returns ``(post_dict, error_str)``.
+    """
+    import httpx
+    import time as _t
+
+    backoff, last = 10, None
+    url = f"{api_url.rstrip('/')}/posts/{post_id}/retry"
+    for attempt in range(max_tries):
+        try:
+            response = httpx.post(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=60)
+            try:
+                body = response.json()
+            except Exception:
+                body = {}
+        except Exception as exc:
+            last = str(exc)
+            if attempt < max_tries - 1:
+                _t.sleep(min(backoff, 120)); backoff *= 2
+            continue
+
+        raw = response.text[:320]
+        if response.status_code == 429 or response.status_code >= 500:
+            last = f"HTTP {response.status_code}: {raw}"
+            if response.status_code == 429 and _re.search(
+                    r"wait\s+\d+\s*h|before\s+post", raw, _re.IGNORECASE):
+                return None, f"Zernio retry blocked by account rate limit: {raw}"
+            if attempt < max_tries - 1:
+                retry_after = response.headers.get("Retry-After", "")
+                wait = int(retry_after) if retry_after.isdigit() else backoff
+                _t.sleep(min(wait, 120)); backoff *= 2
+            continue
+        if response.status_code >= 400:
+            return None, f"Zernio post retry failed HTTP {response.status_code}: {raw}"
+
+        post = body.get("post") or body.get("existingPost") if isinstance(body, dict) else None
+        if isinstance(post, dict):
+            return post, None
+        return None, f"Zernio post retry returned no post: {raw}"
+    return None, f"Zernio post retry failed after {max_tries} tries ({last})"
 
 
 # --- Instagram post log (weekly style-experiment tracking) ----------------
