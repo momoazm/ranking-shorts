@@ -73,25 +73,18 @@ def _ydl_opts(out_base, fmt, player_client=None, use_proxy=True):
 # (the default source) and normal YouTube; the youtube player_client is simply ignored by other
 # extractors like Reddit.
 _DL_ATTEMPTS = [
-    # TV CLIENT FIRST (2026-07-10): the BgUtils PO-token provider mints GVS tokens for BOTH the
-    # `tv` and `web` clients, but only `web` was ever tried -- and on 07-09 YouTube started
-    # serving web-client requests from the WARP egress a degraded <=360p ladder even WITH a
-    # valid POT (both clipping-auto scheduled runs died on the 1080p floor). `tv` is the least
-    # bot-walled POT-covered client (it's yt-dlp's own default for exactly that reason).
-    # DASH merge up to 2160 tall. The final canvas is 1080x1920, but a 2160p horizontal source
-    # gives the vertical crop more pixels before downscaling, which is especially valuable for
-    # wide challenge footage.
+    # YouTube may challenge the runner egress, the WARP egress, or one specific player-client
+    # handshake. Keep both direct and proxied legs for the clients that can use BgUtils POTs;
+    # direct/default is important when the current WARP range is flagged. The route order is
+    # intentionally the same bounded diversity used by clipping-auto.
+    (None, "bv*[height<=2160]+ba/b[height<=2160]", False),
+    (None, "bv*[height<=2160]+ba/b[height<=2160]", True),
+    (["web_safari"], "bv*[height<=2160]+ba/b[height<=2160]", False),
+    (["web_safari"], "bv*[height<=2160]+ba/b[height<=2160]", True),
+    (["tv"], "bv*[height<=2160]+ba/b[height<=2160]", False),
     (["tv"], "bv*[height<=2160]+ba/b[height<=2160]", True),
+    (["web"], "bv*[height<=2160]+ba/b[height<=2160]", False),
     (["web"], "bv*[height<=2160]+ba/b[height<=2160]", True),
-    # DIRECT runner IP (no WARP): BgUtils' primary design case is POT-on-datacenter-IP; when the
-    # WARP egress range itself is flagged, dropping the proxy is what un-degrades the ladder.
-    (["tv", "web"], "bv*[height<=2160]+ba/b[height<=2160]", False),
-    # Graceful fallbacks so a clip still ships: progressive/muxed (single stream, <=720) through
-    # the proxy, then the non-POT clients as last-ditch.
-    (["web"], "b[height<=2160][ext=mp4]/b[height<=2160]/b", True),
-    (None, "bv*[height<=2160]+ba/b[height<=2160]/b", True),
-    (["android"], "b/best", True),
-    (["ios"], "b/best", False),
 ]
 
 
@@ -156,6 +149,7 @@ def download(url, out_base):
             f.write(data)
         return out
     last = None
+    route_errors = []
     deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
     for player_client, fmt, use_proxy in _DL_ATTEMPTS:
         if time.monotonic() >= deadline:
@@ -172,7 +166,12 @@ def download(url, out_base):
                 return path
         except Exception as e:
             last = e
+            route = "+".join(player_client) if player_client else "default"
+            route += " via proxy" if use_proxy and os.environ.get("YTDLP_PROXY") else " direct"
+            route_errors.append(f"[{route}] {str(e).splitlines()[0][:180]}")
             continue
+    if route_errors:
+        raise RuntimeError("all YouTube download routes failed: " + " | ".join(route_errors))
     raise last or RuntimeError("download produced no file")
 
 
