@@ -221,8 +221,9 @@ jobs:
           NO_REDDIT_SOURCES: "1"
           RANKING_SOURCE: streamer
           # A scheduled slot with no five-clip streamer pool is a clean no-post, not a red run.
-          # Manual dispatches keep failing loudly so source/config problems remain diagnosable.
-          NO_SOURCE_OK: ${{ github.event_name == 'schedule' && '1' || '0' }}
+          # No-upload verification has the same diagnostic contract; real publishing runs
+          # still fail loudly on source/configuration errors.
+          NO_SOURCE_OK: ${{ (github.event_name == 'schedule' || inputs.no_upload == true) && '1' || '0' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
         run: |
           PLATFORMS="youtube,instagram,email"
