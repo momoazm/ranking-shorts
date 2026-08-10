@@ -25,13 +25,28 @@ Usage:
 Prints JSON: dry run -> {"status":"preview",...}; real -> {"status":"uploaded","post_id","url",...}.
 """
 import argparse
+import json
 import os
 import time
-import uuid
 
-from _common import load_env, emit, fail, zernio_create_post
+from _common import load_env, emit, fail, zernio_create_post, zernio_retry_post
 
 ZERNIO_API = "https://zernio.com/api/v1"
+
+
+def _platform_entry(post):
+    for entry in (post or {}).get("platforms", []):
+        if entry.get("platform") == "youtube":
+            return entry
+    return {}
+
+
+def _platform_detail(entry):
+    details = {key: entry.get(key) for key in ("error", "code", "message", "platformError")
+               if entry.get(key) not in (None, "", {})}
+    if not details:
+        return "provider returned no YouTube error detail"
+    return json.dumps(details, ensure_ascii=True, separators=(",", ":"))[:600]
 
 
 def main():
@@ -95,33 +110,48 @@ def main():
         fail(f"Zernio post create returned no post id: {post}")
         return
 
-    def platform_entry(p):
-        for entry in p.get("platforms", []):
-            if entry.get("platform") == "youtube":
-                return entry
-        return {}
-
-    entry = platform_entry(post)
+    entry = _platform_entry(post)
     status = entry.get("status") or post.get("status")
 
     # publishNow:true still needs YouTube-side processing (transcode) to finish -- poll
     # the same way upload_instagram.py does.
-    deadline = time.time() + args.poll_timeout
-    while status not in ("published", "failed", "error") and time.time() < deadline:
-        time.sleep(5)
-        try:
-            s = httpx.get(f"{ZERNIO_API}/posts/{post_id}",
-                          headers={"Authorization": f"Bearer {api_key}"}, timeout=30)
-            s.raise_for_status()
-            post = s.json().get("post", post)
-            entry = platform_entry(post)
+    poll_error = None
+    retry_attempted = False
+    retry_error = None
+
+    def poll_until_terminal():
+        nonlocal post, entry, status, poll_error
+        deadline = time.time() + args.poll_timeout
+        while status not in ("published", "failed", "error", "partial") and time.time() < deadline:
+            time.sleep(5)
+            try:
+                s = httpx.get(f"{ZERNIO_API}/posts/{post_id}",
+                              headers={"Authorization": f"Bearer {api_key}"}, timeout=30)
+                s.raise_for_status()
+                body = s.json()
+                post = body.get("post", post) if isinstance(body, dict) else post
+                entry = _platform_entry(post)
+                status = entry.get("status") or post.get("status")
+            except Exception as exc:
+                poll_error = str(exc)
+
+    poll_until_terminal()
+    if status in ("failed", "error", "partial"):
+        retry_attempted = True
+        retried, retry_error = zernio_retry_post(ZERNIO_API, post_id, api_key)
+        if retried:
+            post = retried
+            entry = _platform_entry(post)
             status = entry.get("status") or post.get("status")
-        except Exception:
-            pass
+            poll_until_terminal()
 
     if status not in ("published",):
-        fail(f"Zernio publish did not complete (status={status}).",
-             post_id=post_id, platform_status=entry)
+        detail = f"Zernio publish did not complete (status={status}; {_platform_detail(entry)})."
+        if retry_error:
+            detail += f" Retry attempt: {retry_error}"
+        fail(detail, post_id=post_id, platform_status=entry,
+             retry_attempted=retry_attempted, poll_error=poll_error,
+             ambiguous=status not in ("failed", "error", "partial"))
         return
 
     emit({"status": "uploaded", "platform": "youtube", "via": "zernio",

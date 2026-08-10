@@ -10,6 +10,7 @@ Prints JSON: {"entries":[{rank, candidate_index, id, title, line}], "provider"} 
 import argparse
 import json
 import os
+import sys
 
 from _common import channel_ok, load_env, emit, fail
 from _llm import llm_complete, parse_json
@@ -25,6 +26,8 @@ ANGLE_DESC = {
                 "match footage with no streamer, generic crowd shots with no streamer, and any "
                 "streamer clip unrelated to football / the World Cup (gaming, random IRL, etc.).",
 }
+
+FALLBACK_LABELS = ("Instant Chaos", "Chat Lost It", "Streamer Moment", "Caught Live", "Final Boss")
 
 
 def classify_angle(cands, angle):
@@ -86,6 +89,81 @@ def extract_ranking_entries(data):
     if not isinstance(entries, list):
         raise ValueError("LLM JSON response did not contain an entries array")
     return entries
+
+
+def _candidate_index(entry, cands):
+    """Normalize harmless provider drift while keeping selection inside the candidate list."""
+    if not isinstance(entry, dict):
+        return None
+
+    values = []
+    for key in ("candidate_index", "index", "clip_index", "candidate"):
+        value = entry.get(key)
+        if isinstance(value, dict):
+            values.extend(value.get(key) for key in ("candidate_index", "index", "clip_index"))
+        else:
+            values.append(value)
+    for value in values:
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            if 0 <= value < len(cands):
+                return value
+        elif isinstance(value, str) and value.strip().isdigit():
+            index = int(value.strip())
+            if 0 <= index < len(cands):
+                return index
+
+    # Some otherwise valid JSON responses identify a clip by its stable video id or title
+    # instead of returning the requested numeric index. Exact matches avoid guessing.
+    for key in ("candidate_id", "video_id", "id", "url"):
+        value = entry.get(key)
+        if value in (None, ""):
+            continue
+        value = str(value).strip()
+        for index, candidate in enumerate(cands):
+            if value in {str(candidate.get(key) or "").strip(),
+                         str(candidate.get("id") or "").strip(),
+                         str(candidate.get("url") or "").strip()}:
+                return index
+    title = str(entry.get("title") or entry.get("candidate_title") or "").strip()
+    if title:
+        for index, candidate in enumerate(cands):
+            if title == str(candidate.get("title") or "").strip():
+                return index
+    return None
+
+
+def clean_ranking_entries(entries, cands):
+    """Convert provider rows into the strict five-row shape consumed by the video builder."""
+    clean = []
+    seen = set()
+    for entry in entries or []:
+        idx = _candidate_index(entry, cands)
+        if idx is None or idx in seen:
+            continue
+        seen.add(idx)
+        candidate = cands[idx]
+        label = str((entry or {}).get("label") or (entry or {}).get("caption") or "").strip()[:16]
+        if not label:
+            label = FALLBACK_LABELS[len(clean)]
+        clean.append({"rank": 5 - len(clean), "candidate_index": idx, "id": candidate["id"],
+                      "title": candidate["title"], "url": candidate["url"],
+                      "duration": candidate.get("duration"), "label": label,
+                      "channel": candidate.get("channel") or candidate.get("uploader"),
+                      "uploader": candidate.get("uploader") or candidate.get("channel"),
+                      "source": candidate.get("source"), "source_feed": candidate.get("source_feed"),
+                      "content_type": candidate.get("content_type"),
+                      "streamer_identity": candidate.get("streamer_identity"),
+                      "content_policy": candidate.get("content_policy")})
+    return clean[:5]
+
+
+def deterministic_streamer_fallback(cands):
+    """Keep the account live when the LLM is unavailable; candidates already passed hard gates."""
+    return clean_ranking_entries(
+        [{"candidate_index": index, "label": FALLBACK_LABELS[index]}
+         for index in range(min(5, len(cands)))], cands)
 
 
 def main():
@@ -188,61 +266,55 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
               f"CANDIDATES:\n{listing}\n\n{schema}")
 
     ranking_system = "You rank clips for viral countdown Shorts. English. Strict JSON."
+    out = None
+    entries = []
+    ranking_error = None
     try:
         out = llm_complete(prompt, system=ranking_system, json_mode=True, temperature=0.85)
         try:
             entries = extract_ranking_entries(parse_json(out["text"]))
-        except Exception as first_error:
+        except Exception:
             # Some providers honor JSON mode but still vary the top-level key. A single
             # low-temperature retry keeps a transient schema miss from failing the whole
             # media build; the candidate/content-policy guards below still reject unsafe rows.
             retry_prompt = (prompt + "\n\nYour previous response was not usable. Return ONLY one JSON object "
                             'with exactly this top-level key: "entries". The value must be an '
-                            "array of exactly five objects, each with candidate_index and label.")
+                            "array of exactly five objects, each with candidate_index and label. "
+                            "candidate_index is a zero-based integer from the supplied list.")
             out = llm_complete(retry_prompt, system=ranking_system, json_mode=True, temperature=0.2)
             entries = extract_ranking_entries(parse_json(out["text"]))
     except Exception as e:
-        fail(f"Ranking failed: {e}")
-        return
+        ranking_error = str(e)
 
-    clean = []
-    seen = set()
-    for e in entries:
-        if not isinstance(e, dict):
-            continue
-        idx = e.get("candidate_index")
-        if idx is None:
-            for key in ("index", "clip_index", "candidate"):
-                if isinstance(e.get(key), int):
-                    idx = e[key]
-                    break
-        if not isinstance(idx, int) or not (0 <= idx < len(cands)) or idx in seen:
-            continue
-        seen.add(idx)
-        c = cands[idx]
-        clean.append({"rank": 5 - len(clean), "candidate_index": idx, "id": c["id"],
-                      "title": c["title"], "url": c["url"], "duration": c.get("duration"),
-                      "label": str(e.get("label", "")).strip()[:16],
-                      "channel": c.get("channel") or c.get("uploader"),
-                      "uploader": c.get("uploader") or c.get("channel"),
-                      "source": c.get("source"), "source_feed": c.get("source_feed"),
-                      "content_type": c.get("content_type"),
-                      "streamer_identity": c.get("streamer_identity"),
-                      "content_policy": c.get("content_policy")})
+    clean = clean_ranking_entries(entries, cands)
+    fallback_reason = ranking_error
+    if len(clean) < 5 and topic.get("genre") == "streamer" and len(cands) >= 5:
+        fallback_reason = fallback_reason or (
+            f"LLM returned {len(clean)} valid rows after normalization")
+        print(f"::warning::Using deterministic streamer ranking fallback: {fallback_reason}",
+              file=sys.stderr)
+        clean = deterministic_streamer_fallback(cands)
+        provider = "deterministic-fallback"
+    else:
+        provider = (out or {}).get("provider") if isinstance(out, dict) else None
+
     if len(clean) < 5:
-        fail(f"Ranking produced only {len(clean)} valid entries.", entries=clean)
+        message = f"Ranking produced only {len(clean)} valid entries."
+        if ranking_error:
+            message += f" {ranking_error}"
+        fail(message, entries=clean)
         return
-    clean = clean[:5]
 
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w", encoding="utf-8") as f:
         json.dump({"title": topic.get("title"), "hook": topic.get("hook"),
                    "genre": topic.get("genre"),
                    "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
-                   "entries": clean},
+                   "entries": clean, "provider": provider,
+                   "fallback_reason": fallback_reason},
                   f, indent=2, ensure_ascii=False)
     emit({"count": len(clean), "entries": [{"rank": e["rank"], "title": e["title"][:50]} for e in clean],
-          "provider": out["provider"], "path": args.out})
+          "provider": provider, "fallback_reason": fallback_reason, "path": args.out})
 
 
 if __name__ == "__main__":
