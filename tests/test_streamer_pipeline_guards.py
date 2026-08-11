@@ -15,6 +15,7 @@ import build_ranking_video  # noqa: E402
 import find_streamer_clips  # noqa: E402
 import rank_clips  # noqa: E402
 import rank_autopost  # noqa: E402
+import compare_streamer_formats  # noqa: E402
 
 
 class StreamerPipelineGuardsTest(unittest.TestCase):
@@ -87,7 +88,7 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
                 return {"error": err}, err
             raise AssertionError(f"unexpected safe tool: {name}")
 
-        argv = ["rank_autopost.py", "--no-upload", "--force-genre", "streamer",
+        argv = ["rank_autopost.py", "--no-upload", "--format", "ranking", "--force-genre", "streamer",
                 "--platforms", "youtube,instagram"]
         captured = io.StringIO()
         try:
@@ -120,6 +121,31 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertTrue(rank_autopost._is_streamer_source_starvation(
             "Only 3 usable clips -- need >=5. download failed"
         ))
+
+    def test_auto_format_defaults_to_standalone_and_keeps_ranked_control(self):
+        selected, state = rank_autopost.choose_format("auto", no_upload=True)
+        self.assertEqual(selected, "standalone")
+        self.assertIsInstance(state, dict)
+        selected_ranked, _ = rank_autopost.choose_format("ranking", no_upload=True)
+        self.assertEqual(selected_ranked, "ranking")
+
+    def test_standalone_download_failure_is_source_starvation_only(self):
+        self.assertTrue(rank_autopost._is_streamer_clip_download_failure(
+            "build_clip.py failed: download failed: bot check"))
+        self.assertFalse(rank_autopost._is_streamer_clip_download_failure(
+            "build_clip.py failed: overlay burn failed"))
+
+    def test_format_comparator_requires_clear_mature_winner(self):
+        stats = {
+            "standalone": [{"views": 200, "engagement_rate": 0.12}] * 3,
+            "ranking": [{"views": 100, "engagement_rate": 0.10}] * 3,
+        }
+        winner, _ = compare_streamer_formats.decide(stats)
+        self.assertEqual(winner, "standalone")
+        stats["standalone"] = [{"views": 110, "engagement_rate": 0.12}] * 3
+        winner, reason = compare_streamer_formats.decide(stats)
+        self.assertIsNone(winner)
+        self.assertIn("no clear winner", reason)
 
 
 if __name__ == "__main__":

@@ -28,6 +28,11 @@ on:
         description: "Test run (build the Short but do NOT publish anywhere)"
         type: boolean
         default: false
+      format:
+        description: "Streamer format (auto = standalone default with a ranked control cohort)"
+        type: choice
+        options: [auto, standalone, ranking]
+        default: auto
 
 # NOTE: no `concurrency` group on purpose -- each slot should run independently (see git history).
 
@@ -200,7 +205,7 @@ jobs:
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
-        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME"
+        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME" --require-ready
 
       - name: Build + publish one Ranking Short
         env:
@@ -225,6 +230,7 @@ jobs:
           # still fail loudly on source/configuration errors.
           NO_SOURCE_OK: ${{ (github.event_name == 'schedule' || inputs.no_upload == true) && '1' || '0' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
+          IN_FORMAT: ${{ inputs.format || 'auto' }}
         run: |
           PLATFORMS="youtube,instagram,email"
           if [ -n "$TIKTOK_ACCESS_TOKEN" ] || { [ -n "$TIKTOK_REFRESH_TOKEN" ] && [ -n "$TIKTOK_CLIENT_KEY" ] && [ -n "$TIKTOK_CLIENT_SECRET" ]; }; then
@@ -233,6 +239,7 @@ jobs:
             echo "::warning::TikTok is not configured; publishing YouTube + Instagram only. Add the four TikTok secrets to enable it."
           fi
           ARGS=(--privacy public --keep-tmp --platforms "$PLATFORMS" --required-platforms youtube,instagram
+                --format "${IN_FORMAT:-auto}"
                 --force-genre streamer --niche "funny streamer clips, live reactions, and creator moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           python tools/rank_autopost.py "${ARGS[@]}"
@@ -242,9 +249,32 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: short
-          path: .tmp/final.mp4
+          path: |
+            .tmp/final.mp4
+            .tmp/review_manifest.json
+            state/format_experiment.json
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Validate generated media contract
+        if: ${{ always() && hashFiles('.tmp/final.mp4') != '' }}
+        run: |
+          python3 - <<'EOF'
+          import json, subprocess
+          probe = json.loads(subprocess.check_output([
+              "ffprobe", "-v", "error", "-print_format", "json",
+              "-show_streams", "-show_format", ".tmp/final.mp4"
+          ]))
+          video = next((s for s in probe.get("streams", []) if s.get("codec_type") == "video"), {})
+          audio = any(s.get("codec_type") == "audio" for s in probe.get("streams", []))
+          duration = float((probe.get("format") or {}).get("duration") or 0)
+          if (video.get("width"), video.get("height")) != (1080, 1920):
+              raise SystemExit(f"media contract failed: {video.get('width')}x{video.get('height')}")
+          if not audio or not (0 < duration < 60):
+              raise SystemExit(f"media contract failed: audio={audio} duration={duration}")
+          print(json.dumps({"status": "media_contract_ok", "width": 1080, "height": 1920,
+                            "audio": audio, "duration_sec": round(duration, 2)}))
+          EOF
 
       - name: Upload manual-post export (video + IG/TikTok captions)
         if: always()
@@ -255,8 +285,22 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+      - name: Persist format and Instagram experiment ledger
+        if: ${{ always() && inputs.no_upload != true }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/format_experiment.json state/ig_post_log.json 2>/dev/null || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore: record streamer format cohort [skip ci]"
+            git pull --rebase origin main
+            git push
+          else
+            echo "No format experiment state to commit."
+          fi
+
   # GitHub disables cron on repos with no commits for 60 days; this weekly touch keeps
-  # the schedule alive (the main job never commits -- state lives in actions/cache).
+  # the schedule alive (the post ledger is committed by the main job when a real post is made).
   keepalive:
     runs-on: ubuntu-latest
     timeout-minutes: 5
