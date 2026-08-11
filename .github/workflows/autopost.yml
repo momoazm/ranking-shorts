@@ -242,7 +242,12 @@ jobs:
                 --format "${IN_FORMAT:-auto}"
                 --force-genre streamer --niche "funny streamer clips, live reactions, and creator moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
-          python tools/rank_autopost.py "${ARGS[@]}"
+          # Keep the structured no-source result in the artifact as well as the log.  The
+          # pipeline must keep Python's real exit status so renderer/configuration failures
+          # remain red while an honest scheduled/no-upload no-op stays green and inspectable.
+          mkdir -p .tmp
+          set -o pipefail
+          python tools/rank_autopost.py "${ARGS[@]}" | tee .tmp/run_result.json
 
       - name: Upload final.mp4 artifact (for inspection)
         if: always()
@@ -252,6 +257,7 @@ jobs:
           path: |
             .tmp/final.mp4
             .tmp/review_manifest.json
+            .tmp/run_result.json
             state/format_experiment.json
           if-no-files-found: ignore
           retention-days: 7
