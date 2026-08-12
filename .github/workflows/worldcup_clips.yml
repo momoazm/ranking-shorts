@@ -219,4 +219,4 @@ jobs:
           name: momoclip
           path: .tmp/final.mp4
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
