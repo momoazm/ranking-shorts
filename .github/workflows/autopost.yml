@@ -41,7 +41,8 @@ permissions:
 
 concurrency:
   group: ranking-shorts-post
-  cancel-in-progress: false
+  # Preserve an in-flight live post; only duplicate no-upload tests may be cancelled.
+  cancel-in-progress: ${{ inputs.no_upload == true }}
 
 jobs:
   post:
@@ -249,19 +250,6 @@ jobs:
           set -o pipefail
           python tools/rank_autopost.py "${ARGS[@]}" | tee .tmp/run_result.json
 
-      - name: Upload final.mp4 artifact (for inspection)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: short
-          path: |
-            .tmp/final.mp4
-            .tmp/review_manifest.json
-            .tmp/run_result.json
-            state/format_experiment.json
-          if-no-files-found: ignore
-          retention-days: 7
-
       - name: Validate generated media contract
         if: ${{ always() && hashFiles('.tmp/final.mp4') != '' }}
         run: |
@@ -282,14 +270,34 @@ jobs:
                             "audio": audio, "duration_sec": round(duration, 2)}))
           EOF
 
-      - name: Upload manual-post export (video + IG/TikTok captions)
+      - name: Upload ranking diagnostics on failure or no-upload test
+        if: ${{ always() && (failure() || inputs.no_upload == true) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ranking-debug-${{ github.run_id }}
+          path: |
+            .tmp/final.mp4
+            .tmp/review_manifest.json
+            .tmp/run_result.json
+            state/format_experiment.json
+            exports/
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Upload ranking run metadata
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: manual-post
-          path: exports/
+          name: ranking-run-${{ github.run_id }}
+          path: |
+            .tmp/review_manifest.json
+            .tmp/run_result.json
+            state/format_experiment.json
+            exports/*.json
+            exports/*.txt
+            exports/*.md
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
 
       - name: Persist format and Instagram experiment ledger
         if: ${{ always() && inputs.no_upload != true }}

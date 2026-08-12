@@ -210,7 +210,7 @@ jobs:
           path: |
             .tmp/speed/*.mp4
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
 
       # Keep the relay chain alive match-to-match (see worldcup_live.yml for the rationale).
       - name: Relay forward if more matches remain today
