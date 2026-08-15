@@ -285,6 +285,7 @@ jobs:
       - name: Upload ranking diagnostics on failure or no-upload test
         if: ${{ always() && (failure() || inputs.no_upload == true) }}
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: ranking-debug-${{ github.run_id }}
           path: |
@@ -299,6 +300,7 @@ jobs:
       - name: Upload ranking run metadata
         if: always()
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: ranking-run-${{ github.run_id }}
           path: |
