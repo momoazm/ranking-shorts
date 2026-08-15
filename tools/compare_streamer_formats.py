@@ -21,6 +21,7 @@ MIN_SAMPLES = 3
 MIN_AGE_DAYS = 4.0
 WIN_MARGIN = 0.25
 SECONDARY_FLOOR = -0.10
+RETENTION_FLOOR = -0.15
 
 
 def load_json(path, default):
@@ -62,7 +63,7 @@ def avg(values):
 
 
 def decide(stats):
-    """Return (winner, reason) using views as primary and engagement as a guardrail."""
+    """Return (winner, reason) using views with engagement and retention guardrails."""
     if any(len(stats.get(fmt, [])) < MIN_SAMPLES for fmt in FORMATS):
         return None, f"need at least {MIN_SAMPLES} mature posts per format"
     standalone = stats["standalone"]
@@ -73,11 +74,21 @@ def decide(stats):
         return None, "views and engagement analytics are required for both cohorts"
     view_delta = standalone_views / ranking_views - 1
     eng_delta = standalone_eng / ranking_eng - 1 if ranking_eng else 0
-    if view_delta >= WIN_MARGIN and eng_delta >= SECONDARY_FLOOR:
-        return "standalone", f"views {view_delta:+.0%}; engagement {eng_delta:+.0%}"
-    if view_delta <= -WIN_MARGIN and eng_delta <= SECONDARY_FLOOR:
-        return "ranking", f"standalone vs ranking: views {view_delta:+.0%}; engagement {eng_delta:+.0%}"
-    return None, f"no clear winner: standalone views {view_delta:+.0%}, engagement {eng_delta:+.0%}"
+    standalone_watch = avg([p.get("watch_completion_ratio") for p in standalone])
+    ranking_watch = avg([p.get("watch_completion_ratio") for p in ranking])
+    watch_delta = None
+    if standalone_watch is not None and ranking_watch is not None and ranking_watch:
+        watch_delta = standalone_watch / ranking_watch - 1
+    guardrail_ok = watch_delta is None or watch_delta >= RETENTION_FLOOR
+    if view_delta >= WIN_MARGIN and eng_delta >= SECONDARY_FLOOR and guardrail_ok:
+        suffix = f"; watch completion {watch_delta:+.0%}" if watch_delta is not None else ""
+        return "standalone", f"views {view_delta:+.0%}; engagement {eng_delta:+.0%}{suffix}"
+    if view_delta <= -WIN_MARGIN and eng_delta <= SECONDARY_FLOOR and (
+            watch_delta is None or watch_delta <= -RETENTION_FLOOR):
+        suffix = f"; watch completion {watch_delta:+.0%}" if watch_delta is not None else ""
+        return "ranking", f"standalone vs ranking: views {view_delta:+.0%}; engagement {eng_delta:+.0%}{suffix}"
+    watch_text = f", watch completion {watch_delta:+.0%}" if watch_delta is not None else ""
+    return None, f"no clear winner: standalone views {view_delta:+.0%}, engagement {eng_delta:+.0%}{watch_text}"
 
 
 def main():
@@ -124,6 +135,7 @@ def main():
           "pending": pending, "errors": errors,
           "policy": {"min_samples": MIN_SAMPLES, "min_age_days": MIN_AGE_DAYS,
                      "win_margin": WIN_MARGIN, "secondary_floor": SECONDARY_FLOOR,
+                     "retention_floor": RETENTION_FLOOR,
                      "live_delete": False}})
 
 

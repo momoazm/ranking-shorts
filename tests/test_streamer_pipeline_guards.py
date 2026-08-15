@@ -147,6 +147,28 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertIsNone(winner)
         self.assertIn("no clear winner", reason)
 
+    def test_streamer_signal_prefers_concrete_conflict_over_generic_gameplay(self):
+        concrete = rank_clips.streamer_signal_score({
+            "title": "Kai gets called out over a cringe chat question",
+            "channel": "Kai Cenat", "duration": 32,
+        })
+        generic = rank_clips.streamer_signal_score({
+            "title": "Funny moments compilation gameplay",
+            "channel": "Creator Clips", "duration": 90,
+        })
+        self.assertGreater(concrete, generic)
+
+    def test_format_comparator_keeps_retention_as_a_guardrail(self):
+        stats = {
+            "standalone": [{"views": 200, "engagement_rate": 0.12,
+                            "watch_completion_ratio": 0.10}] * 3,
+            "ranking": [{"views": 100, "engagement_rate": 0.10,
+                         "watch_completion_ratio": 0.20}] * 3,
+        }
+        winner, reason = compare_streamer_formats.decide(stats)
+        self.assertIsNone(winner)
+        self.assertIn("watch completion", reason)
+
 
 if __name__ == "__main__":
     unittest.main()

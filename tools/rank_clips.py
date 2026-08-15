@@ -10,6 +10,7 @@ Prints JSON: {"entries":[{rank, candidate_index, id, title, line}], "provider"} 
 import argparse
 import json
 import os
+import re
 import sys
 
 from _common import channel_ok, load_env, emit, fail
@@ -28,6 +29,50 @@ ANGLE_DESC = {
 }
 
 FALLBACK_LABELS = ("Instant Chaos", "Chat Lost It", "Streamer Moment", "Caught Live", "Final Boss")
+
+# The recent high-reach streamer posts were not generic "best moments" packages. They named a
+# legible social event (called out / roasted / cringe / rigged) and let the viewer wait for the
+# consequence. Keep this signal deterministic so a provider timeout cannot silently choose weak
+# generic gameplay as the fallback.
+CONFLICT_TERMS = (
+    "called out", "roast", "roasted", "cringe", "rigged", "caught", "busted", "chat",
+    "rage", "meltdown", "freak", "embarrass", "exposed", "awkward", "fails",
+)
+ACTION_TERMS = (
+    "eliminat", "loses", "lost", "break", "throws", "falls", "fails", "smash", "hits",
+    "says", "answer", "challenge", "react", "reaction", "surprise", "win", "clutch",
+)
+GENERIC_TERMS = (
+    "funny moments", "best moments", "top moments", "compilation", "montage", "gameplay",
+    "highlights", "stream highlights",
+)
+
+
+def streamer_signal_score(candidate):
+    """Score how quickly a streamer candidate communicates a concrete payoff.
+
+    This is a ranking aid, not a claim that title text equals virality. It gives the deterministic
+    path a sensible quality floor and exposes the signal to the LLM alongside view count.
+    """
+    text = " ".join(str(candidate.get(key) or "") for key in
+                    ("title", "channel", "uploader", "streamer_identity")).lower()
+    score = 35
+    score += min(24, sum(8 for term in CONFLICT_TERMS if term in text))
+    score += min(20, sum(6 for term in ACTION_TERMS if term in text))
+    if candidate.get("streamer_identity") or candidate.get("channel"):
+        score += 8
+    if re.search(r"\$\s?\d|\b(?:one|two|three|million|thousand)\b", text):
+        score += 7
+    score -= min(25, sum(8 for term in GENERIC_TERMS if term in text))
+    try:
+        duration = float(candidate.get("duration"))
+        if 12 <= duration <= 45:
+            score += 6
+        elif duration > 60:
+            score -= 8
+    except (TypeError, ValueError):
+        pass
+    return max(0, min(100, int(score)))
 
 
 def classify_angle(cands, angle):
@@ -152,6 +197,7 @@ def clean_ranking_entries(entries, cands):
                       "duration": candidate.get("duration"), "label": label,
                       "channel": candidate.get("channel") or candidate.get("uploader"),
                       "uploader": candidate.get("uploader") or candidate.get("channel"),
+                      "signal_score": streamer_signal_score(candidate),
                       "source": candidate.get("source"), "source_feed": candidate.get("source_feed"),
                       "content_type": candidate.get("content_type"),
                       "streamer_identity": candidate.get("streamer_identity"),
@@ -161,9 +207,16 @@ def clean_ranking_entries(entries, cands):
 
 def deterministic_streamer_fallback(cands):
     """Keep the account live when the LLM is unavailable; candidates already passed hard gates."""
+    top = sorted(range(len(cands)),
+                 key=lambda index: (-streamer_signal_score(cands[index]), index))[:5]
+    if len(top) >= 5:
+        # Rank #5 is the strongest opener and rank #1 is the strongest payoff. We do not have
+        # visual semantics in this fallback, so reserve the single best signal for the payoff
+        # and use the runner-up as the cold-open clip.
+        top = [top[1], top[2], top[3], top[4], top[0]]
     return clean_ranking_entries(
-        [{"candidate_index": index, "label": FALLBACK_LABELS[index]}
-         for index in range(min(5, len(cands)))], cands)
+        [{"candidate_index": index, "label": FALLBACK_LABELS[position]}
+         for position, index in enumerate(top)], cands)
 
 
 def main():
@@ -226,7 +279,10 @@ def main():
             fail(aerr)
             return
 
-    listing = "\n".join(f"[{i}] {c['title']}" for i, c in enumerate(cands))
+    listing = "\n".join(
+        f"[{i}] {c['title']} (signal={streamer_signal_score(c)}/100)"
+        for i, c in enumerate(cands)
+    )
     schema = """Return ONE JSON object:
 {
   "entries": [   // EXACTLY 5 items, ordered rank 5 (shown FIRST -- the hook) to rank 1 (shown LAST -- the best payoff)
@@ -258,8 +314,10 @@ words, <=16 chars), DIFFERENT for each rank -- e.g. "Aura Lost", "Skill Issue", 
         genre_guard = (
             "STREAMER MODE: every selected candidate must clearly be a specific live-streamer or "
             "creator moment. Prefer an obvious reaction, fail, rage, surprise, chat interaction, "
-            "or punchline. Reject podcasts, news/interviews, compilations, generic gameplay, and "
-            "titles that do not identify a creator or streamer.\n\n"
+            "or punchline. Prefer titles that name the concrete conflict and consequence (for "
+            "example: called out, roasted, cringe question, rigged game, meltdown, or an obvious "
+            "fail) over generic reaction wording. Reject podcasts, news/interviews, compilations, "
+            "generic gameplay, and titles that do not identify a creator or streamer.\n\n"
         )
     prompt = (f"TOPIC: {topic.get('title')}\nRANK BY: {topic.get('criterion')}\n"
               f"GENRE: {topic.get('genre')}\n\n{genre_guard}"

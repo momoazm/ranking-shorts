@@ -51,6 +51,7 @@ TOOL_TIMEOUTS = {
     "fetch_trending_music.py": 180,
     "build_ranking_video.py": 900,
     "build_clip.py": 900,
+    "prepare_upload_media.py": 240,
     "build_captions.py": 180,
     "host_public.py": 240,
     "upload_youtube.py": 360,
@@ -442,7 +443,10 @@ def main():
         build_args = ["--url", best["url"], "--title", best["title"],
                       "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
                       "--source-handle", best.get("streamer_identity") or best.get("channel") or "",
-                      "--max-secs", "58", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
+                      # The live winners hold attention for roughly 20-24 seconds on average;
+                      # a standalone control should finish the payoff before the 58s countdown
+                      # ceiling. Ranking controls keep their separate 58s budget below.
+                      "--max-secs", "45", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
                       "--out", FINAL]
         # Standalone mode intentionally keeps source audio as the creative signal. An explicitly
         # requested --music still works for controlled tests, but auto mode does not add a bed.
@@ -480,6 +484,16 @@ def main():
     if not isinstance(build, dict):
         raise RuntimeError("build_ranking_video.py returned no build result")
 
+    # Instagram rejected the two latest ranking posts with an explicit "re-export as MP4
+    # (H.264 video, AAC audio)" error. Do one final, in-place delivery encode after the creative
+    # renderer and before hosting so every platform receives the same verified artifact.
+    media, media_err = run_tool_safe(
+        "prepare_upload_media.py", ["--input", FINAL, "--output", FINAL])
+    if media_err:
+        raise RuntimeError(media_err)
+    if not media or not (media.get("contract") or {}).get("valid"):
+        raise RuntimeError("prepare_upload_media.py returned no valid media contract")
+
     # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
     title = (build.get("title") or topic["title"]) if selected_format == "standalone" else topic["title"]
     if selected_format == "standalone":
@@ -503,6 +517,7 @@ def main():
                              if entry.get("rank") == 1), None)
     result = {"status": "built", "title": title, "final": FINAL,
               "byte_size": build.get("byte_size"), "duration_sec": build.get("duration_sec"),
+              "media_contract": media.get("contract"),
               "entries": build.get("entries"), "elapsed_sec": round(time.time() - t0, 1),
               "format": selected_format,
               "format_requested": args.format,
@@ -520,7 +535,9 @@ def main():
             "duration_sec": result["duration_sec"], "byte_size": result["byte_size"],
             "source_entry": source_entry,
             "quality_contract": {"vertical": "1080x1920", "max_duration_sec": 59,
-                                 "audio_required": True, "streamer_only": True},
+                                 "audio_required": True, "video_codec": "h264",
+                                 "audio_codec": "aac", "pixel_format": "yuv420p",
+                                 "faststart": True, "streamer_only": True},
             "delivery_contract": {"required": sorted(required_platforms),
                                    "retry_is_provider_side": True,
                                    "no_delete_without_analytics": True},
@@ -578,7 +595,9 @@ def main():
                         style=f"streamer-{selected_format}",
                         experiment=(args.format == "auto" and selected_format == "ranking"),
                         context={"format": selected_format, "source": "rank_autopost",
-                                 "content_policy": "streamer-only"},
+                                 "content_policy": "streamer-only",
+                                 "title_signal_score": (source_entry or {}).get("signal_score"),
+                                 "duration_sec": (media.get("contract") or {}).get("duration_sec")},
                     )
 
     if publishing and "tiktok" in platforms:
