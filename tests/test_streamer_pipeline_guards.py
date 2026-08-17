@@ -15,6 +15,7 @@ import build_ranking_video  # noqa: E402
 import find_streamer_clips  # noqa: E402
 import rank_clips  # noqa: E402
 import rank_autopost  # noqa: E402
+import compare_streamer_formats  # noqa: E402
 
 
 class StreamerPipelineGuardsTest(unittest.TestCase):
@@ -30,6 +31,11 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertIn((("tv",), True), routes)
         self.assertNotIn((("android",), True), routes)
         self.assertNotIn((("ios",), False), routes)
+
+    def test_audio_policy_keeps_native_pitch_and_payoff_first_hook(self):
+        self.assertEqual(build_ranking_video.DEFAULT_MUSIC_PITCH, 1.0)
+        self.assertLessEqual(build_ranking_video.DEFAULT_MUSIC_VOLUME, 0.10)
+        self.assertIn("PAYOFF", build_ranking_video.DEFAULT_TEASER_TEXT)
 
     def test_streamer_identity_gate_is_strict(self):
         self.assertTrue(find_streamer_clips.streamer_signal("Kai Cenat funniest reaction", "Kai Cenat"))
@@ -87,7 +93,7 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
                 return {"error": err}, err
             raise AssertionError(f"unexpected safe tool: {name}")
 
-        argv = ["rank_autopost.py", "--no-upload", "--force-genre", "streamer",
+        argv = ["rank_autopost.py", "--no-upload", "--format", "ranking", "--force-genre", "streamer",
                 "--platforms", "youtube,instagram"]
         captured = io.StringIO()
         try:
@@ -120,6 +126,72 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertTrue(rank_autopost._is_streamer_source_starvation(
             "Only 3 usable clips -- need >=5. download failed"
         ))
+
+    def test_auto_format_defaults_to_standalone_and_keeps_ranked_control(self):
+        selected, state = rank_autopost.choose_format("auto", no_upload=True)
+        self.assertEqual(selected, "standalone")
+        self.assertIsInstance(state, dict)
+        selected_ranked, _ = rank_autopost.choose_format("ranking", no_upload=True)
+        self.assertEqual(selected_ranked, "ranking")
+
+    def test_format_slot_advances_only_after_confirmed_upload(self):
+        state = {"run_index": 4, "runs": [], "winner": None}
+        path = ROOT / ".tmp" / "test_format_state.json"
+        with mock.patch.object(rank_autopost, "load_json", return_value=state), \
+             mock.patch.object(rank_autopost, "FORMAT_STATE", ".tmp/test_format_state.json"):
+            try:
+                selected, reserved = rank_autopost.choose_format("auto", no_upload=False)
+                self.assertEqual(selected, "ranking")
+                rank_autopost.save_format_state(reserved, "ranking", status="delivery_failed")
+                failed = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(failed["run_index"], 4)
+                self.assertEqual(failed["pending_format"], "ranking")
+                rank_autopost.save_format_state(failed, "ranking", status="uploaded")
+                uploaded = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(uploaded["run_index"], 5)
+                self.assertNotIn("pending_format", uploaded)
+            finally:
+                path.unlink(missing_ok=True)
+
+    def test_standalone_download_failure_is_source_starvation_only(self):
+        self.assertTrue(rank_autopost._is_streamer_clip_download_failure(
+            "build_clip.py failed: download failed: bot check"))
+        self.assertFalse(rank_autopost._is_streamer_clip_download_failure(
+            "build_clip.py failed: overlay burn failed"))
+
+    def test_format_comparator_requires_clear_mature_winner(self):
+        stats = {
+            "standalone": [{"views": 200, "engagement_rate": 0.12}] * 3,
+            "ranking": [{"views": 100, "engagement_rate": 0.10}] * 3,
+        }
+        winner, _ = compare_streamer_formats.decide(stats)
+        self.assertEqual(winner, "standalone")
+        stats["standalone"] = [{"views": 110, "engagement_rate": 0.12}] * 3
+        winner, reason = compare_streamer_formats.decide(stats)
+        self.assertIsNone(winner)
+        self.assertIn("no clear winner", reason)
+
+    def test_streamer_signal_prefers_concrete_conflict_over_generic_gameplay(self):
+        concrete = rank_clips.streamer_signal_score({
+            "title": "Kai gets called out over a cringe chat question",
+            "channel": "Kai Cenat", "duration": 32,
+        })
+        generic = rank_clips.streamer_signal_score({
+            "title": "Funny moments compilation gameplay",
+            "channel": "Creator Clips", "duration": 90,
+        })
+        self.assertGreater(concrete, generic)
+
+    def test_format_comparator_keeps_retention_as_a_guardrail(self):
+        stats = {
+            "standalone": [{"views": 200, "engagement_rate": 0.12,
+                            "watch_completion_ratio": 0.10}] * 3,
+            "ranking": [{"views": 100, "engagement_rate": 0.10,
+                         "watch_completion_ratio": 0.20}] * 3,
+        }
+        winner, reason = compare_streamer_formats.decide(stats)
+        self.assertIsNone(winner)
+        self.assertIn("watch completion", reason)
 
 
 if __name__ == "__main__":

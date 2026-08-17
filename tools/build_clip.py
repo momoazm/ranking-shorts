@@ -81,7 +81,8 @@ def hex_to_ass_bgr(hex_color, alpha="00"):
     return f"&H{alpha}{b}{g}{r}&"
 
 
-def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text="", theme=None):
+def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text="", theme=None,
+                      badge_text="MOMOCLIPS / FOOTBALL"):
     """A compact title card: bold title pinned top for the whole clip + a small handle
     watermark bottom-centre. Colours/anchoring mirror build_ranking_video's Header style so
     the two formats look like one channel. Gold accent = brand.
@@ -118,7 +119,7 @@ def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text="", 
     )
     rows = [
         f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Badge,,0,0,0,,"
-        "{\\fad(120,0)}MOMOCLIPS / FOOTBALL",
+        "{\\fad(120,0)}" + esc(badge_text),
         # Title pops in with a quick scale-down so it punches on the open, then holds.
         f"Dialogue: 0,{ass_time(0)},{ass_time(total)},Title,,0,0,0,,"
         "{\\fad(120,0)\\fscx112\\fscy112\\t(0,240,\\fscx100\\fscy100)}" + esc(title),
@@ -145,6 +146,8 @@ def main():
     ap.add_argument("--source-handle", default="",
                     help="Uploader @handle of the source. TOD-by-beIN clips get their bottom "
                          "branding bar cropped off before the 9:16 fit; every other source is untouched.")
+    ap.add_argument("--badge", default="MOMOCLIPS / FOOTBALL",
+                    help="Small top badge burned into the video")
     ap.add_argument("--cta", dest="cta", action="store_true", default=True,
                     help="Follow CTA pop-in over the last --cta-dur seconds (default ON; no SFX, "
                          "per the audio rule -- purely on-screen text, same pattern as build_ranking_video).")
@@ -211,7 +214,8 @@ def main():
     except Exception:
         theme = {"colors": {}}
     build_overlay_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name),
-                       args.cta_dur if args.cta else 0.0, args.cta_text, theme=theme)
+                       args.cta_dur if args.cta else 0.0, args.cta_text, theme=theme,
+                       badge_text=args.badge)
 
     out_path = args.out if os.path.isabs(args.out) else str(REPO_ROOT / args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
@@ -252,6 +256,7 @@ def main():
         "source_url": args.url,
         "width": OUT_W, "height": OUT_H,
         "music": os.path.basename(music) if (music and os.path.isfile(music)) else None,
+        "badge": args.badge,
     })
 
 

@@ -56,6 +56,9 @@ jobs:
       - name: Run weekly check
         run: python tools/check_style_experiment.py
 
+      - name: Compare streamer formats when analytics are mature
+        run: python tools/compare_streamer_formats.py
+
       - name: Commit updated post log
         if: always()
         run: |
@@ -64,10 +67,13 @@ jobs:
           if [ -f state/ig_post_log.json ]; then
             git add state/ig_post_log.json
           fi
+          if [ -f state/format_experiment.json ]; then
+            git add state/format_experiment.json
+          fi
           if ! git diff --staged --quiet; then
             git commit -m "chore: resolve weekly style experiment [skip ci]"
-            git pull --rebase origin main
-            git push
+            git pull --rebase origin "${GITHUB_REF_NAME:-main}"
+            git push origin "HEAD:${GITHUB_REF_NAME:-main}"
           else
             echo "No log change to commit."
           fi

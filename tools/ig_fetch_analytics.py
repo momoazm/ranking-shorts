@@ -34,18 +34,33 @@ def _normalize(post):
     # level down under platforms[0] -- verified against the real API 2026-07-12 (docs' example
     # response didn't match the list shape). Fall back through both.
     plat = (post.get("platforms") or [{}])[0]
+    # List responses usually repeat analytics under the platform entry. Prefer the top-level
+    # values, but keep the platform copy as a fallback so retention fields are not silently lost.
+    pa = plat.get("analytics") or {}
+    get = lambda key, default=0: a.get(key, pa.get(key, default))
+    avg_watch = get("igReelsAvgWatchTime", None)
+    duration = get("videoDurationSeconds", None)
+    try:
+        watch_ratio = (float(avg_watch) / 1000.0) / float(duration) if duration else None
+    except (TypeError, ValueError, ZeroDivisionError):
+        watch_ratio = None
     return {
         "post_id": post.get("postId") or post.get("_id"),
         "platform_post_url": post.get("platformPostUrl") or plat.get("platformPostUrl"),
         "published_at": post.get("publishedAt"),
-        "views": a.get("views", 0),
-        "likes": a.get("likes", 0),
-        "comments": a.get("comments", 0),
-        "shares": a.get("shares", 0),
-        "saves": a.get("saves", 0),
-        "impressions": a.get("impressions", 0),
-        "reach": a.get("reach", 0),
-        "engagement_rate": a.get("engagementRate", 0),
+        "views": get("views", 0),
+        "likes": get("likes", 0),
+        "comments": get("comments", 0),
+        "shares": get("shares", 0),
+        "saves": get("saves", 0),
+        "impressions": get("impressions", 0),
+        "reach": get("reach", 0),
+        "follows": get("follows", 0),
+        "engagement_rate": get("engagementRate", 0),
+        "average_watch_time_ms": avg_watch,
+        "total_watch_time_ms": get("igReelsVideoViewTotalTime", None),
+        "video_duration_sec": duration,
+        "watch_completion_ratio": round(watch_ratio, 4) if watch_ratio is not None else None,
         "sync_status": post.get("syncStatus") or plat.get("syncStatus"),
     }
 

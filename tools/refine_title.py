@@ -17,6 +17,18 @@ from _common import load_env, emit, fail
 from _llm import llm_complete, parse_json
 
 
+GENERIC_TITLE_RE = re.compile(
+    r"\b(?:top\s*5|top\s*five|best|wild|crazy|insane|funny)\s+(?:streamer\s+)?"
+    r"(?:moments?|clips?|highlights?|reactions?)\b|\bcompilation\b",
+    re.IGNORECASE,
+)
+SPECIFIC_TITLE_RE = re.compile(
+    r"\b(?:called\s+out|roast(?:ed|s|ing)?|cringe|rigged|caught|busted|meltdown|"
+    r"rage|eliminat(?:ed|ion)|fails?|wins?|loses?|\$\s?\d+|million|challenge)\b",
+    re.IGNORECASE,
+)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ranked", default=".tmp/ranked.json", help="Output from rank_clips.py")
@@ -37,14 +49,21 @@ def main():
 
     # Extract clip titles and themes
     clip_titles = [e.get("title", "").strip() for e in entries]
-    listing = "\n".join(f"[Rank {e.get('rank')}] {clip_titles[i]}" for i, e in enumerate(entries))
+    listing = "\n".join(
+        f"[Rank {e.get('rank')}] {clip_titles[i]} (hook signal={e.get('signal_score', 'n/a')}/100)"
+        for i, e in enumerate(entries)
+    )
 
     prompt = f"""Analyze these 5 clips (ranked by virality, #1 = best) and generate a SPECIFIC, CATCHY title
 that captures what they have in common. The title should be:
 - Specific to the actual content (not generic like "Epic Fails" or "Top 5")
+- Use one concrete actor + action + consequence whenever the clips support it: e.g. called out,
+  roasted, cringe question, rigged game, meltdown, or an obvious fail.
 - Catchy, punchy, Gen-Z style
 - Optimized for shorts virality (curiosity, shock value, relatability)
 - Under 50 chars
+- Avoid "wild moments", "best moments", "top moments", "funny compilation", and other labels
+  that do not tell the viewer what actually happens.
 - Something like "POV: You're Worse Than Expected" or "Confidence Gone Wrong" or "The Skill Deficit"
 
 CLIPS:
@@ -76,6 +95,17 @@ Output JSON only."""
     refined_title = re.sub(r"^[^0-9A-Za-z]+", "", data.get("title", "").strip())[:50].strip()
     refined_hook = data.get("hook", "").strip()[:200]
     reasoning = data.get("reasoning", "").strip()
+
+    # Do not let a high-temperature title model erase the concrete event we measured in the
+    # selected clips. If its result is generic, use the best selected source title as a factual
+    # fallback; the selector/ranker already filtered that row for streamer-only safety.
+    if GENERIC_TITLE_RE.search(refined_title) and not SPECIFIC_TITLE_RE.search(refined_title):
+        rank_one = next((entry for entry in entries if entry.get("rank") == 1), entries[-1])
+        source_title = re.sub(r"\s+", " ", str(rank_one.get("title") or "")).strip()
+        if source_title:
+            refined_title = source_title[:50].rstrip(" -,:;")
+            reasoning = (reasoning + " Used the rank-one source title because the model title was "
+                         "too generic.").strip()
 
     if not refined_title:
         fail("LLM returned empty title")

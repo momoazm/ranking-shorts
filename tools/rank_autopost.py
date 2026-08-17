@@ -22,7 +22,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from _common import emit, load_env
+from _common import emit, load_env, log_ig_post
 
 ROOT = Path(__file__).resolve().parent.parent
 TMP = ROOT / ".tmp"
@@ -32,9 +32,11 @@ TOPIC = ".tmp/rank_topic.json"
 CANDS = ".tmp/rank_candidates.json"
 RANKED = ".tmp/ranked.json"
 FINAL = ".tmp/final.mp4"
+REVIEW_MANIFEST = ".tmp/review_manifest.json"
 RANK_STORY = ".tmp/rank_story.json"
 CAPMETA = ".tmp/captions_meta.json"
 DAILY_COUNT = ".tmp/daily_count.json"
+FORMAT_STATE = "state/format_experiment.json"
 
 # Every network- or media-heavy child must have a bounded wall-clock budget.  Without this,
 # yt-dlp or a public host can leave the Actions job "in progress" until the workflow's much
@@ -46,8 +48,11 @@ TOOL_TIMEOUTS = {
     "find_worldcup_clips.py": 240,
     "rank_clips.py": 180,
     "refine_title.py": 120,
+    "build_music.py": 120,
     "fetch_trending_music.py": 180,
     "build_ranking_video.py": 900,
+    "build_clip.py": 900,
+    "prepare_upload_media.py": 240,
     "build_captions.py": 180,
     "host_public.py": 240,
     "upload_youtube.py": 360,
@@ -108,6 +113,12 @@ def _is_streamer_source_starvation(error):
     return "usable clips" in text and "need >=5" in text
 
 
+def _is_streamer_clip_download_failure(error):
+    """Recognize a standalone source fetch failure without masking render/config errors."""
+    text = str(error or "").lower()
+    return "build_clip.py failed: download failed" in text or "yt-dlp" in text and "download" in text
+
+
 def _streamer_no_source_payload(source, requested_genre, detail, candidate_count=None):
     payload = {"status": "no_source", "content_policy": "streamer-only",
                "source_mode": source, "requested_genre": requested_genre,
@@ -120,10 +131,13 @@ def _streamer_no_source_payload(source, requested_genre, detail, candidate_count
 HISTORY = "state/used_clips.json"
 
 
-def record_used(ranked_path):
-    """Remember the Reddit post ids that went into this video so future runs don't repeat them."""
+def record_used(ranked_path, selected_format="ranking"):
+    """Remember only sources that actually went into this format's video."""
     ranked = load_json(ranked_path)
-    ids = [e.get("id") for e in (ranked or {}).get("entries", []) if e.get("id")]
+    entries = (ranked or {}).get("entries", [])
+    if selected_format == "standalone":
+        entries = [e for e in entries if e.get("rank") == 1][:1]
+    ids = [e.get("id") for e in entries if e.get("id")]
     if not ids:
         return
     prev = (load_json(HISTORY) or {}).get("used", [])
@@ -143,9 +157,78 @@ def daily_increment():
         json.dump({"date": date.today().isoformat(), "count": daily_used() + 1}, f)
 
 
+def choose_format(requested, no_upload=False):
+    """Choose the streamer presentation while preserving a small ranked control cohort.
+
+    Public competitor evidence favors standalone clips for discovery, but the existing account's
+    countdown has a valid retention hypothesis.  Auto mode therefore runs standalone by default
+    and reserves every fifth *real* post for ranking until measured analytics are written into the
+    state ledger.  A future winner field can switch the auto cohort without changing the workflow.
+    Dry runs never advance the cohort counter.
+    """
+    requested = (requested or "auto").strip().lower()
+    if requested not in {"auto", "standalone", "ranking"}:
+        raise ValueError(f"unknown format: {requested}")
+    state = load_json(FORMAT_STATE) or {"run_index": 0, "winner": None, "runs": []}
+    if not isinstance(state, dict):
+        state = {"run_index": 0, "winner": None, "runs": []}
+    winner = state.get("winner") if state.get("winner") in {"standalone", "ranking"} else None
+    pending = state.get("pending_format") if state.get("pending_format") in {"standalone", "ranking"} else None
+    if requested == "auto" and pending:
+        # A failed build/delivery keeps its selected format so the retry does not silently turn
+        # a planned ranked control into a standalone post (or vice versa).
+        selected = pending
+    elif requested != "auto":
+        selected = requested
+    elif winner:
+        selected = winner
+    else:
+        try:
+            run_index = max(0, int(state.get("run_index", 0)))
+        except (TypeError, ValueError):
+            run_index = 0
+        selected = "ranking" if run_index % 5 == 4 else "standalone"
+    if not no_upload:
+        try:
+            prior_index = max(0, int(state.get("run_index", 0) or 0))
+        except (TypeError, ValueError):
+            prior_index = 0
+        # Reserve the current cohort index, but do not advance it until a real upload is
+        # confirmed. Failed/no-source runs must not consume the every-fifth-post ranking slot.
+        state["pending_format"] = selected
+        state.setdefault("runs", []).append({"index": prior_index,
+                                               "requested": requested,
+                                               "selected": selected,
+                                               "status": "selected"})
+        state["runs"] = state["runs"][-40:]
+    return selected, state
+
+
+def save_format_state(state, selected, status="built"):
+    state = dict(state or {})
+    runs = list(state.get("runs") or [])
+    if runs:
+        runs[-1] = {**runs[-1], "selected": selected, "status": status}
+        if status in {"uploaded", "partial_upload"} and not runs[-1].get("counted"):
+            try:
+                run_index = max(0, int(state.get("run_index", 0) or 0))
+            except (TypeError, ValueError):
+                run_index = 0
+            state["run_index"] = run_index + 1
+            runs[-1]["counted"] = True
+            state.pop("pending_format", None)
+    state["runs"] = runs[-40:]
+    path = ROOT / FORMAT_STATE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2, ensure_ascii=True)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-upload", action="store_true")
+    ap.add_argument("--format", choices=["auto", "standalone", "ranking"], default="auto",
+                    help="Streamer presentation. Auto defaults to standalone and keeps a 1-in-5 ranked control.")
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
     # The main workflow forces the dedicated streamer genre; football has its own isolated
     # workflows and MrBeast sourcing belongs to clipping-auto.
@@ -163,10 +246,12 @@ def main():
                     help="TikTok privacy (defaults to PUBLIC_TO_EVERYONE for public runs, "
                          "SELF_ONLY otherwise).")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
-    ap.add_argument("--music", default=None, help="Optional music bed path (default: none -- keep clip audio)")
-    ap.add_argument("--music-query", default="trending tiktok background music 2026")
+    ap.add_argument("--music", default=None,
+                    help="Explicitly rights-cleared bed path; standalone stays original-audio by default")
+    ap.add_argument("--music-query", default="trending tiktok background music 2026",
+                    help="Deprecated compatibility flag; network music fetching is disabled")
     ap.add_argument("--with-music", action="store_true",
-                    help="Add a trending background-music bed under the clips (default: off)")
+                    help="Use the locally generated rights-safe bed for a ranking control")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_VIDEOS", "6")))
@@ -181,6 +266,7 @@ def main():
     # Zernio creds (written to API.env from repo secrets) and add the platform here. Harmless when
     # not publishing -- the instagram delivery branch below is gated on `publishing`.
     load_env()
+    selected_format, format_state = choose_format(args.format, no_upload=args.no_upload)
     source = os.environ.get("RANKING_SOURCE", "").strip().lower()
     if source not in {"reddit", "youtube", "streamer"}:
         source = "youtube" if os.environ.get("NO_REDDIT_SOURCES") == "1" else "reddit"
@@ -344,31 +430,55 @@ def main():
         # Fall back to original topic title if refinement fails
         print(f"::warning::Title refinement failed: {title_err or 'no data'}; using original title", file=sys.stderr)
 
-    # 4) background music -> 5) build the video.
-    # Default: ALWAYS mix in the committed background bed (assets/music/bg.mp3 -- the
-    # user's chosen track, extracted from the reference Short). The per-line whoosh/boom
-    # SFX are gone, and the intro swoosh is removed too (user rule, 2026-06-23) -- the bed
-    # is now the ONLY non-clip audio. An explicit --music overrides it; --with-music can still
-    # pull a trending track instead. (The bed is committed because the cloud runner's IP
-    # is blocked from YouTube downloads, so we can't re-extract it at runtime.)
-    MUSIC = ".tmp/music.mp3"
-    BG_BED = ROOT / "assets" / "music" / "bg.mp3"
+    # 4) audio policy -> 5) build the video. Standalone streamer clips keep original audio and
+    # use one source moment; ranked controls keep the #5->#1 countdown and a generated bed.
+    # Both paths use the same strict streamer candidate/ranking gate above.
+    # Ranking controls get a locally generated bed; standalone streamer clips keep the original
+    # source audio. Never download or pitch-shift a third-party track as a Content-ID workaround.
+    GENERATED_BED = ROOT / ".tmp" / "audio" / "momo_pulse.mp3"
     music_path = args.music
-    if not music_path and args.with_music:
-        _m, merr = run_tool_safe("fetch_trending_music.py", ["--query", args.music_query, "--out", MUSIC])
-        music_path = MUSIC if (not merr and (ROOT / MUSIC).is_file()) else None
-    if not music_path and BG_BED.is_file():
-        music_path = str(BG_BED)
+    music_error = None
+    if selected_format == "ranking" and not music_path:
+        if GENERATED_BED.is_file():
+            music_path = str(GENERATED_BED)
+        else:
+            music_error = "generated bed missing; workflow audio-generation step should run before ranking build"
+    elif selected_format == "standalone" and args.with_music and not music_path:
+        music_error = "standalone mode keeps original clip audio; --with-music applies only to ranking controls"
 
-    build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
-                  "--title", topic["title"], "--out", FINAL]
-    if topic.get("genre") == "streamer":
-        # A streamer ranking is always a real #5 -> #1 countdown, never a silently shortened
-        # Top-3/Top-4 after a download or normalization failure.
-        build_args += ["--min-clips", "5"]
-    if music_path:
-        build_args += ["--music", music_path]
-    build, build_err = run_tool_safe("build_ranking_video.py", build_args)
+    if selected_format == "standalone":
+        ranked_data = load_json(RANKED) or {}
+        ranked_entries = ranked_data.get("entries") or []
+        best = next((entry for entry in ranked_entries if entry.get("rank") == 1), None)
+        if not best:
+            raise RuntimeError("Standalone streamer mode could not identify the ranked #1 source")
+        if (best.get("content_type") != "streamer_clip"
+                or best.get("content_policy") != "streamer-only"
+                or not best.get("streamer_identity")):
+            raise RuntimeError("Standalone streamer mode received an unverified source entry")
+        build_args = ["--url", best["url"], "--title", best["title"],
+                      "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
+                      "--source-handle", best.get("streamer_identity") or best.get("channel") or "",
+                      # The live winners hold attention for roughly 20-24 seconds on average;
+                      # a standalone control should finish the payoff before the 58s countdown
+                      # ceiling. Ranking controls keep their separate 58s budget below.
+                      "--max-secs", "45", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
+                      "--out", FINAL]
+        # Standalone mode intentionally keeps source audio as the creative signal. An explicitly
+        # requested --music still works for controlled tests, but auto mode does not add a bed.
+        if args.music:
+            build_args += ["--music", args.music]
+        build, build_err = run_tool_safe("build_clip.py", build_args)
+    else:
+        build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
+                      "--title", topic["title"], "--out", FINAL]
+        if topic.get("genre") == "streamer":
+            # A streamer ranking is always a real #5 -> #1 countdown, never a silently shortened
+            # Top-3/Top-4 after a download or normalization failure.
+            build_args += ["--min-clips", "5"]
+        if music_path:
+            build_args += ["--music", music_path]
+        build, build_err = run_tool_safe("build_ranking_video.py", build_args)
     if build_err:
         # The source finder can return valid streamer metadata while YouTube blocks every
         # media download route a few seconds later. Scheduled/no-upload diagnostics should
@@ -376,33 +486,89 @@ def main():
         # hatch for a real non-streamer build or for unrelated renderer bugs.
         if (os.environ.get("NO_SOURCE_OK") == "1"
                 and topic.get("genre") == "streamer"
-                and _is_streamer_source_starvation(build_err)):
+                and (_is_streamer_source_starvation(build_err)
+                     or (selected_format == "standalone" and _is_streamer_clip_download_failure(build_err)))):
             candidate_data = load_json(CANDS)
-            emit(_streamer_no_source_payload(
+            payload = _streamer_no_source_payload(
                 source, requested_genre, build_err,
                 len(candidate_data.get("candidates", [])) if isinstance(candidate_data, dict) else None,
-            ))
+            )
+            payload["format"] = selected_format
+            emit(payload)
             return
         raise RuntimeError(build_err)
     if not isinstance(build, dict):
         raise RuntimeError("build_ranking_video.py returned no build result")
 
+    # Instagram rejected the two latest ranking posts with an explicit "re-export as MP4
+    # (H.264 video, AAC audio)" error. Do one final, in-place delivery encode after the creative
+    # renderer and before hosting so every platform receives the same verified artifact.
+    media, media_err = run_tool_safe(
+        "prepare_upload_media.py", ["--input", FINAL, "--output", FINAL])
+    if media_err:
+        raise RuntimeError(media_err)
+    if not media or not (media.get("contract") or {}).get("valid"):
+        raise RuntimeError("prepare_upload_media.py returned no valid media contract")
+
     # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
-    title = topic["title"]
+    title = (build.get("title") or topic["title"]) if selected_format == "standalone" else topic["title"]
+    if selected_format == "standalone":
+        standalone_entry = next((entry for entry in (load_json(RANKED) or {}).get("entries", [])
+                                 if entry.get("rank") == 1), {})
+        description = standalone_entry.get("title") or title
+        tag_seed = ["streamer", "streamerclips", "liveclip", "shorts"]
+    else:
+        description = topic.get("hook", title)
+        tag_seed = ["ranking", "top5", "countdown", "shorts"]
     tags = [w for w in "".join(c if c.isalnum() else " " for c in title.lower()).split() if len(w) > 3]
     with open(ROOT / RANK_STORY, "w", encoding="utf-8") as f:
-        json.dump({"title": title, "description": topic.get("hook", title),
-                   "tags": (tags + ["ranking", "top5", "countdown", "viral"])[:15]}, f)
+        json.dump({"title": title, "description": description,
+                   "tags": (tags + tag_seed + ["viral"])[:15]}, f)
     run_tool_safe("build_captions.py", ["--story", RANK_STORY, "--out", CAPMETA])
     meta = load_json(CAPMETA) or {}
 
+    source_entry = None
+    if selected_format == "standalone":
+        source_entry = next((entry for entry in (load_json(RANKED) or {}).get("entries", [])
+                             if entry.get("rank") == 1), None)
     result = {"status": "built", "title": title, "final": FINAL,
               "byte_size": build.get("byte_size"), "duration_sec": build.get("duration_sec"),
+              "media_contract": media.get("contract"),
               "entries": build.get("entries"), "elapsed_sec": round(time.time() - t0, 1),
+              "format": selected_format,
+              "format_requested": args.format,
+              "format_experiment": {"default": "standalone", "ranked_control_every": 5},
+              "source_entry": source_entry,
               "source_mode": source,
               "requested_genre": requested_genre, "used_genre": topic.get("genre"),
               "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
-              "fallback_reason": fallback_reason, "delivery": {}}
+              "fallback_reason": fallback_reason, "delivery": {},
+              "audio": {
+                  "profile": build.get("audio_profile") or "original_audio_only",
+                  "music": os.path.basename(music_path) if music_path else None,
+                  "music_volume": build.get("music_volume", 0.0),
+                  "rights_policy": (
+                      "generated_only" if music_path and music_path == str(GENERATED_BED)
+                      else ("explicit_path_requires_license" if music_path else "original_audio_only")
+                  ),
+                  "warning": music_error,
+              }}
+
+    with open(ROOT / REVIEW_MANIFEST, "w", encoding="utf-8") as handle:
+        json.dump({
+            "status": "built", "account": "@itsmomoclips", "format": selected_format,
+            "content_policy": result["content_policy"], "title": title,
+            "duration_sec": result["duration_sec"], "byte_size": result["byte_size"],
+            "source_entry": source_entry,
+            "quality_contract": {"vertical": "1080x1920", "max_duration_sec": 59,
+                                 "audio_required": True, "video_codec": "h264",
+                                 "audio_codec": "aac", "pixel_format": "yuv420p",
+                                 "faststart": True, "streamer_only": True},
+            "audio_policy": result["audio"],
+            "delivery_contract": {"required": sorted(required_platforms),
+                                   "retry_is_provider_side": True,
+                                   "no_delete_without_analytics": True},
+        }, handle, indent=2, ensure_ascii=True)
 
     # 6) deliver. Host the finished MP4 once for the public-url platforms, then use the local
     # file for TikTok's FILE_UPLOAD API. The old flow hosted separately for YouTube and Instagram,
@@ -426,8 +592,11 @@ def main():
                                        "--description", yt.get("description", ""),
                                        "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
                                        "--privacy", args.privacy, "--confirm"])
-            ok = not err and (m or {}).get("status") == "uploaded"
-            result["delivery"]["youtube"] = ({"skipped": err.splitlines()[0][:140]}
+            ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
+            result["delivery"]["youtube"] = ({"skipped": err.splitlines()[0][:140],
+                                                 "diagnostics": {k: m.get(k) for k in
+                                                                 ("post_id", "retry_attempted", "ambiguous", "platform_status", "poll_error")
+                                                                 if (m or {}).get(k) not in (None, "", {})}}
                                                 if err else {"url": m.get("url")})
             published = published or ok
 
@@ -438,10 +607,27 @@ def main():
         else:
             m, err = run_tool_safe("upload_instagram.py", ["--video-url", host_url,
                                        "--caption", ig.get("caption", title), "--confirm"])
-            ok = not err and (m or {}).get("status") == "uploaded"
-            result["delivery"]["instagram"] = ({"skipped": err.splitlines()[0][:140]}
+            ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
+            result["delivery"]["instagram"] = ({"skipped": err.splitlines()[0][:140],
+                                                   "diagnostics": {k: m.get(k) for k in
+                                                                   ("post_id", "retry_attempted", "ambiguous", "platform_status", "poll_error")
+                                                                   if (m or {}).get(k) not in (None, "", {})}}
                                                   if err else {"media_id": m.get("post_id") or m.get("media_id")})
             published = published or ok
+            if ok and m:
+                post_id = m.get("post_id") or m.get("media_id")
+                if post_id:
+                    log_ig_post(
+                        post_id,
+                        style=f"streamer-{selected_format}",
+                        experiment=(args.format == "auto" and selected_format == "ranking"),
+                        context={"format": selected_format, "source": "rank_autopost",
+                                 "content_policy": "streamer-only",
+                                 "title_signal_score": (source_entry or {}).get("signal_score"),
+                                 "duration_sec": (media.get("contract") or {}).get("duration_sec"),
+                                 "audio": result.get("audio"),
+                                 "hook_variant": "streamer_payoff_first"},
+                    )
 
     if publishing and "tiktok" in platforms:
         tt = (meta.get("tiktok") or {})
@@ -450,7 +636,7 @@ def main():
         m, err = run_tool_safe("upload_tiktok.py", ["--video", FINAL,
                                     "--title", tt.get("caption", title),
                                     "--privacy", tiktok_privacy, "--confirm"])
-        ok = not err and (m or {}).get("status") == "uploaded"
+        ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
         result["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:140]}
                                           if err else {"publish_id": m.get("publish_id")})
         published = published or ok
@@ -486,9 +672,12 @@ def main():
     if published:
         result["status"] = "partial_upload" if required_failures else "uploaded"
         daily_increment()
-        record_used(RANKED)
+        record_used(RANKED, selected_format)
     elif required_failures:
         result["status"] = "delivery_failed"
+
+    if publishing:
+        save_format_state(format_state, selected_format, status=result.get("status", "built"))
 
     # No-upload runs are the workflow's media-QA mode: keep the finished MP4 until the
     # upload-artifact step can collect it. Real publishing runs may still clean scratch files.

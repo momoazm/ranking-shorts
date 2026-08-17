@@ -228,7 +228,7 @@ def zernio_create_post(api_url, payload, api_key, max_tries=5):
     return None, f"Zernio post create failed after {max_tries} tries ({last})"
 
 
-def zernio_retry_post(api_url, post_id, api_key, max_tries=2):
+def zernio_retry_post(api_url, post_id, api_key, max_tries=3):
     """Retry a Zernio post whose platform status is failed/partial.
 
     Zernio retries only the failed platforms, so this is safe after a partial cross-post and
