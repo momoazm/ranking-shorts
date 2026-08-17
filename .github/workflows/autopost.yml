@@ -324,8 +324,8 @@ jobs:
           git add state/format_experiment.json state/ig_post_log.json 2>/dev/null || true
           if ! git diff --staged --quiet; then
             git commit -m "chore: record streamer format cohort [skip ci]"
-            git pull --rebase origin main
-            git push
+            git pull --rebase origin "${GITHUB_REF_NAME:-main}"
+            git push origin "HEAD:${GITHUB_REF_NAME:-main}"
           else
             echo "No format experiment state to commit."
           fi
@@ -349,5 +349,5 @@ jobs:
           date -u +"%Y-%m-%dT%H:%MZ" > .github/.heartbeat
           git add .github/.heartbeat
           git commit -m "chore: schedule keepalive [skip ci]"
-          git pull --rebase origin main || true
-          git push
+          git pull --rebase origin "${GITHUB_REF_NAME:-main}" || true
+          git push origin "HEAD:${GITHUB_REF_NAME:-main}"
