@@ -236,7 +236,12 @@ jobs:
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
           IN_FORMAT: ${{ inputs.format || 'auto' }}
         run: |
-          PLATFORMS="youtube,instagram,email"
+          PLATFORMS="youtube,instagram"
+          if [ -s gmail_token.json ]; then
+            PLATFORMS="$PLATFORMS,email"
+          else
+            echo "::warning::Gmail token is not configured; skipping optional email delivery."
+          fi
           if [ -n "$TIKTOK_ACCESS_TOKEN" ] || { [ -n "$TIKTOK_REFRESH_TOKEN" ] && [ -n "$TIKTOK_CLIENT_KEY" ] && [ -n "$TIKTOK_CLIENT_SECRET" ]; }; then
             PLATFORMS="$PLATFORMS,tiktok"
           else
@@ -301,7 +306,7 @@ jobs:
           retention-days: 3
 
       - name: Upload ranking run metadata
-        if: always()
+        if: ${{ always() && (failure() || inputs.no_upload == true) }}
         uses: actions/upload-artifact@v4
         continue-on-error: true
         with:
