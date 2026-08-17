@@ -32,6 +32,11 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertNotIn((("android",), True), routes)
         self.assertNotIn((("ios",), False), routes)
 
+    def test_audio_policy_keeps_native_pitch_and_payoff_first_hook(self):
+        self.assertEqual(build_ranking_video.DEFAULT_MUSIC_PITCH, 1.0)
+        self.assertLessEqual(build_ranking_video.DEFAULT_MUSIC_VOLUME, 0.10)
+        self.assertIn("PAYOFF", build_ranking_video.DEFAULT_TEASER_TEXT)
+
     def test_streamer_identity_gate_is_strict(self):
         self.assertTrue(find_streamer_clips.streamer_signal("Kai Cenat funniest reaction", "Kai Cenat"))
         self.assertTrue(find_streamer_clips.streamer_signal("Twitch streamer rage", "Creator Clips"))
@@ -128,6 +133,25 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertIsInstance(state, dict)
         selected_ranked, _ = rank_autopost.choose_format("ranking", no_upload=True)
         self.assertEqual(selected_ranked, "ranking")
+
+    def test_format_slot_advances_only_after_confirmed_upload(self):
+        state = {"run_index": 4, "runs": [], "winner": None}
+        path = ROOT / ".tmp" / "test_format_state.json"
+        with mock.patch.object(rank_autopost, "load_json", return_value=state), \
+             mock.patch.object(rank_autopost, "FORMAT_STATE", ".tmp/test_format_state.json"):
+            try:
+                selected, reserved = rank_autopost.choose_format("auto", no_upload=False)
+                self.assertEqual(selected, "ranking")
+                rank_autopost.save_format_state(reserved, "ranking", status="delivery_failed")
+                failed = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(failed["run_index"], 4)
+                self.assertEqual(failed["pending_format"], "ranking")
+                rank_autopost.save_format_state(failed, "ranking", status="uploaded")
+                uploaded = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(uploaded["run_index"], 5)
+                self.assertNotIn("pending_format", uploaded)
+            finally:
+                path.unlink(missing_ok=True)
 
     def test_standalone_download_failure_is_source_starvation_only(self):
         self.assertTrue(rank_autopost._is_streamer_clip_download_failure(

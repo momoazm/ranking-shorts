@@ -48,6 +48,7 @@ TOOL_TIMEOUTS = {
     "find_worldcup_clips.py": 240,
     "rank_clips.py": 180,
     "refine_title.py": 120,
+    "build_music.py": 120,
     "fetch_trending_music.py": 180,
     "build_ranking_video.py": 900,
     "build_clip.py": 900,
@@ -172,7 +173,12 @@ def choose_format(requested, no_upload=False):
     if not isinstance(state, dict):
         state = {"run_index": 0, "winner": None, "runs": []}
     winner = state.get("winner") if state.get("winner") in {"standalone", "ranking"} else None
-    if requested != "auto":
+    pending = state.get("pending_format") if state.get("pending_format") in {"standalone", "ranking"} else None
+    if requested == "auto" and pending:
+        # A failed build/delivery keeps its selected format so the retry does not silently turn
+        # a planned ranked control into a standalone post (or vice versa).
+        selected = pending
+    elif requested != "auto":
         selected = requested
     elif winner:
         selected = winner
@@ -187,7 +193,9 @@ def choose_format(requested, no_upload=False):
             prior_index = max(0, int(state.get("run_index", 0) or 0))
         except (TypeError, ValueError):
             prior_index = 0
-        state["run_index"] = prior_index + 1
+        # Reserve the current cohort index, but do not advance it until a real upload is
+        # confirmed. Failed/no-source runs must not consume the every-fifth-post ranking slot.
+        state["pending_format"] = selected
         state.setdefault("runs", []).append({"index": prior_index,
                                                "requested": requested,
                                                "selected": selected,
@@ -201,6 +209,14 @@ def save_format_state(state, selected, status="built"):
     runs = list(state.get("runs") or [])
     if runs:
         runs[-1] = {**runs[-1], "selected": selected, "status": status}
+        if status in {"uploaded", "partial_upload"} and not runs[-1].get("counted"):
+            try:
+                run_index = max(0, int(state.get("run_index", 0) or 0))
+            except (TypeError, ValueError):
+                run_index = 0
+            state["run_index"] = run_index + 1
+            runs[-1]["counted"] = True
+            state.pop("pending_format", None)
     state["runs"] = runs[-40:]
     path = ROOT / FORMAT_STATE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -230,10 +246,12 @@ def main():
                     help="TikTok privacy (defaults to PUBLIC_TO_EVERYONE for public runs, "
                          "SELF_ONLY otherwise).")
     ap.add_argument("--privacy", default="public", choices=["public", "unlisted", "private"])
-    ap.add_argument("--music", default=None, help="Optional music bed path (default: none -- keep clip audio)")
-    ap.add_argument("--music-query", default="trending tiktok background music 2026")
+    ap.add_argument("--music", default=None,
+                    help="Explicitly rights-cleared bed path; standalone stays original-audio by default")
+    ap.add_argument("--music-query", default="trending tiktok background music 2026",
+                    help="Deprecated compatibility flag; network music fetching is disabled")
     ap.add_argument("--with-music", action="store_true",
-                    help="Add a trending background-music bed under the clips (default: off)")
+                    help="Use the locally generated rights-safe bed for a ranking control")
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_VIDEOS", "6")))
@@ -412,23 +430,21 @@ def main():
         # Fall back to original topic title if refinement fails
         print(f"::warning::Title refinement failed: {title_err or 'no data'}; using original title", file=sys.stderr)
 
-    # 4) background music -> 5) build the video.  Standalone streamer clips keep original audio
-    # and use a single source moment; ranked controls keep the existing #5->#1 countdown and
-    # branded bed.  Both paths use the same strict streamer candidate/ranking gate above.
-    # Default: ALWAYS mix in the committed background bed (assets/music/bg.mp3 -- the
-    # user's chosen track, extracted from the reference Short). The per-line whoosh/boom
-    # SFX are gone, and the intro swoosh is removed too (user rule, 2026-06-23) -- the bed
-    # is now the ONLY non-clip audio. An explicit --music overrides it; --with-music can still
-    # pull a trending track instead. (The bed is committed because the cloud runner's IP
-    # is blocked from YouTube downloads, so we can't re-extract it at runtime.)
-    MUSIC = ".tmp/music.mp3"
-    BG_BED = ROOT / "assets" / "music" / "bg.mp3"
+    # 4) audio policy -> 5) build the video. Standalone streamer clips keep original audio and
+    # use one source moment; ranked controls keep the #5->#1 countdown and a generated bed.
+    # Both paths use the same strict streamer candidate/ranking gate above.
+    # Ranking controls get a locally generated bed; standalone streamer clips keep the original
+    # source audio. Never download or pitch-shift a third-party track as a Content-ID workaround.
+    GENERATED_BED = ROOT / ".tmp" / "audio" / "momo_pulse.mp3"
     music_path = args.music
-    if not music_path and args.with_music:
-        _m, merr = run_tool_safe("fetch_trending_music.py", ["--query", args.music_query, "--out", MUSIC])
-        music_path = MUSIC if (not merr and (ROOT / MUSIC).is_file()) else None
-    if selected_format == "ranking" and not music_path and BG_BED.is_file():
-        music_path = str(BG_BED)
+    music_error = None
+    if selected_format == "ranking" and not music_path:
+        if GENERATED_BED.is_file():
+            music_path = str(GENERATED_BED)
+        else:
+            music_error = "generated bed missing; workflow audio-generation step should run before ranking build"
+    elif selected_format == "standalone" and args.with_music and not music_path:
+        music_error = "standalone mode keeps original clip audio; --with-music applies only to ranking controls"
 
     if selected_format == "standalone":
         ranked_data = load_json(RANKED) or {}
@@ -526,7 +542,17 @@ def main():
               "source_mode": source,
               "requested_genre": requested_genre, "used_genre": topic.get("genre"),
               "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
-              "fallback_reason": fallback_reason, "delivery": {}}
+              "fallback_reason": fallback_reason, "delivery": {},
+              "audio": {
+                  "profile": build.get("audio_profile") or "original_audio_only",
+                  "music": os.path.basename(music_path) if music_path else None,
+                  "music_volume": build.get("music_volume", 0.0),
+                  "rights_policy": (
+                      "generated_only" if music_path and music_path == str(GENERATED_BED)
+                      else ("explicit_path_requires_license" if music_path else "original_audio_only")
+                  ),
+                  "warning": music_error,
+              }}
 
     with open(ROOT / REVIEW_MANIFEST, "w", encoding="utf-8") as handle:
         json.dump({
@@ -538,6 +564,7 @@ def main():
                                  "audio_required": True, "video_codec": "h264",
                                  "audio_codec": "aac", "pixel_format": "yuv420p",
                                  "faststart": True, "streamer_only": True},
+            "audio_policy": result["audio"],
             "delivery_contract": {"required": sorted(required_platforms),
                                    "retry_is_provider_side": True,
                                    "no_delete_without_analytics": True},
@@ -597,7 +624,9 @@ def main():
                         context={"format": selected_format, "source": "rank_autopost",
                                  "content_policy": "streamer-only",
                                  "title_signal_score": (source_entry or {}).get("signal_score"),
-                                 "duration_sec": (media.get("contract") or {}).get("duration_sec")},
+                                 "duration_sec": (media.get("contract") or {}).get("duration_sec"),
+                                 "audio": result.get("audio"),
+                                 "hook_variant": "streamer_payoff_first"},
                     )
 
     if publishing and "tiktok" in platforms:

@@ -208,6 +208,9 @@ jobs:
           TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
         run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME" --require-ready
 
+      - name: Generate rights-safe ranking audio bed
+        run: python tools/build_music.py
+
       - name: Build + publish one Ranking Short
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}    # injected directly too, so the LLM never depends on the file

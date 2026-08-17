@@ -3,7 +3,7 @@
 Style (per the user's spec):
   * FUNNY clips, shown with their ORIGINAL audio (no AI narrator).
   * the WHOLE frame is shown — fit into 9:16 over a blurred fill, NO crop-zoom.
-  * a trending background-music bed is mixed in under the clip audio.
+  * an original, rights-safe background bed is mixed in under the clip audio with ducking.
   * each clip is capped so the whole video is <= 3 minutes and long sources are windowed around
     their strongest audible/action beat.
   * a countdown overlay (#N + the video title) sits on each clip.
@@ -32,6 +32,9 @@ TMPDIR = ".tmp/rank"
 SILENCE_DB = -50.0                       # below this mean volume a clip counts as "silent"
 DOWNLOAD_DEADLINE_SEC = 150.0            # one bad source must not consume a whole Actions job
 DOWNLOAD_ATTEMPT_TIMEOUT_SEC = 25.0      # yt-dlp API calls can outlive socket timeouts
+DEFAULT_MUSIC_VOLUME = 0.09
+DEFAULT_MUSIC_PITCH = 1.0
+DEFAULT_TEASER_TEXT = "WATCH THE #1 PAYOFF"
 
 
 def ass_time(t):
@@ -291,7 +294,7 @@ def build_overlay_ass(segments, title, total, teaser_dur=0.0, teaser_text="", ct
     ranks_asc = sorted(by_rank)                           # 1,2,3,4,5 top-to-bottom (#1 on top)
 
     # Title is pinned for the whole video EXCEPT the teaser flash, where the cold-open hook owns
-    # the screen (a 1s tease of the #1 clip with "WAIT FOR #1" to promise the payoff up front).
+    # the screen and promises the #1 payoff up front.
     rows = [f"Dialogue: 0,{ass_time(teaser_dur)},{ass_time(total)},Header,,0,0,0,,{esc(title)[:55]}"]
     if teaser_dur > 0 and teaser_text:
         rows.append(
@@ -333,10 +336,9 @@ def main():
     ap.add_argument("--ranked", default=".tmp/ranked.json")
     ap.add_argument("--title", default=None, help="Overall video title pinned at the top")
     ap.add_argument("--music", default=None)
-    ap.add_argument("--music-volume", type=float, default=0.18)
-    ap.add_argument("--music-pitch", type=float, default=1.06,
-                    help="Pitch/tempo-shift the bed to dodge YouTube Content ID fingerprinting "
-                         "(1.0 = off; 1.06 ~= +1 semitone with the tempo preserved)")
+    ap.add_argument("--music-volume", type=float, default=DEFAULT_MUSIC_VOLUME)
+    ap.add_argument("--music-pitch", type=float, default=DEFAULT_MUSIC_PITCH,
+                    help="Native pitch only. Non-native pitch shifting is disabled by policy.")
     ap.add_argument("--intro-swoosh", default=None,
                     help="One-shot SFX placed once at t=0. OFF by default (user rule, 2026-06-23 — "
                          "no intro swoosh); only added when an explicit path is passed here.")
@@ -352,12 +354,12 @@ def main():
     ap.add_argument("--min-clips", type=int, default=3,
                     help="Minimum number of source clips that must render successfully")
     ap.add_argument("--teaser", dest="teaser", action="store_true", default=True,
-                    help="Cold-open hook: flash ~1.2s of the #1 clip + 'WAIT FOR #1' before the "
+                    help="Cold-open hook: flash ~1.2s of the #1 clip before the "
                          "#5 countdown starts (default ON -- biggest retention lever).")
     ap.add_argument("--no-teaser", dest="teaser", action="store_false",
                     help="Disable the cold-open teaser; start straight on #5.")
     ap.add_argument("--teaser-dur", type=float, default=1.2, help="Teaser length in seconds.")
-    ap.add_argument("--teaser-text", default="WAIT FOR #1",
+    ap.add_argument("--teaser-text", default=DEFAULT_TEASER_TEXT,
                     help="On-screen hook shown over the teaser flash.")
     ap.add_argument("--cta", dest="cta", action="store_true", default=True,
                     help="Visual follow CTA end-card over the #1 payoff (default ON; no SFX, "
@@ -449,7 +451,7 @@ def main():
     clip_total = round(min(cursor, budget), 2)
 
     # Cold-open teaser (user/competitor rule, 2026-06-23): flash ~1.2s of the #1 clip's MAIN ACTION
-    # with a "WAIT FOR #1" hook BEFORE the #5 countdown, so the payoff is promised in frame one --
+    # with a concrete payoff hook BEFORE the #5 countdown, so the payoff is promised in frame one --
     # the single biggest retention lever for countdown Shorts. clips[-1] (rank #1) was already
     # normalized to END on the source's payoff moment (see the "show its END" trim above), so the
     # teaser grabs clips[-1]'s OWN selected payoff window rather than the raw source start/end.
@@ -502,30 +504,40 @@ def main():
     concat_in = "".join(f"[{k}:v][{k}:a]" for k in range(n_v))
     chain = f"{concat_in}concat=n={n_v}:v=1:a=1[cv][ca];[cv]ass={ass_rel}[v]"
 
-    # Audio mix. The clips' ORIGINAL audio stays at full level; the bed + intro swoosh sit
-    # under it. normalize=0 keeps levels (default amix halves every input); a final limiter
-    # guards the summed signal against clipping. duration=first anchors to the clip track
-    # (so the looped bed and the short swoosh don't extend the video).
+    if music_idx is not None and abs(args.music_pitch - 1.0) > 1e-3:
+        fail("--music-pitch is disabled; use an original or explicitly rights-cleared bed at native pitch")
+        return
+
+    # Audio mix. The clips' ORIGINAL audio stays at full level; the generated bed + optional
+    # intro swoosh sit under it. The bed is sidechain-ducked from the clip audio so speech and
+    # the actual streamer payoff remain the loudest signal. normalize=0 keeps levels; a final
+    # limiter guards the summed signal against clipping.
     # When there's an intro swoosh, briefly duck the clip audio at t=0 so the swoosh punches
     # through (otherwise a full-level clip masks it); ramp back to full over swoosh_duck seconds.
-    if swoosh_idx is not None and args.swoosh_duck > 0:
+    if music_idx is not None:
+        if swoosh_idx is not None and args.swoosh_duck > 0:
+            d = args.swoosh_duck
+            base_filter = (
+                f"[ca]volume='min(1,0.15+0.85*t/{d:.3f})':eval=frame,"
+                "asplit=2[base][bed_sidechain]"
+            )
+        else:
+            base_filter = "[ca]volume=1.0,asplit=2[base][bed_sidechain]"
+    elif swoosh_idx is not None and args.swoosh_duck > 0:
         d = args.swoosh_duck
         base_filter = f"[ca]volume='min(1,0.15+0.85*t/{d:.3f})':eval=frame[base]"
     else:
         base_filter = "[ca]volume=1.0[base]"
     pre, labels = [base_filter], ["[base]"]
     if music_idx is not None:
-        # Pitch/tempo-shift the bed so its audio FINGERPRINT no longer matches the source
-        # track -> dodges Content ID, while still sounding the same low in the mix. asetrate
-        # pitches+speeds up, aresample fixes the rate, atempo restores the original tempo;
-        # the highpass/lowpass nudge the spectrum a touch further from the original.
-        if abs(args.music_pitch - 1.0) > 1e-3:
-            shift = (f"aresample=44100,asetrate={int(44100 * args.music_pitch)},"
-                     f"aresample=44100,atempo={1.0 / args.music_pitch:.4f},")
-        else:
-            shift = "aresample=44100,"
-        pre.append(f"[{music_idx}:a]{shift}highpass=f=60,lowpass=f=15000,"
-                   f"volume={args.music_volume}[mus]")
+        pre.append(
+            f"[{music_idx}:a]aresample=44100,highpass=f=70,lowpass=f=9000,"
+            f"volume={args.music_volume}[musraw]"
+        )
+        pre.append(
+            "[musraw][bed_sidechain]sidechaincompress=threshold=0.035:ratio=10:"
+            "attack=5:release=300[mus]"
+        )
         labels.append("[mus]")
     if swoosh_idx is not None:
         pre.append(f"[{swoosh_idx}:a]aresample=44100,volume={args.swoosh_volume}[swh]")
@@ -550,7 +562,9 @@ def main():
 
     emit({"path": args.out, "byte_size": os.path.getsize(args.out), "duration_sec": total,
           "entries": [{"rank": s["rank"], "title": s["title"][:50]} for s in segments],
-          "title": data.get("title")})
+          "title": data.get("title"),
+          "audio_profile": "generated_bed_ducked" if music_idx is not None else "original_audio_only",
+          "music_volume": round(args.music_volume, 3) if music_idx is not None else 0.0})
 
 
 if __name__ == "__main__":
