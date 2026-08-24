@@ -147,6 +147,26 @@ recent normal posts via Zernio analytics (`tools/ig_fetch_analytics.py`) and Wha
 win. **Never auto-applies a winning CTA** — it's a notification; Moemen decides whether to update
 `build_clip.py`'s/`build_compilation.py`'s default `--cta-text`.
 
+## Most-successful-video tracking (2026-08-24)
+
+New `tools/update_best_videos.py` pulls Zernio analytics for BOTH platform workflows, ranks every
+post (views → engagement_rate → recency), and writes the winner per platform — with a
+metrics-backed `why_most_successful` (retention vs clip length, engagement vs account median,
+title pattern) — to `state/best_videos.json`. `rank_autopost.py` refreshes it at the end of each
+real publishing run; standalone runs work too (`python tools/update_best_videos.py`). Account ids
+auto-resolve via GET /v1/accounts from this project's Zernio key, so no extra env is needed locally.
+
+First full review (172 IG / 100 YT posts):
+- **Instagram winner** — "HOW DID MADA WIN THIS?!!!?" (`DcQ_applcNW`, Aug 20): 544 views ≈ 57x the
+  recent-posts median (9.5), ~57% average retention (25.5s of 45s). Why: raw shock-reaction +
+  open curiosity-gap title on a genuinely surprising moment.
+- **YouTube winner** — "Skydiver CRASHES In The Go Ahead Eagles Vs Willem II 🔥 #Shorts"
+  (`yrQbdE8mDes`, Aug 9): only 117 views; median 0. Same cold-start story as clipping-auto's
+  channel: distribution, not content quality, is the bottleneck on YT right now.
+- Takeaway feeding future titles: reaction-question titles ("HOW DID X ...?") measurably beat the
+  descriptive "Watch ..." house style relative to account median — `refine_title.py`'s prompt now
+  prefers them. `state/ig_post_log.json` already records hooks for attribution.
+
 ## Hard rules specific to this project
 
 - **Under-1-minute hard cap on any video** (user rule, 2026-06-24 — strictly *less than* a minute,

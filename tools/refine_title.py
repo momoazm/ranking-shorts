@@ -65,6 +65,9 @@ that captures what they have in common. The title should be:
 - Avoid "wild moments", "best moments", "top moments", "funny compilation", and other labels
   that do not tell the viewer what actually happens.
 - Something like "POV: You're Worse Than Expected" or "Confidence Gone Wrong" or "The Skill Deficit"
+- PROVEN from our own account data (2026-08-24 review): reaction-question titles ("HOW DID MADA
+  WIN THIS?!!!?") beat descriptive "Watch ..." titles by a wide margin relative to account median.
+  Prefer an open reaction question or shock phrasing over describing what happens.
 
 CLIPS:
 {listing}

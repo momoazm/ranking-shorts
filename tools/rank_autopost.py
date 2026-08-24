@@ -679,6 +679,15 @@ def main():
     if publishing:
         save_format_state(format_state, selected_format, status=result.get("status", "built"))
 
+    # Refresh the most-successful-video store (state/best_videos.json) with fresh
+    # analytics -- best effort, never fails the run (2026-08-24 analytics review).
+    if publishing:
+        bv, bverr = run_tool_safe("update_best_videos.py", [])
+        result["delivery"]["best_videos"] = (
+            {"error": bverr.splitlines()[0][:140]} if bverr else
+            {p: (bv.get("platforms", {}).get(p, {}).get("most_successful_video") or {}).get("url")
+             for p in ("youtube", "instagram")})
+
     # No-upload runs are the workflow's media-QA mode: keep the finished MP4 until the
     # upload-artifact step can collect it. Real publishing runs may still clean scratch files.
     if not args.keep_tmp and publishing:
