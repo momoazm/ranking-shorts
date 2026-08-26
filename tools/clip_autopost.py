@@ -176,6 +176,17 @@ def screen_candidates(cands):
     return []
 
 
+def credit_tag(cand):
+    """'IB: @handle' (falls back to the channel name) for the candidate's source creator.
+    Standard clip-channel etiquette credit: softens copyright claims and lets the tagged
+    creator's audience find the post."""
+    src_handle = (cand.get("handle") or "").strip().lstrip("@")
+    if src_handle:
+        return f"IB: @{src_handle}"
+    src_name = (cand.get("channel") or cand.get("uploader") or "").strip()
+    return f"IB: {src_name}" if src_name else ""
+
+
 def build_meta(cand, handle):
     """Make the burned card title + the YouTube/IG posted text from a candidate."""
     raw = cand.get("title", "").strip()
@@ -189,8 +200,15 @@ def build_meta(cand, handle):
                         if len(w) > 3][:6]
     hashtags = " ".join(f"#{t}" for t in dict.fromkeys(tags))
     subject = "football clips" if cat == "football" else "World Cup clips"
+    ib_line = credit_tag(cand)
+    src_url = (cand.get("url") or "").strip()
     description = f"{card}\n\n{hashtags}\n\nFollow {handle} for daily {subject}."
+    yt_credit = "\n".join(x for x in (ib_line, src_url) if x)
+    if yt_credit:
+        description += f"\n\n{yt_credit}"
     ig_caption = f"{card} {emoji}\n\nFollow {handle} for daily {subject} ⚽\U0001F525\n\n{hashtags}"
+    if ib_line:
+        ig_caption += f"\n\n{ib_line}"
     return card, yt_title, description, ig_caption, tags
 
 
@@ -381,7 +399,8 @@ def main():
         tiktok_privacy = args.tiktok_privacy or (
             "PUBLIC_TO_EVERYONE" if args.privacy == "public" else "SELF_ONLY")
         m, err = run_tool_safe("upload_tiktok.py", ["--video", FINAL,
-                                    "--title", f"{card} #football #shorts",
+                                    "--title", " ".join(x for x in (
+                                        f"{card} #football #shorts", credit_tag(cand)) if x),
                                     "--privacy", tiktok_privacy, "--confirm"])
         result["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:160]}
                                           if err else {"publish_id": m.get("publish_id")})
