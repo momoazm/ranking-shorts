@@ -531,6 +531,24 @@ def main():
     if selected_format == "standalone":
         source_entry = next((entry for entry in (load_json(RANKED) or {}).get("entries", [])
                              if entry.get("rank") == 1), None)
+
+    # Credit the source creator on standalone streamer posts -- mirrors the 2026-08-26
+    # clip_autopost.build_meta change ('IB: @handle', channel-name fallback): IB line on
+    # every posted text plus the source link in the YouTube description. Softens copyright
+    # claims and routes the creator's audience to the channel.
+    ib_line, src_url = "", ""
+    if selected_format == "standalone" and source_entry:
+        src_handle = (source_entry.get("handle") or "").strip().lstrip("@")
+        src_name = (source_entry.get("channel") or source_entry.get("uploader") or "").strip()
+        ib_line = f"IB: @{src_handle}" if src_handle else (f"IB: {src_name}" if src_name else "")
+        src_url = (source_entry.get("url") or "").strip()
+        yt_credit = "\n".join(x for x in (ib_line, src_url) if x)
+        yt_desc = (meta.get("youtube") or {}).get("description") or ""
+        if yt_credit and yt_desc:
+            meta.setdefault("youtube", {})["description"] = f"{yt_desc}\n\n{yt_credit}"
+        ig_caption = (meta.get("instagram") or {}).get("caption") or ""
+        if ib_line and ig_caption:
+            meta.setdefault("instagram", {})["caption"] = f"{ig_caption}\n\n{ib_line}"
     result = {"status": "built", "title": title, "final": FINAL,
               "byte_size": build.get("byte_size"), "duration_sec": build.get("duration_sec"),
               "media_contract": media.get("contract"),
@@ -634,7 +652,8 @@ def main():
         tiktok_privacy = args.tiktok_privacy or (
             "PUBLIC_TO_EVERYONE" if args.privacy == "public" else "SELF_ONLY")
         m, err = run_tool_safe("upload_tiktok.py", ["--video", FINAL,
-                                    "--title", tt.get("caption", title),
+                                    "--title", " ".join(x for x in (tt.get("caption", title),
+                                                                    ib_line) if x),
                                     "--privacy", tiktok_privacy, "--confirm"])
         ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
         result["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:140]}
