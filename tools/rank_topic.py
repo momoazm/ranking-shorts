@@ -41,6 +41,12 @@ SCHEMA = """Return ONE JSON object with exactly these keys:
                            //   - contrast/"shouldn't": "Top 5 Baby Fails That Shouldn't Be This Funny"
                            //   - escalation: "These Dog Fails Get Worse Every Single Time"
                            //   - dare/relatable: "Top 5 Fails You Can't Watch Without Laughing"
+                           //   PROVEN 2026-09-04 from our own accounts (IG winners "HOW DID MADA WIN
+                           //   THIS?!!!?" at 545 views / 68x median / 57% retention, and "15 Sea Bombs
+                           //   Surrounding His Yacht - What?" at 500 views / 3.5x median / 57% retention):
+                           //   prefer a reaction-question ("HOW DID X ...?"), a specific number + open
+                           //   gap ("15 X - What?", "80% ... Until This Happened"), or a shock verb
+                           //   (CRASHES / WIN / SCREAMS). Never a flat label or "Watch ...".
                            //   When genre is "worldcup", the title must clearly reflect the chosen angle
                            //   (e.g. "Top 5 Wildest World Cup Fan Reactions", "Top 5 Most Insane World
                            //   Cup Goals", or "Top 5 Streamer Meltdowns At The World Cup") -- never a
