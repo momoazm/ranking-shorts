@@ -95,6 +95,20 @@ _LISTY = _re.compile(
     r"compilation|montage|\bquiz\b|\btrivia\b",
     _re.IGNORECASE)
 
+# Reacts-to-third-party screen (mute test, user 2026-09-05): a streamer reacting to
+# someone ELSE's content (music video, match footage, trailer, another video) republishes
+# TWO copyrighted works -- the streamer's permission/program covers only their own layer.
+# Blocks explicit "reacts to / watching / listening to <external media>" titles. Deliberately
+# narrow: bare "reaction" with no media object (the channel's actual genre) still passes, and
+# "reacts to his own clips/chat" passes since clips/chat are not media nouns below.
+_REACTS_THIRDPARTY = _re.compile(
+    r"(?:reacts?(?:\s+\w+){0,2}\s+to|watch(?:es|ing)?|listens?(?:\s+\w+){0,2}\s+to)\s+"
+    r"(?:\w+\s+){0,4}?"
+    r"(?:music\s*videos?|songs?|tracks?|albums?|trailers?|movies?|films?|episodes?|"
+    r"documentar(?:y|ies)|match(?:es)?|highlights?|finals?|fights?|shows?|concerts?|"
+    r"performances?|tiktoks?|reels?|shorts?\b)",
+    _re.IGNORECASE)
+
 # iShowSpeed / "Speed" content is BLOCKED again (user 2026-07-12, re-reverses the
 # 2026-07-08 un-block back to the 2026-07-06 stance). _ISHOWSPEED above is checked in both
 # title_ok() and channel_ok() below.
@@ -103,7 +117,8 @@ _LISTY = _re.compile(
 def title_ok(title):
     """True if a candidate's title looks like English-language actual-footage content.
 
-    Rejects non-Latin-script titles, news/analysis/talking-head markers, and iShowSpeed.
+    Rejects non-Latin-script titles, news/analysis/talking-head markers, iShowSpeed,
+    and reacts-to-third-party titles (mute test: the underlying media is someone else's).
     Deliberately conservative: a false reject just skips one candidate; a false accept
     posts an off-audience video to the channel.
     """
@@ -113,6 +128,8 @@ def title_ok(title):
     if _TALK_OR_FOREIGN.search(t):
         return False
     if _LISTY.search(t):
+        return False
+    if _REACTS_THIRDPARTY.search(t):
         return False
     if _ISHOWSPEED.search(t):
         return False
