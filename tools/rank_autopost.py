@@ -449,26 +449,50 @@ def main():
     if selected_format == "standalone":
         ranked_data = load_json(RANKED) or {}
         ranked_entries = ranked_data.get("entries") or []
-        best = next((entry for entry in ranked_entries if entry.get("rank") == 1), None)
-        if not best:
-            raise RuntimeError("Standalone streamer mode could not identify the ranked #1 source")
-        if (best.get("content_type") != "streamer_clip"
-                or best.get("content_policy") != "streamer-only"
-                or not best.get("streamer_identity")):
-            raise RuntimeError("Standalone streamer mode received an unverified source entry")
-        build_args = ["--url", best["url"], "--title", best["title"],
-                      "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
-                      "--source-handle", best.get("streamer_identity") or best.get("channel") or "",
-                      # The live winners hold attention for roughly 20-24 seconds on average;
-                      # a standalone control should finish the payoff before the 58s countdown
-                      # ceiling. Ranking controls keep their separate 58s budget below.
-                      "--max-secs", "45", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
-                      "--out", FINAL]
-        # Standalone mode intentionally keeps source audio as the creative signal. An explicitly
-        # requested --music still works for controlled tests, but auto mode does not add a bed.
-        if args.music:
-            build_args += ["--music", args.music]
-        build, build_err = run_tool_safe("build_clip.py", build_args)
+        # A bot-walled #1 source must not red the whole run while #2-#5 are valid:
+        # walk the ranked entries in order and post the first one that downloads.
+        # Only download failures fall through; renderer/config errors still raise
+        # immediately, and an entirely walled pool still fails loudly below.
+        ordered = sorted(ranked_entries, key=lambda e: e.get("rank") or 999)
+        verified = [
+            entry for entry in ordered
+            if (entry.get("content_type") == "streamer_clip"
+                and entry.get("content_policy") == "streamer-only"
+                and entry.get("streamer_identity")
+                and entry.get("url") and entry.get("title"))
+        ]
+        if not verified:
+            raise RuntimeError("Standalone streamer mode could not identify a verified ranked source")
+        build, build_err, failures = None, None, []
+        for entry in verified:
+            build_args = ["--url", entry["url"], "--title", entry["title"],
+                          "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
+                          "--source-handle", entry.get("streamer_identity") or entry.get("channel") or "",
+                          # The live winners hold attention for roughly 20-24 seconds on average;
+                          # a standalone control should finish the payoff before the 58s countdown
+                          # ceiling. Ranking controls keep their separate 58s budget below.
+                          "--max-secs", "45", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
+                          "--out", FINAL]
+            # Standalone mode intentionally keeps source audio as the creative signal. An explicitly
+            # requested --music still works for controlled tests, but auto mode does not add a bed.
+            if args.music:
+                build_args += ["--music", args.music]
+            build, build_err = run_tool_safe("build_clip.py", build_args)
+            if not build_err:
+                if entry.get("rank") != 1:
+                    print(f"::warning::rank #{entry.get('rank')} posted after higher-ranked "
+                          f"source(s) failed to download", file=sys.stderr)
+                break
+            if not _is_streamer_clip_download_failure(build_err):
+                raise RuntimeError(build_err)
+            failures.append(f"rank #{entry.get('rank')}: {build_err}")
+            build = None
+        else:
+            # Message keeps the "build_clip.py failed: download failed" shape so the
+            # NO_SOURCE_OK escape hatch below still recognizes an all-walled pool.
+            raise RuntimeError(
+                f"build_clip.py failed: download failed for all {len(verified)} verified "
+                f"standalone candidates: {'; '.join(failures)}")
     else:
         build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
                       "--title", topic["title"], "--out", FINAL]
