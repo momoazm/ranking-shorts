@@ -9,5 +9,16 @@
       "status": "delivery_failed"
     }
   ],
-  "pending_format": "standalone"
+  "pending_format": "standalone",
+  "last_comparison": {
+    "at": "2026-09-20T11:54:15.800736+00:00",
+    "samples": {
+      "standalone": 52,
+      "ranking": 13
+    },
+    "winner": null,
+    "reason": "no clear winner: standalone views -47%, engagement -3%, watch completion -38%",
+    "pending": 8,
+    "errors": 0
+  }
 }
