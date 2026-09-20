@@ -3,8 +3,9 @@ old enough to judge, compare it against a baseline of recent normal posts, and
 WhatsApp Moemen if it clearly won.
 
 Run by .github/workflows/style_experiment.yml on a weekly cron. Reads/writes
-state/ig_post_log.json (written by clip_autopost.py / watch_worldcup.py /
-watch_speed.py via _common.log_ig_post -- all three post to the same account).
+state/ig_post_log.json (written by rank_autopost.py via _common.log_ig_post;
+kept in git as a deliberate state/ exception -- see autopost.yml -- because
+this job runs from a fresh checkout without the Actions cache).
 Never touches the live pipeline -- a win is a notification, not an automatic
 style change; Moemen decides whether to roll it into the default CTA.
 

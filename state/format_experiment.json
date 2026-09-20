@@ -1,0 +1,13 @@
+{
+  "run_index": 0,
+  "winner": null,
+  "runs": [
+    {
+      "index": 0,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "delivery_failed"
+    }
+  ],
+  "pending_format": "standalone"
+}

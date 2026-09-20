@@ -1,0 +1,1610 @@
+{
+  "posts": [
+    {
+      "post_id": "6a831bd61d0ce696c700ae0e",
+      "posted_at": "2026-08-17T14:34:33.758864+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 51,
+        "duration_sec": 17.856,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a846d10fcc8250d840ccf55",
+      "posted_at": "2026-08-18T14:33:29.202067+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 17.67,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8499a3f91d6eae5e490bdf",
+      "posted_at": "2026-08-18T17:43:35.430153+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 55,
+        "duration_sec": 25.937,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a84c19b8674bc27a7b9705e",
+      "posted_at": "2026-08-18T20:34:11.734769+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a863dec7f71a4e431591cc6",
+      "posted_at": "2026-08-19T23:36:53.356587+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a866a7f207efed7f6f46f3a",
+      "posted_at": "2026-08-20T02:47:08.651329+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 56,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a86e5e4365b1cfd47ff1adf",
+      "posted_at": "2026-08-20T11:33:20.149673+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 21.943,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a87109a71192cc5bb3ccf09",
+      "posted_at": "2026-08-20T14:36:19.888576+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a878ebe693387f3450ceda4",
+      "posted_at": "2026-08-20T23:33:53.416368+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 30.07,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8838074cf5f9f555e2ce54",
+      "posted_at": "2026-08-21T11:36:37.515069+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a886181eeeb0d2d8408beab",
+      "posted_at": "2026-08-21T14:33:19.486831+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 13.189,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a888bc3e9161cbda651f063",
+      "posted_at": "2026-08-21T17:33:57.232111+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 57,
+        "duration_sec": 24.381,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a88b61b101ff5edc4a8e019",
+      "posted_at": "2026-08-21T20:35:06.576428+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 51,
+        "duration_sec": 25.681,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8a607fc4b450d6d27b081f",
+      "posted_at": "2026-08-23T02:53:44.114304+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 18.042,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8b2fa7c4b7939a9e060e04",
+      "posted_at": "2026-08-23T17:37:30.602064+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8b595dedfafc6943e472ef",
+      "posted_at": "2026-08-23T20:35:34.279069+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 38.359,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8b83570c19f45f9c1f3f44",
+      "posted_at": "2026-08-23T23:35:17.215493+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8cd530c42b709c04780d17",
+      "posted_at": "2026-08-24T23:35:59.071735+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8d02731806e1577d26004e",
+      "posted_at": "2026-08-25T02:49:17.339819+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 15.627,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8da84f1dd0a4bcaf10421f",
+      "posted_at": "2026-08-25T14:36:55.631370+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 54.156,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8e26751348ee97c01eb306",
+      "posted_at": "2026-08-25T23:34:59.233972+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8e5603a38f8302c534fba0",
+      "posted_at": "2026-08-26T02:57:42.285211+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 51,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8ecf5da4b9b63041e9baa9",
+      "posted_at": "2026-08-26T11:35:56.155512+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8ef991da43e9f86e5db886",
+      "posted_at": "2026-08-26T14:36:06.633624+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 59,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8f16f0dac80aaf9f00e183",
+      "posted_at": "2026-08-26T16:41:12.713694+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8f307854a0716cf650f2b2",
+      "posted_at": "2026-08-26T18:29:58.146587+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 26.726,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a8f69c25b7624e7f8c731d3",
+      "posted_at": "2026-08-26T22:34:55.216989+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 31.092,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a91fb5afa8597c50e811264",
+      "posted_at": "2026-08-28T21:19:58.229365+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a92583126cb177883c263d3",
+      "posted_at": "2026-08-29T03:56:25.806438+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 10.612,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a93350d612d53c23eac845a",
+      "posted_at": "2026-08-29T19:39:47.015947+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9356c9f00a8d51671d6400",
+      "posted_at": "2026-08-29T22:03:10.175353+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 55,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a93dc4a5bf8a0c8f74d1726",
+      "posted_at": "2026-08-30T07:32:07.591717+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 41.262,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a94aa30379c262dcb98c0a3",
+      "posted_at": "2026-08-30T22:10:37.133747+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 29.187,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a94d1342af81b99ad213d9d",
+      "posted_at": "2026-08-31T00:56:55.232742+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9531935451dde1d507a7d8",
+      "posted_at": "2026-08-31T07:48:12.406225+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a95bdf6024ab9873fa3b49f",
+      "posted_at": "2026-08-31T17:47:27.418274+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 19.087,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a960f8c17fd17a368fe9f58",
+      "posted_at": "2026-08-31T23:35:23.811281+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a967592f0709f996eb71241",
+      "posted_at": "2026-09-01T06:50:41.150150+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 20.108,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a96ec6f8ef6d1752946a457",
+      "posted_at": "2026-09-01T15:18:48.223625+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 39.033,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a974da495d648f062a91afe",
+      "posted_at": "2026-09-01T22:12:28.688125+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a976f74d0130d116d53b873",
+      "posted_at": "2026-09-02T00:36:45.320829+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 6.989,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a989d5341e7cbfd8b7b2cdc",
+      "posted_at": "2026-09-02T22:04:43.463434+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a99ed29db62f3a2b84c7796",
+      "posted_at": "2026-09-03T21:57:43.281721+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 26.842,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9a10dfd42611225775ac2a",
+      "posted_at": "2026-09-04T00:30:02.675590+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 19.505,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9b18b7ef08628d71a41916",
+      "posted_at": "2026-09-04T19:15:39.034370+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9b6261ebc8e7122126156c",
+      "posted_at": "2026-09-05T00:29:56.810848+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9c8dd216f563df90a77129",
+      "posted_at": "2026-09-05T21:47:32.410428+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 51,
+        "duration_sec": 33.739,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9d79aa6eb7b80ea9013941",
+      "posted_at": "2026-09-06T14:34:09.959609+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 36.525,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6a9db3f99c0918cbb460782e",
+      "posted_at": "2026-09-06T18:42:57.794759+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 50,
+        "duration_sec": 16.765,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa021b1e356525ce81059e6",
+      "posted_at": "2026-09-08T14:56:31.100028+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa0713fb921c258cfab4354",
+      "posted_at": "2026-09-08T20:35:26.016174+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 65,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa086f4fd45edfa645c2f12",
+      "posted_at": "2026-09-08T22:07:30.719526+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa0abbf986ee70e65675c22",
+      "posted_at": "2026-09-09T00:44:19.492011+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 31.486,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa1014719f1221748361271",
+      "posted_at": "2026-09-09T06:49:34.461813+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa173401dad3ce7cb7293f7",
+      "posted_at": "2026-09-09T14:55:58.388557+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa34d5483b704c880252bba",
+      "posted_at": "2026-09-11T00:39:09.882352+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 38.824,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa4135c2e78bfdc041e288e",
+      "posted_at": "2026-09-11T14:43:49.757067+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 31.045,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa4549a75a16d9790c5dc05",
+      "posted_at": "2026-09-11T19:22:12.382192+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 22.5,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa74093b394cf85f625a615",
+      "posted_at": "2026-09-14T00:33:45.157245+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa79ebe0d19e232443a090c",
+      "posted_at": "2026-09-14T07:15:06.582635+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa82fd8c4aeb58d436b44e8",
+      "posted_at": "2026-09-14T17:34:24.968830+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 41,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa85bdc7cf2acec0eb36a18",
+      "posted_at": "2026-09-14T20:41:47.534729+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 41,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa8986595cc7b0a0f044bdb",
+      "posted_at": "2026-09-15T01:00:09.445665+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 26.239,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa8ea5137fbd1b0c5b0222b",
+      "posted_at": "2026-09-15T06:49:36.520488+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 12.817,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aa962f9abee0459d3e826c2",
+      "posted_at": "2026-09-15T15:25:29.407045+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aaab257aed325dfe6bc987f",
+      "posted_at": "2026-09-16T15:15:33.677470+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 35,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aab8c3e9f470f1d2cb352c8",
+      "posted_at": "2026-09-17T06:44:50.119361+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 30.163,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aac4eacf6f32836e86771b3",
+      "posted_at": "2026-09-17T20:34:28.717917+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 26.099,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aacdde208433da63ad505f5",
+      "posted_at": "2026-09-18T06:45:31.085156+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 18.042,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aad4e64b9a2382cdd40736c",
+      "posted_at": "2026-09-18T14:45:50.005154+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aad8e0647a1ef8b6328b894",
+      "posted_at": "2026-09-18T19:17:25.436758+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 13.05,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aadb3927db2bf1d886dba25",
+      "posted_at": "2026-09-18T21:57:19.962021+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 38.638,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    },
+    {
+      "post_id": "6aae74d647259f726e3bb754",
+      "posted_at": "2026-09-19T11:41:56.058020+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 43,
+        "duration_sec": 20.735,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
+    }
+  ]
+}
