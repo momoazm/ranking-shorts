@@ -1,24 +1,286 @@
 {
-  "run_index": 0,
+  "run_index": 76,
   "winner": null,
   "runs": [
     {
-      "index": 0,
+      "index": 36,
       "requested": "auto",
       "selected": "standalone",
-      "status": "delivery_failed"
-    }
-  ],
-  "pending_format": "standalone",
-  "last_comparison": {
-    "at": "2026-09-20T11:54:15.800736+00:00",
-    "samples": {
-      "standalone": 52,
-      "ranking": 13
+      "status": "uploaded",
+      "counted": true
     },
-    "winner": null,
-    "reason": "no clear winner: standalone views -47%, engagement -3%, watch completion -38%",
-    "pending": 8,
-    "errors": 0
-  }
+    {
+      "index": 37,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 38,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 39,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 40,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 41,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 42,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 43,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 44,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 45,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 46,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 47,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 48,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 49,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 50,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 51,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 52,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 53,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 54,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 55,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 56,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 57,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 58,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 59,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 60,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 61,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 62,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 63,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 64,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 65,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 66,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 67,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 68,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 69,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 70,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 71,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 72,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 73,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 74,
+      "requested": "auto",
+      "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 75,
+      "requested": "auto",
+      "selected": "standalone",
+      "status": "partial_upload",
+      "counted": true
+    }
+  ]
 }
