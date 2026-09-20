@@ -174,7 +174,15 @@ def download(url, out_base):
             route_errors.append(f"[{route}] {str(e).splitlines()[0][:180]}")
             continue
     if route_errors:
-        raise RuntimeError("all YouTube download routes failed: " + " | ".join(route_errors))
+        # A total wall with no authenticated session is almost always the missing-secret
+        # case, not a code bug: say so directly (proven 2026-09-20 -- every route, every
+        # candidate, both proxy legs, all "sign in to confirm you're not a bot").
+        cookie = os.environ.get("YT_COOKIES_FILE") or str(REPO_ROOT / "cookies.txt")
+        hint = ("" if os.path.isfile(cookie)
+                else " (no cookies.txt in play: anonymous datacenter egress gets bot-walled; "
+                     "export a fresh YouTube cookies.txt into the YT_COOKIES repo secret)")
+        raise RuntimeError("all YouTube download routes failed" + hint + ": "
+                           + " | ".join(route_errors))
     raise last or RuntimeError("download produced no file")
 
 
