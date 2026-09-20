@@ -16,6 +16,7 @@ import argparse
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
@@ -117,6 +118,24 @@ def _is_streamer_clip_download_failure(error):
     """Recognize a standalone source fetch failure without masking render/config errors."""
     text = str(error or "").lower()
     return "build_clip.py failed: download failed" in text or "yt-dlp" in text and "download" in text
+
+
+# Titles that get the post itself removed: a 2026-09-20 live run proved YouTube pulls
+# the upload within minutes (and Instagram refuses processing) when the title frames
+# real-person violence ("assaults granny"). Screen BEFORE spending render/upload budget.
+# Narrow by design: gaming hyperbole (kill feed, "I'm dead", knife/gun props) is NOT here.
+UNSAFE_TITLE_RE = re.compile(
+    r"\b(?:assault(?:s|ed|ing)?|murder(?:s|ed|ing)?|rape[sd]?|kidnap(?:s|ped|ping)?|"
+    r"tortur(?:e|ed|ing)|suicid(?:e|al)|behead(?:s|ed|ing)?|strangl(?:e|es|ed|ing)?|"
+    r"molest(?:s|ed|ing)?|stab(?:b)?(?:s|ed|ing)?|lynch(?:es|ed|ing)?|massacre[sd]?|"
+    r"abduct(?:s|ed|ing)?|porn|hentai|nude|naked|erotic|bestiality|sex\s*tape)\b",
+    re.IGNORECASE,
+)
+
+
+def _title_flag(text):
+    m = UNSAFE_TITLE_RE.search(str(text or ""))
+    return m.group(0).lower() if m else None
 
 
 def _streamer_no_source_payload(source, requested_genre, detail, candidate_count=None):
@@ -463,8 +482,15 @@ def main():
         ]
         if not verified:
             raise RuntimeError("Standalone streamer mode could not identify a verified ranked source")
-        build, build_err, failures = None, None, []
+        build, build_err, failures, posted = None, None, [], None
         for entry in verified:
+            flag = _title_flag(entry.get("title"))
+            if flag:
+                # Proven takedown trigger (2026-09-20): skip BEFORE render/upload spend.
+                print(f"::warning::rank #{entry.get('rank')} skipped: title flags safety "
+                      f"screen ({flag})", file=sys.stderr)
+                failures.append(f"rank #{entry.get('rank')}: title safety screen ({flag})")
+                continue
             build_args = ["--url", entry["url"], "--title", entry["title"],
                           "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
                           "--source-handle", entry.get("streamer_identity") or entry.get("channel") or "",
@@ -479,6 +505,7 @@ def main():
                 build_args += ["--music", args.music]
             build, build_err = run_tool_safe("build_clip.py", build_args)
             if not build_err:
+                posted = entry
                 if entry.get("rank") != 1:
                     print(f"::warning::rank #{entry.get('rank')} posted after higher-ranked "
                           f"source(s) failed to download", file=sys.stderr)
@@ -489,10 +516,13 @@ def main():
             build = None
         else:
             # Message keeps the "build_clip.py failed: download failed" shape so the
-            # NO_SOURCE_OK escape hatch below still recognizes an all-walled pool.
+            # NO_SOURCE_OK escape hatch below still recognizes an all-walled pool
+            # (a fully screen-skipped pool is likewise a clean no-post for scheduled runs).
+            screened = sum(1 for f in failures if "title safety screen" in f)
             raise RuntimeError(
                 f"build_clip.py failed: download failed for all {len(verified)} verified "
-                f"standalone candidates: {'; '.join(failures)}")
+                f"standalone candidates ({screened} skipped by title safety screen): "
+                f"{'; '.join(failures)}")
     else:
         build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
                       "--title", topic["title"], "--out", FINAL]
@@ -537,8 +567,18 @@ def main():
     # 5) per-platform captions/hashtags (write a tiny story-like file for build_captions)
     title = (build.get("title") or topic["title"]) if selected_format == "standalone" else topic["title"]
     if selected_format == "standalone":
-        standalone_entry = next((entry for entry in (load_json(RANKED) or {}).get("entries", [])
-                                 if entry.get("rank") == 1), {})
+        # Credit/description must follow the ACTUALLY posted entry (rank fallback above),
+        # not a blind rank-#1 lookup. Both are screen-checked: entry titles were screened
+        # in the loop; the refined final title gets screened here with fallback.
+        standalone_entry = posted or {}
+        title_flag = _title_flag(title)
+        if title_flag:
+            safe_fallback = (posted or {}).get("title") or ""
+            if _title_flag(safe_fallback):
+                raise RuntimeError(f"no safe standalone title (final + source both flag: {title_flag})")
+            print(f"::warning::final title flags safety screen ({title_flag}); "
+                  f"falling back to source title", file=sys.stderr)
+            title = safe_fallback
         description = standalone_entry.get("title") or title
         tag_seed = ["streamer", "streamerclips", "liveclip", "shorts"]
     else:
@@ -555,8 +595,8 @@ def main():
 
     source_entry = None
     if selected_format == "standalone":
-        source_entry = next((entry for entry in (load_json(RANKED) or {}).get("entries", [])
-                             if entry.get("rank") == 1), None)
+        # The actually posted entry (rank fallback above), never a blind rank-#1 lookup.
+        source_entry = posted
 
     # Credit the source creator on standalone streamer posts -- mirrors the 2026-08-26
     # clip_autopost.build_meta change ('IB: @handle', channel-name fallback): IB line on

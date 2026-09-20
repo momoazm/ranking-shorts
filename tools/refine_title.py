@@ -22,6 +22,15 @@ GENERIC_TITLE_RE = re.compile(
     r"(?:moments?|clips?|highlights?|reactions?)\b|\bcompilation\b",
     re.IGNORECASE,
 )
+# Titles that get the post removed (proven 2026-09-20: YouTube pulled the upload within
+# minutes and Instagram refused processing for a real-person-violence framing).
+UNSAFE_TITLE_RE = re.compile(
+    r"\b(?:assault(?:s|ed|ing)?|murder(?:s|ed|ing)?|rape[sd]?|kidnap(?:s|ped|ping)?|"
+    r"tortur(?:e|ed|ing)|suicid(?:e|al)|behead(?:s|ed|ing)?|strangl(?:e|es|ed|ing)?|"
+    r"molest(?:s|ed|ing)?|stab(?:b)?(?:s|ed|ing)?|lynch(?:es|ed|ing)?|massacre[sd]?|"
+    r"abduct(?:s|ed|ing)?|porn|hentai|nude|naked|erotic|bestiality|sex\s*tape)\b",
+    re.IGNORECASE,
+)
 SPECIFIC_TITLE_RE = re.compile(
     r"\b(?:called\s+out|roast(?:ed|s|ing)?|cringe|rigged|caught|busted|meltdown|"
     r"rage|eliminat(?:ed|ion)|fails?|wins?|loses?|\$\s?\d+|million|challenge)\b",
@@ -104,13 +113,25 @@ Output JSON only."""
     # Do not let a high-temperature title model erase the concrete event we measured in the
     # selected clips. If its result is generic, use the best selected source title as a factual
     # fallback; the selector/ranker already filtered that row for streamer-only safety.
-    if GENERIC_TITLE_RE.search(refined_title) and not SPECIFIC_TITLE_RE.search(refined_title):
-        rank_one = next((entry for entry in entries if entry.get("rank") == 1), entries[-1])
-        source_title = re.sub(r"\s+", " ", str(rank_one.get("title") or "")).strip()
+    # The fallback is also the safety valve: a refined title that frames real-person violence
+    # gets replaced, never published (proven takedown trigger 2026-09-20).
+    if ((GENERIC_TITLE_RE.search(refined_title) and not SPECIFIC_TITLE_RE.search(refined_title))
+            or UNSAFE_TITLE_RE.search(refined_title)):
+        ordered = sorted(entries, key=lambda e: e.get("rank") or 999)
+        safe_src = next(
+            (e for e in ordered
+             if not UNSAFE_TITLE_RE.search(str(e.get("title") or ""))),
+            None,
+        )
+        if safe_src is None:
+            fail("No safe title available: refined title and every ranked source title "
+                 "flag the safety screen")
+            return
+        source_title = re.sub(r"\s+", " ", str(safe_src.get("title") or "")).strip()
         if source_title:
             refined_title = source_title[:50].rstrip(" -,:;")
-            reasoning = (reasoning + " Used the rank-one source title because the model title was "
-                         "too generic.").strip()
+            reasoning = (reasoning + " Used a safe ranked source title because the model title was "
+                          "too generic or flagged.").strip()
 
     if not refined_title:
         fail("LLM returned empty title")
