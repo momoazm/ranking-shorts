@@ -62,6 +62,8 @@ that captures what they have in common. The title should be:
 - Catchy, punchy, Gen-Z style
 - Optimized for shorts virality (curiosity, shock value, relatability)
 - Under 50 chars
+- Put the main keyword (streamer name or event) within the FIRST 40 characters -- the
+  classifier reads titles/OCR/transcripts together, and front-loaded keywords win.
 - Avoid "wild moments", "best moments", "top moments", "funny compilation", and other labels
   that do not tell the viewer what actually happens.
 - Something like "POV: You're Worse Than Expected" or "Confidence Gone Wrong" or "The Skill Deficit"
@@ -75,7 +77,7 @@ CLIPS:
 Return ONE JSON object:
 {{
   "title": "<specific catchy title, <50 chars>",
-  "hook": "<1-sentence hook/why you should watch this (for description>",
+  "hook": "<1-sentence hook/why you should watch this (for description) -- restate the title's main keyword in the opening words so title/description classify together>",
   "reasoning": "<brief note on what tied these clips together>"
 }}
 

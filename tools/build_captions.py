@@ -26,10 +26,12 @@ from _common import emit, fail
 # (faceless "ranking" Top-N countdown Shorts of funny clips / fails — see momo-actual-niche; the
 # old Family Guy/"brainrot" framing was dropped 2026-06-23), then broad short-form discovery tags.
 # Ordered niche-first so the per-platform caps below keep the relevant tags and drop the generics.
+# Deliberately NO generic filler (#viral/#fyp/#foryou/#trending): 2026 Shorts/Reels research
+# shows a few hyper-relevant tags beat generic stuffing for initial classification.
 CORE = [
     "ranking", "top5", "countdown", "funnyfails", "fails", "satisfying", "tierlist", "ranked",
-    "shorts", "youtubeshorts", "shortsfeed", "fyp", "foryou", "foryoupage",
-    "viral", "viralshorts", "trending", "funny", "comedy", "memes",
+    "shorts", "youtubeshorts", "shortsfeed",
+    "funny", "comedy", "memes",
 ]
 
 

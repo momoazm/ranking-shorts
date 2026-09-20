@@ -546,8 +546,10 @@ def main():
         tag_seed = ["ranking", "top5", "countdown", "shorts"]
     tags = [w for w in "".join(c if c.isalnum() else " " for c in title.lower()).split() if len(w) > 3]
     with open(ROOT / RANK_STORY, "w", encoding="utf-8") as f:
+        # No generic filler appended (viral/fyp-style tags hurt classification per 2026
+        # research); title words + seeds + build_captions' curated core are the tag pool.
         json.dump({"title": title, "description": description,
-                   "tags": (tags + tag_seed + ["viral"])[:15]}, f)
+                   "tags": (tags + tag_seed)[:15]}, f)
     run_tool_safe("build_captions.py", ["--story", RANK_STORY, "--out", CAPMETA])
     meta = load_json(CAPMETA) or {}
 
