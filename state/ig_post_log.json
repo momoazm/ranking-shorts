@@ -1737,6 +1737,28 @@
         },
         "hook_variant": "streamer_payoff_first"
       }
+    },
+    {
+      "post_id": "6ab196eb21ea077e03152204",
+      "posted_at": "2026-09-21T20:44:08.593231+00:00",
+      "style": "streamer-ranking",
+      "experiment": true,
+      "resolved": false,
+      "context": {
+        "format": "ranking",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": null,
+        "duration_sec": 58.023,
+        "audio": {
+          "profile": "generated_bed_ducked",
+          "music": "momo_pulse.mp3",
+          "music_volume": 0.09,
+          "rights_policy": "generated_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
     }
   ]
 }
