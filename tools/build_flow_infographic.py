@@ -3,7 +3,7 @@ circular node diagram) with CRISP text labels overlaid via HTML/Playwright — s
 art looks AI-generated but every label is legible. Brand colors from theme.json.
 
 Usage:
-  python tools/build_flow_infographic.py --scene .tmp/flow-scene.png --title "CLAUDE CODE SKILLS" \
+  python tools/build_flow_infographic.py --scene .tmp/flow-scene.png --title "CODEX SKILLS" \
       --labels '[{"text":"COMMAND PROMPT","sub":"slash trigger","x":0.16,"y":0.14}, ...]' \
       [--out .tmp/flow.png] [--size 1024]
 

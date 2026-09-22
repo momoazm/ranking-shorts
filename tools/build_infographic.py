@@ -6,7 +6,7 @@ The logo is inlined as a base64 data URI so it loads under set_content() (Chromi
 file:// images on an about:blank origin — same constraint generate_thumbnail.py works around).
 
 Usage:
-    python tools/build_infographic.py --title "CLAUDE CODE" \
+    python tools/build_infographic.py --title "CODEX" \
         --points "Agentic coding in your terminal|Reads, writes & edits your codebase|Runs commands, tests & git" \
         [--out .tmp/infographic.png] [--width 1080 --height 1920]
 
