@@ -56,13 +56,29 @@ def main():
         )
         return
 
+    import socket
+    socket.setdefaulttimeout(600)  # large attachments over slow links need > default
     from googleapiclient.discovery import build
 
     service = build("gmail", "v1", credentials=creds)
-    raw = base64.urlsafe_b64encode(raw_bytes).decode("utf-8")
 
     try:
-        sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
+        # For anything but tiny messages, upload the raw RFC822 as resumable, chunked media
+        # (message/rfc822) instead of a single base64-in-JSON POST — avoids the ~33% base64
+        # bloat and the one-shot socket write that times out on big attachments.
+        if len(raw_bytes) > 3 * 1024 * 1024:
+            import io
+            from googleapiclient.http import MediaIoBaseUpload
+            media = MediaIoBaseUpload(io.BytesIO(raw_bytes), mimetype="message/rfc822",
+                                      chunksize=1024 * 1024, resumable=True)
+            req = service.users().messages().send(userId="me", body={}, media_body=media)
+            resp = None
+            while resp is None:
+                _, resp = req.next_chunk()
+            sent = resp
+        else:
+            raw = base64.urlsafe_b64encode(raw_bytes).decode("utf-8")
+            sent = service.users().messages().send(userId="me", body={"raw": raw}).execute()
     except Exception as e:
         fail(f"Gmail send failed: {e}")
         return
