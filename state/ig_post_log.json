@@ -1825,6 +1825,28 @@
         },
         "hook_variant": "streamer_payoff_first"
       }
+    },
+    {
+      "post_id": "6ab3ed1a2b89fac9449c91c3",
+      "posted_at": "2026-09-23T15:16:24.467162+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 50,
+        "duration_sec": 45.023,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
     }
   ]
 }
