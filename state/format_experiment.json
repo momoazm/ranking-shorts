@@ -1,14 +1,7 @@
 {
-  "run_index": 90,
+  "run_index": 91,
   "winner": null,
   "runs": [
-    {
-      "index": 50,
-      "requested": "auto",
-      "selected": "standalone",
-      "status": "uploaded",
-      "counted": true
-    },
     {
       "index": 51,
       "requested": "auto",
@@ -279,6 +272,13 @@
       "index": 89,
       "requested": "auto",
       "selected": "ranking",
+      "status": "uploaded",
+      "counted": true
+    },
+    {
+      "index": 90,
+      "requested": "auto",
+      "selected": "standalone",
       "status": "uploaded",
       "counted": true
     }
