@@ -2023,6 +2023,28 @@
         },
         "hook_variant": "streamer_payoff_first"
       }
+    },
+    {
+      "post_id": "6ab97db72cfbdaee32a080f9",
+      "posted_at": "2026-09-27T20:34:45.841072+00:00",
+      "style": "streamer-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "streamer-only",
+        "title_signal_score": 49,
+        "duration_sec": 38.801,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "streamer_payoff_first"
+      }
     }
   ]
 }
