@@ -57,7 +57,9 @@ TOOL_TIMEOUTS = {
     "build_captions.py": 180,
     "host_public.py": 240,
     "upload_youtube.py": 360,
-    "upload_instagram.py": 360,
+    # Instagram's first transcode can fail and self-retry for minutes; upload_instagram polls
+    # 420s by default, so this ceiling must clear that poll plus the create-call backoff.
+    "upload_instagram.py": 780,
     "upload_tiktok.py": 360,
     "email_video.py": 300,
     "export_local.py": 180,
@@ -518,11 +520,17 @@ def main():
             # Message keeps the "build_clip.py failed: download failed" shape so the
             # NO_SOURCE_OK escape hatch below still recognizes an all-walled pool
             # (a fully screen-skipped pool is likewise a clean no-post for scheduled runs).
+            # Set build_err instead of raising here: raising jumps straight past that
+            # hatch, which reds every scheduled run whose whole candidate pool is
+            # bot-walled (proven 2026-10-02, run 36979089034: NO_SOURCE_OK=1 yet red).
             screened = sum(1 for f in failures if "title safety screen" in f)
-            raise RuntimeError(
+            build = None
+            build_err = (
                 f"build_clip.py failed: download failed for all {len(verified)} verified "
                 f"standalone candidates ({screened} skipped by title safety screen): "
                 f"{'; '.join(failures)}")
+            print(f"::warning::standalone source pool exhausted: {build_err[:180]}",
+                  file=sys.stderr)
     else:
         build_args = ["--ranked", RANKED, "--max-total", "58", "--per-clip", str(args.per_clip),
                       "--title", topic["title"], "--out", FINAL]

@@ -193,6 +193,100 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
         self.assertIsNone(winner)
         self.assertIn("watch completion", reason)
 
+    # --- Scheduled download-wall handling ----------------------------------------------------
+    # 2026-10-02 run 36979089034: NO_SOURCE_OK=1 was set, every one of the 5 standalone
+    # candidates was bot-walled, and the run still went red because the standalone
+    # `for...else` raised past the NO_SOURCE_OK escape hatch. These two tests pin both
+    # sides of that contract.
+    def _run_standalone_all_walled(self, no_source_ok):
+        entries = [
+            {"rank": index + 1, "content_type": "streamer_clip",
+             "content_policy": "streamer-only", "streamer_identity": "Kai Cenat",
+             "channel": "Kai Cenat", "url": f"https://www.youtube.com/watch?v=clip-{index}",
+             "title": f"Kai Cenat moment {index}"}
+            for index in range(5)
+        ]
+        candidates = [dict(entry, id=f"clip-{index}", source="youtube",
+                           source_feed="youtube-search", uploader="Kai Cenat")
+                      for index, entry in enumerate(entries)]
+        calls = []
+
+        def fake_run_tool(name, _args):
+            calls.append(name)
+            if name == "rank_topic.py":
+                return {"genre": "streamer", "title": "Streamer Moments", "hook": "Top five"}
+            raise AssertionError(f"unexpected raising tool: {name}")
+
+        def fake_run_tool_safe(name, _args):
+            calls.append(name)
+            if name == "find_streamer_clips.py":
+                (ROOT / rank_autopost.CANDS).parent.mkdir(parents=True, exist_ok=True)
+                (ROOT / rank_autopost.CANDS).write_text(
+                    json.dumps({"source": "youtube", "genre": "streamer",
+                                "content_policy": "streamer-only",
+                                "candidates": candidates}), encoding="utf-8")
+                return {"count": 5, "candidates": candidates}, None
+            if name == "rank_clips.py":
+                (ROOT / rank_autopost.RANKED).parent.mkdir(parents=True, exist_ok=True)
+                (ROOT / rank_autopost.RANKED).write_text(
+                    json.dumps({"count": 5, "entries": entries}), encoding="utf-8")
+                return {"count": 5, "entries": entries}, None
+            if name == "refine_title.py":
+                return {"title": "Streamer Moments", "hook": "Top five"}, None
+            if name == "build_clip.py":
+                return None, ("build_clip.py failed: download failed: all YouTube download "
+                              "routes failed (no cookies.txt in play)")
+            raise AssertionError(f"unexpected safe tool: {name}")
+
+        argv = ["rank_autopost.py", "--no-upload", "--format", "standalone",
+                "--force-genre", "streamer", "--platforms", "youtube,instagram"]
+        ranked_backup = None
+        ranked_path = ROOT / rank_autopost.RANKED
+        if ranked_path.is_file():
+            ranked_backup = ranked_path.read_bytes()
+        captured = io.StringIO()
+        try:
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.dict("os.environ", {"RANKING_SOURCE": "streamer",
+                                                   "NO_SOURCE_OK": no_source_ok}, clear=False), \
+                    mock.patch.object(rank_autopost, "load_env", lambda: None), \
+                    mock.patch.object(rank_autopost, "run_tool", side_effect=fake_run_tool), \
+                    mock.patch.object(rank_autopost, "run_tool_safe", side_effect=fake_run_tool_safe), \
+                    contextlib.redirect_stdout(captured):
+                rank_autopost.main()
+        finally:
+            (ROOT / rank_autopost.CANDS).unlink(missing_ok=True)
+            if ranked_backup is not None:
+                ranked_path.write_bytes(ranked_backup)
+            else:
+                ranked_path.unlink(missing_ok=True)
+        return captured.getvalue().strip(), calls
+
+    def test_scheduled_standalone_download_wall_is_clean_no_post(self):
+        out, calls = self._run_standalone_all_walled("1")
+        result = json.loads(out)
+        self.assertEqual(result["status"], "no_source")
+        self.assertEqual(result["content_policy"], "streamer-only")
+        self.assertEqual(result["format"], "standalone")
+        self.assertIn("download failed for all 5 verified standalone candidates", result["detail"])
+        for tool in ("host_public.py", "upload_youtube.py", "upload_instagram.py",
+                     "prepare_upload_media.py"):
+            self.assertNotIn(tool, calls)
+
+    def test_publish_standalone_download_wall_still_fails_loudly(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            self._run_standalone_all_walled("0")
+        self.assertIn("download failed for all 5 verified standalone candidates", str(ctx.exception))
+
+    def test_instagram_poll_ceiling_clears_transcode_retry(self):
+        import upload_instagram  # argparse lives in build_parser(); import is side-effect free
+        default_poll = upload_instagram.build_parser().parse_args(
+            ["--video-url", "https://example.com/v.mp4"]).poll_timeout
+        self.assertGreaterEqual(default_poll, 420,
+                                "Instagram's self-retry transcode outlived the old 180s poll")
+        # The child must outlive its own poll window (create-call backoff + poll budget).
+        self.assertGreater(rank_autopost.TOOL_TIMEOUTS["upload_instagram.py"], default_poll + 60)
+
 
 if __name__ == "__main__":
     unittest.main()

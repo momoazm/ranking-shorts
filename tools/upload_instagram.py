@@ -52,13 +52,21 @@ def _platform_detail(entry):
     return json.dumps(details, ensure_ascii=True, separators=(",", ":"))[:600]
 
 
-def main():
+def build_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--video-url", required=True, help="PUBLIC https url to the mp4 (host_public.py)")
     parser.add_argument("--caption", default="", help="Caption incl. hashtags")
     parser.add_argument("--confirm", action="store_true", help="Required to actually publish.")
-    parser.add_argument("--poll-timeout", type=int, default=180)
-    args = parser.parse_args()
+    parser.add_argument("--poll-timeout", type=int, default=420,
+                        help="Seconds to wait for Instagram transcode. Zernio's own message on a "
+                             "first-time transcode failure is 'It will retry automatically', so a "
+                             "180s ceiling declared 6 real posts dead while the retry was still "
+                             "running (2026-09/10: status=pending, progressive_video_not_ready).")
+    return parser
+
+
+def main():
+    args = build_parser().parse_args()
 
     load_env()
     api_key = os.environ.get("ZERNIO_API_KEY", "").strip()
