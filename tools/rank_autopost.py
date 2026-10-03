@@ -167,6 +167,40 @@ def show_tag(entry):
     return channel if len(channel) <= 14 else channel[:14].rstrip()
 
 
+def _words(text):
+    return set(re.findall(r"[a-z0-9']+", str(text or "").lower()))
+
+
+def source_hook(entry):
+    """Pick the hook segment out of a '|'-separated source title.
+
+    Pitch feeds publish the segments in both orders -- "Hook | Show | Show" (Shark Tank
+    Global, Dragons' Den) and "Show | Hook" (Shark Tank Australia). clean_title() keeps
+    only the FIRST segment and only appends the second when it contains a digit, so on the
+    second shape it returns the bare show name and the hook is lost entirely (run
+    37117676301 burned "Shark Tank Australia (Part 1/8) | Shark Tank AU" with no hook).
+    Segments that are nothing but the show/channel name are dropped, then the longest
+    remaining segment -- the descriptive hook -- wins.
+    """
+    raw = str((entry or {}).get("source_title") or "")
+    if not raw:
+        # entry["title"] already carries "(Part i/N)"; the label is appended again later.
+        raw = re.sub(r"\s*\(Part \d+/\d+\)\s*$", "", str((entry or {}).get("title") or ""))
+    segs = [re.sub(r"\s+", " ", s).strip() for s in raw.split("|") if s.strip()]
+    if len(segs) < 2:
+        return raw.strip()
+    show = _words((entry or {}).get("channel")) | _words(show_tag(entry))
+    kept = [s for s in segs if _words(s) and not _words(s) <= show]
+    hook = max(kept or segs, key=len)
+    if len(hook) > 62:
+        # clean_title would word-cut at 62, which can strand a clause ("...Only A"). Prefer a
+        # real sentence stop inside the window so the card ends on a whole thought.
+        stops = [m.end() for m in re.finditer(r"[.!?…][\"'”’)]?\s+", hook)]
+        clause = max((s for s in stops if 36 <= s <= 76), default=0)
+        hook = hook[:clause].rstrip() if clause else hook[:62].rsplit(" ", 1)[0].strip()
+    return hook
+
+
 def _no_source_payload(source, requested_genre, detail, candidate_count=None, policy="streamer-only"):
     payload = {"status": "no_source", "content_policy": policy,
                "source_mode": source, "requested_genre": requested_genre,
@@ -599,7 +633,7 @@ def main():
                 # the part number and the show all survive together.
                 part_label = entry.get("part_label") or ""
                 build_args = ["--url", entry["url"],
-                              "--title", entry.get("source_title") or entry["title"],
+                              "--title", source_hook(entry),
                               "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / SHARK TANK",
                               "--source-handle", entry.get("channel") or "",
                               "--start", str(entry.get("start") or 0.0),

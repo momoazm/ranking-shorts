@@ -364,6 +364,59 @@ class SharktankPartsGuardsTest(unittest.TestCase):
         self.assertEqual(rank_autopost.show_tag({"channel": "Dragons' Den"}), "Dragons' Den")
         self.assertTrue(rank_autopost.show_tag({}))
 
+    def test_source_hook_picks_the_hook_in_both_title_orders(self):
+        # Real feed shapes observed 2026-10-03. AU publishes "Show | Hook", so taking the
+        # first segment burned "Shark Tank Australia (Part 1/8) | Shark Tank AU" -- a title
+        # with no reason to click (run 37117676301).
+        global_entry = {
+            "channel": "Shark Tank Global",
+            "source_feed": "https://www.youtube.com/@SharkTankGlobal/videos",
+            "source_title": ("The Foster Sisters Battle It Out With Kevin!? | "
+                             "Shark Tank US | Shark Tank Global"),
+        }
+        au_entry = {
+            "channel": "Shark Tank Australia",
+            "source_feed": "https://www.youtube.com/@SharkTankAustralia/videos",
+            "source_title": ("Shark Tank Australia | Entrepreneur Enters The Tank Without "
+                             "A Product... Only A Crazy Idea"),
+        }
+        dragons_entry = {
+            "channel": "Dragons' Den",
+            "source_feed": "https://www.youtube.com/@DragonsDenGlobal/videos",
+            "source_title": "BarMate\u2019s Self-Pouring Pint Impresses the Dragons | Dragons\u2019 Den",
+        }
+        self.assertEqual(
+            rank_autopost.source_hook(global_entry),
+            "The Foster Sisters Battle It Out With Kevin!?")
+        self.assertEqual(
+            rank_autopost.source_hook(au_entry),
+            "Entrepreneur Enters The Tank Without A Product...")
+        self.assertEqual(
+            rank_autopost.source_hook(dragons_entry),
+            "BarMate\u2019s Self-Pouring Pint Impresses the Dragons")
+        # The hook must survive clean_title, and the burned title must stay under 100.
+        for entry, show, first_word in (
+                (global_entry, "Shark Tank", "the foster"),
+                (au_entry, "Shark Tank AU", "entrepreneur"),
+                (dragons_entry, "Dragons' Den", "barmate")):
+            cleaned = build_clip.clean_title(rank_autopost.source_hook(entry))
+            burned = f"{cleaned} (Part 1/8) | {show}"
+            self.assertTrue(cleaned.lower().startswith(first_word),
+                            f"hook lost: {burned!r}")
+            self.assertLessEqual(len(burned), 100, burned)
+        # A short hook must still win when the show segment is longer than it.
+        self.assertEqual(
+            rank_autopost.source_hook({"channel": "Shark Tank Global",
+                                       "source_title": "Deal | Shark Tank Global"}),
+            "Deal")
+        # Fallback path: no source_title, and the label must not be doubled up.
+        self.assertEqual(
+            rank_autopost.source_hook({"channel": "Shark Tank Global",
+                                       "title": "Big Win (Part 1/8)"}), "Big Win")
+        # No separators at all: hand the whole title straight through.
+        self.assertEqual(rank_autopost.source_hook({"source_title": "One Line Hook"}),
+                         "One Line Hook")
+
     def test_default_rotation_covers_four_verified_pitch_shows(self):
         feeds = find_sharktank_parts.DEFAULT_CHANNELS
         self.assertGreaterEqual(len(feeds), 4)
