@@ -12,6 +12,7 @@ TOOLS = ROOT / "tools"
 sys.path.insert(0, str(TOOLS))
 
 import build_ranking_video  # noqa: E402
+import build_clip  # noqa: E402
 import find_streamer_clips  # noqa: E402
 import rank_clips  # noqa: E402
 import rank_autopost  # noqa: E402
@@ -338,6 +339,22 @@ class SharktankPartsGuardsTest(unittest.TestCase):
         self.assertLess(cand["duration"], 60.0)
         self.assertEqual(cand["content_type"], "sharktank_part")
         self.assertEqual(cand["content_policy"], "sharktank-only")
+
+    def test_show_tag_keeps_the_hook_inside_clean_title_cap(self):
+        # Run 37115177398 lost the hook's last word ("...Battle It Out With", "Kevin" cut)
+        # because a 19-char channel prefix pushed the title past clean_title's 62-char cut.
+        entry = {"source_feed": "https://www.youtube.com/@SharkTankGlobal/videos",
+                 "channel": "Shark Tank Global",
+                 "source_title": ("The Foster Sisters Battle It Out With Kevin!? | "
+                                  "Shark Tank US | Shark Tank Global")}
+        tag = rank_autopost.show_tag(entry)
+        self.assertEqual(tag, "Shark Tank")
+        titled = build_clip.clean_title(f"{tag}: {entry['source_title']}")
+        self.assertTrue(titled.endswith("Kevin"), f"hook truncated: {titled!r}")
+        # Unknown/long channel names must still fit the cap.
+        self.assertLessEqual(
+            len(rank_autopost.show_tag({"channel": "Shark Tank Australia (Official)"})), 14)
+        self.assertEqual(rank_autopost.show_tag({"channel": "Dragons' Den"}), "Dragons' Den")
 
     def test_default_rotation_covers_four_verified_pitch_shows(self):
         feeds = find_sharktank_parts.DEFAULT_CHANNELS

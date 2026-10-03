@@ -143,6 +143,30 @@ def _title_flag(text):
     return m.group(0).lower() if m else None
 
 
+# Short show tag prefixed onto the posted title. clean_title() keeps only the FIRST "|"
+# segment and hard-cuts at 62 chars, so a full channel name crowds the hook out of the
+# budget: run 37115177398 lost the hook's last word ("...Battle It Out With", dropping
+# "Kevin") with an 19-char "Shark Tank Global: " prefix. Keep tags <=14 chars so the
+# hook survives with room to spare; the full channel name still lands in the description.
+SHOW_TAG_BY_HANDLE = {
+    "sharktankglobal": "Shark Tank",
+    "dragonsdenglobal": "Dragons' Den",
+    "sharktankaustralia": "Shark Tank AU",
+    "dragonsdencanada": "Dragons' Den CA",
+}
+
+
+def show_tag(entry):
+    """Brand the title with the show, short enough to leave the hook intact."""
+    feed = str((entry or {}).get("source_feed") or "")
+    handle = feed.split("/@")[-1].split("/")[0].lower() if "/@" in feed else ""
+    tag = SHOW_TAG_BY_HANDLE.get(handle)
+    if tag:
+        return tag
+    channel = str((entry or {}).get("channel") or "Shark Tank").strip()
+    return channel if len(channel) <= 14 else channel[:14].rstrip()
+
+
 def _no_source_payload(source, requested_genre, detail, candidate_count=None, policy="streamer-only"):
     payload = {"status": "no_source", "content_policy": policy,
                "source_mode": source, "requested_genre": requested_genre,
@@ -568,10 +592,11 @@ def main():
                 # that clean_title would otherwise strip, and give the downloader a budget that
                 # fits ~10 minutes of video instead of a 15s Short (1080p is the ceiling -- a
                 # 16:9 source fitted into 9:16 never uses more than the output width). The show
-                # name is prefixed because clean_title keeps only the FIRST "|" segment, which
-                # would otherwise drop "| Shark Tank US | Shark Tank Global" off every title.
+                # is prefixed with a SHORT tag (see show_tag) because clean_title keeps only the
+                # first "|" segment, which would otherwise drop "| Shark Tank US | Shark Tank
+                # Global" off every title -- while a long channel prefix would eat the hook.
                 build_args = ["--url", entry["url"],
-                              "--title", f"{entry.get('channel') or 'Shark Tank'}: "
+                              "--title", f"{show_tag(entry)}: "
                                          f"{entry.get('source_title') or entry['title']}",
                               "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / SHARK TANK",
                               "--source-handle", entry.get("channel") or "",
