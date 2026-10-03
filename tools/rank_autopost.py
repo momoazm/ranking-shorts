@@ -592,17 +592,19 @@ def main():
                 # that clean_title would otherwise strip, and give the downloader a budget that
                 # fits ~10 minutes of video instead of a 15s Short (1080p is the ceiling -- a
                 # 16:9 source fitted into 9:16 never uses more than the output width). The show
-                # is prefixed with a SHORT tag (see show_tag) because clean_title keeps only the
-                # first "|" segment, which would otherwise drop "| Shark Tank US | Shark Tank
-                # Global" off every title -- while a long channel prefix would eat the hook.
+                # rides in the PART LABEL, not a title prefix: clean_title() keeps only the first
+                # "|" segment (dropping "| Shark Tank US | Shark Tank Global") and hard-cuts at 62
+                # chars, so ANY prefix eats the hook's tail -- run 37117223221 lost "Dragons" from
+                # "…Impresses the Dragons". The label is appended AFTER cleaning, so the full hook,
+                # the part number and the show all survive together.
+                part_label = entry.get("part_label") or ""
                 build_args = ["--url", entry["url"],
-                              "--title", f"{show_tag(entry)}: "
-                                         f"{entry.get('source_title') or entry['title']}",
+                              "--title", entry.get("source_title") or entry["title"],
                               "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / SHARK TANK",
                               "--source-handle", entry.get("channel") or "",
                               "--start", str(entry.get("start") or 0.0),
                               "--max-secs", str(entry.get("duration") or 58.0),
-                              "--part-label", entry.get("part_label") or "",
+                              "--part-label", f"{part_label} | {show_tag(entry)}".strip(" |"),
                               "--download-deadline", "600",
                               "--download-attempt-timeout", "540",
                               "--max-height", "1080",

@@ -341,20 +341,28 @@ class SharktankPartsGuardsTest(unittest.TestCase):
         self.assertEqual(cand["content_policy"], "sharktank-only")
 
     def test_show_tag_keeps_the_hook_inside_clean_title_cap(self):
-        # Run 37115177398 lost the hook's last word ("...Battle It Out With", "Kevin" cut)
-        # because a 19-char channel prefix pushed the title past clean_title's 62-char cut.
+        # Two live runs showed the hook losing words to clean_title's 62-char cut: a 19-char
+        # channel prefix cost "Kevin" (37115177398) and a 14-char prefix cost "Dragons"
+        # (37117223221). The show therefore rides in the part label, which is appended AFTER
+        # cleaning, so hook + part number + show all fit inside YouTube's 100-char title.
         entry = {"source_feed": "https://www.youtube.com/@SharkTankGlobal/videos",
                  "channel": "Shark Tank Global",
                  "source_title": ("The Foster Sisters Battle It Out With Kevin!? | "
-                                  "Shark Tank US | Shark Tank Global")}
+                                  "Shark Tank US | Shark Tank Global"),
+                 "part_label": "(Part 1/10)"}
         tag = rank_autopost.show_tag(entry)
         self.assertEqual(tag, "Shark Tank")
-        titled = build_clip.clean_title(f"{tag}: {entry['source_title']}")
-        self.assertTrue(titled.endswith("Kevin"), f"hook truncated: {titled!r}")
-        # Unknown/long channel names must still fit the cap.
+        cleaned = build_clip.clean_title(entry["source_title"])
+        final = f"{cleaned} (Part 1/10) | {tag}".strip()
+        self.assertTrue(cleaned.endswith("Kevin"), f"hook truncated: {cleaned!r}")
+        self.assertLessEqual(len(cleaned), 62, "clean_title cap itself must hold the hook")
+        self.assertIn("Shark Tank", final)
+        self.assertLessEqual(len(final), 100, "YouTube title limit")
+        # Unknown/long channel names must still fit, and the tag is never empty.
         self.assertLessEqual(
             len(rank_autopost.show_tag({"channel": "Shark Tank Australia (Official)"})), 14)
         self.assertEqual(rank_autopost.show_tag({"channel": "Dragons' Den"}), "Dragons' Den")
+        self.assertTrue(rank_autopost.show_tag({}))
 
     def test_default_rotation_covers_four_verified_pitch_shows(self):
         feeds = find_sharktank_parts.DEFAULT_CHANNELS
