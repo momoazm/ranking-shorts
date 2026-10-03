@@ -16,6 +16,7 @@ import find_streamer_clips  # noqa: E402
 import rank_clips  # noqa: E402
 import rank_autopost  # noqa: E402
 import compare_streamer_formats  # noqa: E402
+import find_sharktank_parts  # noqa: E402
 
 
 class StreamerPipelineGuardsTest(unittest.TestCase):
@@ -286,6 +287,77 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
                                 "Instagram's self-retry transcode outlived the old 180s poll")
         # The child must outlive its own poll window (create-call backoff + poll budget).
         self.assertGreater(rank_autopost.TOOL_TIMEOUTS["upload_instagram.py"], default_poll + 60)
+
+
+class SharktankPartsGuardsTest(unittest.TestCase):
+    def test_ten_minute_video_is_ten_sixty_second_parts(self):
+        parts = find_sharktank_parts.split_parts(600.0)
+        self.assertEqual(len(parts), 10)
+        self.assertTrue(all(round(end - start, 2) <= 60.0 for start, end in parts))
+        self.assertAlmostEqual(parts[0][0], 0.0)
+        self.assertAlmostEqual(parts[-1][1], 600.0)
+
+    def test_even_multiples_never_gain_a_sliver_tail(self):
+        self.assertEqual(len(find_sharktank_parts.split_parts(599.0)), 10)
+        self.assertEqual(len(find_sharktank_parts.split_parts(120.0)), 2)
+        sizes = [round(e - s, 2) for s, e in find_sharktank_parts.split_parts(61.0)]
+        self.assertEqual(sizes, [30.5, 30.5])
+
+    def test_short_and_bad_durations_are_rejected(self):
+        self.assertEqual(find_sharktank_parts.split_parts(59.0), [(0.0, 59.0)])
+        self.assertIsNone(find_sharktank_parts.split_parts(0))
+        self.assertIsNone(find_sharktank_parts.split_parts(None))
+        self.assertIsNone(find_sharktank_parts.split_parts(3600.0))  # hour-long: cap guard
+
+    def test_candidate_carries_the_part_contract(self):
+        entry = {"id": "VID123", "title": "Startup Pitches",
+                 "webpage_url": "https://www.youtube.com/watch?v=VID123",
+                 "channel": "Shark Tank Global"}
+        cand = find_sharktank_parts.build_candidate(
+            entry, find_sharktank_parts.split_parts(600.0), 3, 120.0, 180.0,
+            "https://www.youtube.com/@SharkTankGlobal/videos")
+        self.assertEqual(cand["id"], "VID123#3")
+        self.assertEqual(cand["part_label"], "(Part 3/10)")
+        self.assertIn("(Part 3/10)", cand["title"])
+        self.assertEqual((cand["start"], cand["end"], cand["duration"]), (120.0, 180.0, 60.0))
+        self.assertEqual(cand["content_type"], "sharktank_part")
+        self.assertEqual(cand["content_policy"], "sharktank-only")
+
+    def test_default_rotation_covers_three_pitch_shows(self):
+        feeds = find_sharktank_parts.DEFAULT_CHANNELS
+        self.assertGreaterEqual(len(feeds), 3)
+        blob = ",".join(feeds)
+        self.assertIn("SharkTank", blob)
+        self.assertTrue(any("dragon" in feed.lower() for feed in feeds))
+
+    def test_main_rotates_to_second_feed_when_first_is_exhausted(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            history = str(Path(tmp) / "used.json")
+            used = {"used": ["AAA#1", "AAA#2"]}
+            Path(history).write_text(json.dumps(used), encoding="utf-8")
+            entries = {
+                "https://www.youtube.com/@SharkTankGlobal/videos": [
+                    {"id": "AAA", "title": "Done", "duration": 120.0,
+                     "webpage_url": "https://www.youtube.com/watch?v=AAA"}],
+                "https://www.youtube.com/@dragonsden/videos": [
+                    {"id": "BBB", "title": "Fresh", "duration": 120.0,
+                     "webpage_url": "https://www.youtube.com/watch?v=BBB"}],
+            }
+            out = str(Path(tmp) / "cands.json")
+            with mock.patch.object(find_sharktank_parts, "search",
+                                   side_effect=lambda feed, n: entries[feed]), \
+                 mock.patch.object(find_sharktank_parts, "probe_duration",
+                                   side_effect=lambda entry: entry.get("duration")), \
+                 mock.patch("sys.argv", ["find_sharktank_parts.py",
+                                         "--channel", ",".join(entries.keys()),
+                                         "--history", history, "--out", out]):
+                find_sharktank_parts.main()
+            payload = json.loads(Path(out).read_text(encoding="utf-8"))
+            self.assertTrue(payload["candidates"], "rotation must hop to the second feed")
+            self.assertEqual(payload["candidates"][0]["id"], "BBB#1")
+            self.assertEqual(payload["channel"],
+                             "https://www.youtube.com/@dragonsden/videos")
 
 
 if __name__ == "__main__":

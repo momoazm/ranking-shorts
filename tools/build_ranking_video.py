@@ -91,6 +91,25 @@ _DL_ATTEMPTS = [
 ]
 
 
+def download_deadline_sec():
+    """Whole-download wall clock. Callers with LONG sources (a full episode instead of a
+    15s Short) raise it through YTDLP_DEADLINE_SEC; the Short defaults stay tight."""
+    try:
+        override = float(os.environ.get("YTDLP_DEADLINE_SEC") or 0)
+    except ValueError:
+        override = 0.0
+    return override if override > 0 else DOWNLOAD_DEADLINE_SEC
+
+
+def download_attempt_timeout_sec():
+    """Per-route ceiling inside download(). Overridable the same way for long sources."""
+    try:
+        override = float(os.environ.get("YTDLP_ATTEMPT_TIMEOUT_SEC") or 0)
+    except ValueError:
+        override = 0.0
+    return override if override > 0 else DOWNLOAD_ATTEMPT_TIMEOUT_SEC
+
+
 def _resolve(out_base):
     for ext in (".mp4", ".mkv", ".webm"):
         if os.path.isfile(out_base + ext):
@@ -105,6 +124,12 @@ def _download_attempt(url, out_base, player_client, fmt, use_proxy):
     process gives every client/format fallback a real wall-clock ceiling and prevents a blocked
     source from holding the parent video build forever.
     """
+    # A landscape source fit into 9:16 never uses more than the output width, so long-source
+    # callers can cap the ladder via YTDLP_MAX_HEIGHT instead of pulling a 4K file they
+    # will only downscale. Short callers leave it unset and keep the full chain.
+    max_height = (os.environ.get("YTDLP_MAX_HEIGHT") or "").strip()
+    if max_height.isdigit():
+        fmt = re.sub(r"height<=\d+", f"height<={int(max_height)}", fmt)
     cmd = [sys.executable, "-m", "yt_dlp", "--format", fmt,
            "--format-sort", "res,vcodec:h264,acodec:m4a", "--merge-output-format", "mp4",
            "--output", out_base + ".%(ext)s", "--no-playlist", "--quiet", "--no-warnings",
@@ -120,12 +145,13 @@ def _download_attempt(url, out_base, player_client, fmt, use_proxy):
     if proxy and use_proxy:
         cmd += ["--proxy", proxy]
     cmd.append(url)
+    attempt_timeout = download_attempt_timeout_sec()
     try:
         proc = subprocess.run(cmd, cwd=str(REPO_ROOT), capture_output=True, text=True,
                               encoding="utf-8", errors="replace",
-                              timeout=DOWNLOAD_ATTEMPT_TIMEOUT_SEC)
+                              timeout=attempt_timeout)
     except subprocess.TimeoutExpired as e:
-        raise RuntimeError(f"yt-dlp attempt timed out after {DOWNLOAD_ATTEMPT_TIMEOUT_SEC:.0f}s") from e
+        raise RuntimeError(f"yt-dlp attempt timed out after {attempt_timeout:.0f}s") from e
     if proc.returncode != 0:
         tail = (proc.stderr or proc.stdout or "").strip()[-500:]
         raise RuntimeError(tail or f"yt-dlp exited {proc.returncode}")
@@ -153,7 +179,7 @@ def download(url, out_base):
         return out
     last = None
     route_errors = []
-    deadline = time.monotonic() + DOWNLOAD_DEADLINE_SEC
+    deadline = time.monotonic() + download_deadline_sec()
     for player_client, fmt, use_proxy in _DL_ATTEMPTS:
         if time.monotonic() >= deadline:
             break

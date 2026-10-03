@@ -45,6 +45,7 @@ FORMAT_STATE = "state/format_experiment.json"
 TOOL_TIMEOUTS = {
     "rank_topic.py": 120,
     "find_streamer_clips.py": 240,
+    "find_sharktank_parts.py": 300,
     "find_ranking_clips.py": 240,
     "find_worldcup_clips.py": 240,
     "rank_clips.py": 180,
@@ -52,7 +53,9 @@ TOOL_TIMEOUTS = {
     "build_music.py": 120,
     "fetch_trending_music.py": 180,
     "build_ranking_video.py": 900,
-    "build_clip.py": 900,
+    # A full-episode source is ~10 min of video instead of a 15s Short: the download budget
+    # itself can be 600s, so the wrapper ceiling must clear that plus render + overlay burn.
+    "build_clip.py": 1500,
     "prepare_upload_media.py": 240,
     "build_captions.py": 180,
     "host_public.py": 240,
@@ -140,13 +143,17 @@ def _title_flag(text):
     return m.group(0).lower() if m else None
 
 
-def _streamer_no_source_payload(source, requested_genre, detail, candidate_count=None):
-    payload = {"status": "no_source", "content_policy": "streamer-only",
+def _no_source_payload(source, requested_genre, detail, candidate_count=None, policy="streamer-only"):
+    payload = {"status": "no_source", "content_policy": policy,
                "source_mode": source, "requested_genre": requested_genre,
                "detail": str(detail)}
     if candidate_count is not None:
         payload["candidate_count"] = int(candidate_count)
     return payload
+
+
+# Kept as the old name so any caller/log grep that looks for it still resolves.
+_streamer_no_source_payload = _no_source_payload
 
 
 HISTORY = "state/used_clips.json"
@@ -253,8 +260,10 @@ def main():
     ap.add_argument("--niche", default="funny videos / fails / funny moments")
     # The main workflow forces the dedicated streamer genre; football has its own isolated
     # workflows and MrBeast sourcing belongs to clipping-auto.
-    ap.add_argument("--force-genre", default="fails", choices=["", "fails", "cats", "babies", "dogs", "streamer", "worldcup"],
-                    help="Lock every video to one genre instead of letting the topic model rotate.")
+    ap.add_argument("--force-genre", default="fails",
+                    choices=["", "fails", "cats", "babies", "dogs", "streamer", "worldcup", "sharktank"],
+                    help="Lock every video to one genre instead of letting the topic model rotate. "
+                         "'sharktank' chops the newest long-form upload into sequential parts.")
     ap.add_argument("--search", default=None, help="Override the Tenor search query")
     ap.add_argument("--platforms", default="youtube,instagram,tiktok,email")
     ap.add_argument("--required-platforms",
@@ -287,10 +296,14 @@ def main():
     # Zernio creds (written to API.env from repo secrets) and add the platform here. Harmless when
     # not publishing -- the instagram delivery branch below is gated on `publishing`.
     load_env()
-    selected_format, format_state = choose_format(args.format, no_upload=args.no_upload)
     source = os.environ.get("RANKING_SOURCE", "").strip().lower()
-    if source not in {"reddit", "youtube", "streamer"}:
+    if source not in {"reddit", "youtube", "streamer", "sharktank"}:
         source = "youtube" if os.environ.get("NO_REDDIT_SOURCES") == "1" else "reddit"
+    # A sequential chop is always a standalone part: the 1-in-5 ranked control cohort is a
+    # streamer-format experiment and must never consume a part of a multi-part video.
+    format_request = ("standalone" if (source == "sharktank" or args.force_genre == "sharktank")
+                      else args.format)
+    selected_format, format_state = choose_format(format_request, no_upload=args.no_upload)
     if "instagram" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_INSTAGRAM_ID"):
         platforms.append("instagram")
     t0 = time.time()
@@ -307,6 +320,10 @@ def main():
     # World Cup theme because the chosen angle often turned out unsourceable after the fact.
     if args.force_genre == "worldcup":
         topic = {"genre": "worldcup"}   # defer the actual title/angle LLM call until angle is known
+    elif args.force_genre == "sharktank" or source == "sharktank":
+        # Chopping a long source is deterministic: the part's own title (source title + "Part
+        # i/N") comes from the finder, so no LLM topic/title call is needed or wanted here.
+        topic = {"genre": "sharktank"}
     elif args.force_genre == "streamer" or source == "streamer":
         # Streamer mode is a dedicated source pool. Do not let the generic funny/fails finder or
         # its fallback rescue turn this account back into a mixed ranking feed.
@@ -322,8 +339,32 @@ def main():
     account_streamer_only = source == "streamer" or args.force_genre == "streamer"
     if account_streamer_only and requested_genre != "streamer":
         raise RuntimeError("Streamer-only account received a non-streamer topic; refusing to publish.")
+    account_sharktank_only = source == "sharktank" or args.force_genre == "sharktank"
+    if account_sharktank_only and requested_genre != "sharktank":
+        raise RuntimeError("Shark-Tank-only account received a non-sharktank topic; refusing to publish.")
 
-    if topic.get("genre") == "streamer":
+    if topic.get("genre") == "sharktank":
+        # One official feed, newest upload first, already split into ordered parts. The finder
+        # skips every part recorded in the shared clip history, so consecutive runs walk a video
+        # from part 1 to part N and then move to the next upload.
+        _f, ferr = run_tool_safe("find_sharktank_parts.py",
+                                 ["--history", HISTORY, "--out", CANDS])
+        if not ferr and not ((_f or {}).get("candidates") or []):
+            ferr = "find_sharktank_parts.py returned no unposted parts"
+        if ferr:
+            # Same contract as streamer mode: an exhausted/walled source on a scheduled or
+            # no-upload run is an honest green no-post, never a red Actions failure.
+            if os.environ.get("NO_SOURCE_OK") == "1":
+                payload = _no_source_payload(source, requested_genre, ferr, policy="sharktank-only")
+                if _f and isinstance(_f, dict) and _f.get("count") is not None:
+                    payload["candidate_count"] = _f["count"]
+                emit(payload)
+                return
+            raise RuntimeError(f"shark tank source failed: {ferr}")
+        first_part = ((_f or {}).get("candidates") or [{}])[0]
+        topic["title"] = first_part.get("title") or topic.get("title") or "Shark Tank"
+        topic["video"] = (_f or {}).get("video")
+    elif topic.get("genre") == "streamer":
         _f, ferr = run_tool_safe("find_streamer_clips.py",
                                  ["--max", "30", "--history", HISTORY, "--out", CANDS])
         if ferr:
@@ -425,31 +466,47 @@ def main():
         run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
         topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
 
-    _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
-    if rerr and topic.get("genre") != "fails" and not no_reddit_rescue:
-        # last-resort safety net (e.g. re-classification flake right after the probe confirmed
-        # enough candidates) -- drop the theme for this run rather than crash
-        fallback_reason = fallback_reason or f"rank_clips({requested_genre}): {rerr}"
-        print(f"::warning::{fallback_reason}", file=sys.stderr)
-        run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
-        topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
-        run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
-    elif rerr:
-        raise RuntimeError(rerr)
-
-    # 3.5) Refine the title based on what clips were actually selected (not the pre-made topic title)
-    # This makes the title specific/catchy and ensures the video is cohesive.
-    REFINED_TITLE_FILE = ".tmp/refined_title.json"
-    refined_title_data, title_err = run_tool_safe("refine_title.py", ["--ranked", RANKED, "--out", REFINED_TITLE_FILE])
-    refined_title = None
-    if not title_err and refined_title_data:
-        refined_title = refined_title_data.get("title", "").strip()
-        if refined_title:
-            topic["title"] = refined_title
-            topic["hook"] = refined_title_data.get("hook", topic.get("hook", refined_title))
+    if topic.get("genre") == "sharktank":
+        # Parts arrive already ordered and already titled. An LLM rank/refine pass would either
+        # reorder them (breaking part 1 -> N) or rewrite the "Part i/N" label off the title, so
+        # the next unposted part is written straight to RANKED as rank #1 and the shared
+        # standalone path below posts it unchanged.
+        cand_data = load_json(CANDS) or {}
+        pool = cand_data.get("candidates") or []
+        if not pool:
+            raise RuntimeError("shark tank candidates disappeared before the build step")
+        part_entry = dict(pool[0])
+        part_entry["rank"] = 1
+        TMP.mkdir(exist_ok=True)
+        with open(ROOT / RANKED, "w", encoding="utf-8") as handle:
+            json.dump({"source": "youtube", "genre": "sharktank",
+                       "content_policy": "sharktank-only", "entries": [part_entry]},
+                      handle, indent=2, ensure_ascii=False)
     else:
-        # Fall back to original topic title if refinement fails
-        print(f"::warning::Title refinement failed: {title_err or 'no data'}; using original title", file=sys.stderr)
+        _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+        if rerr and topic.get("genre") != "fails" and not no_reddit_rescue:
+            # last-resort safety net (e.g. re-classification flake right after the probe confirmed
+            # enough candidates) -- drop the theme for this run rather than crash
+            fallback_reason = fallback_reason or f"rank_clips({requested_genre}): {rerr}"
+            print(f"::warning::{fallback_reason}", file=sys.stderr)
+            run_tool("find_ranking_clips.py", ["--genre", "fails", "--source", source, "--out", CANDS])
+            topic = run_tool("rank_topic.py", ["--niche", args.niche, "--force-genre", "fails", "--out", TOPIC])
+            run_tool("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
+        elif rerr:
+            raise RuntimeError(rerr)
+
+        # 3.5) Refine the title based on what clips were actually selected (not the pre-made topic title)
+        # This makes the title specific/catchy and ensures the video is cohesive.
+        REFINED_TITLE_FILE = ".tmp/refined_title.json"
+        refined_title_data, title_err = run_tool_safe("refine_title.py", ["--ranked", RANKED, "--out", REFINED_TITLE_FILE])
+        if not title_err and refined_title_data:
+            refined_title = refined_title_data.get("title", "").strip()
+            if refined_title:
+                topic["title"] = refined_title
+                topic["hook"] = refined_title_data.get("hook", topic.get("hook", refined_title))
+        else:
+            # Fall back to original topic title if refinement fails
+            print(f"::warning::Title refinement failed: {title_err or 'no data'}; using original title", file=sys.stderr)
 
     # 4) audio policy -> 5) build the video. Standalone streamer clips keep original audio and
     # use one source moment; ranked controls keep the #5->#1 countdown and a generated bed.
@@ -475,15 +532,25 @@ def main():
         # Only download failures fall through; renderer/config errors still raise
         # immediately, and an entirely walled pool still fails loudly below.
         ordered = sorted(ranked_entries, key=lambda e: e.get("rank") or 999)
-        verified = [
-            entry for entry in ordered
-            if (entry.get("content_type") == "streamer_clip"
-                and entry.get("content_policy") == "streamer-only"
-                and entry.get("streamer_identity")
-                and entry.get("url") and entry.get("title"))
-        ]
+
+        def _verified_source(entry):
+            """Both standalone sources must prove a bounded, policy-matched download contract."""
+            if not (entry.get("url") and entry.get("title")):
+                return False
+            if entry.get("content_type") == "sharktank_part":
+                # An ordered slice of ONE official long-form upload: the slice boundaries are
+                # the whole contract, so they must be present before any render spend.
+                return (entry.get("content_policy") == "sharktank-only"
+                        and entry.get("video_id")
+                        and entry.get("start") is not None
+                        and entry.get("duration"))
+            return (entry.get("content_type") == "streamer_clip"
+                    and entry.get("content_policy") == "streamer-only"
+                    and entry.get("streamer_identity"))
+
+        verified = [entry for entry in ordered if _verified_source(entry)]
         if not verified:
-            raise RuntimeError("Standalone streamer mode could not identify a verified ranked source")
+            raise RuntimeError("Standalone mode could not identify a verified ranked source")
         build, build_err, failures, posted = None, None, [], None
         for entry in verified:
             flag = _title_flag(entry.get("title"))
@@ -493,14 +560,31 @@ def main():
                       f"screen ({flag})", file=sys.stderr)
                 failures.append(f"rank #{entry.get('rank')}: title safety screen ({flag})")
                 continue
-            build_args = ["--url", entry["url"], "--title", entry["title"],
-                          "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
-                          "--source-handle", entry.get("streamer_identity") or entry.get("channel") or "",
-                          # The live winners hold attention for roughly 20-24 seconds on average;
-                          # a standalone control should finish the payoff before the 58s countdown
-                          # ceiling. Ranking controls keep their separate 58s budget below.
-                          "--max-secs", "45", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
-                          "--out", FINAL]
+            if entry.get("content_type") == "sharktank_part":
+                # Sequential chop of a full episode: seek to this part's window, keep the label
+                # that clean_title would otherwise strip, and give the downloader a budget that
+                # fits ~10 minutes of video instead of a 15s Short (1080p is the ceiling -- a
+                # 16:9 source fitted into 9:16 never uses more than the output width).
+                build_args = ["--url", entry["url"], "--title", entry.get("source_title") or entry["title"],
+                              "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / SHARK TANK",
+                              "--source-handle", entry.get("channel") or "",
+                              "--start", str(entry.get("start") or 0.0),
+                              "--max-secs", str(entry.get("duration") or 58.0),
+                              "--part-label", entry.get("part_label") or "",
+                              "--download-deadline", "600",
+                              "--download-attempt-timeout", "540",
+                              "--max-height", "1080",
+                              "--cta-text", "FOLLOW FOR MORE DEALS",
+                              "--out", FINAL]
+            else:
+                build_args = ["--url", entry["url"], "--title", entry["title"],
+                              "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / STREAMER CLIP",
+                              "--source-handle", entry.get("streamer_identity") or entry.get("channel") or "",
+                              # The live winners hold attention for roughly 20-24 seconds on average;
+                              # a standalone control should finish the payoff before the 58s countdown
+                              # ceiling. Ranking controls keep their separate 58s budget below.
+                              "--max-secs", "45", "--cta-text", "FOLLOW FOR MORE STREAMER MOMENTS",
+                              "--out", FINAL]
             # Standalone mode intentionally keeps source audio as the creative signal. An explicitly
             # requested --music still works for controlled tests, but auto mode does not add a bed.
             if args.music:
@@ -542,18 +626,20 @@ def main():
             build_args += ["--music", music_path]
         build, build_err = run_tool_safe("build_ranking_video.py", build_args)
     if build_err:
-        # The source finder can return valid streamer metadata while YouTube blocks every
-        # media download route a few seconds later. Scheduled/no-upload diagnostics should
-        # report that as an honest no-post, not a red Actions failure. Never use this escape
-        # hatch for a real non-streamer build or for unrelated renderer bugs.
+        # The source finder can return valid metadata while YouTube blocks every media download
+        # route a few seconds later. Scheduled/no-upload diagnostics should report that as an
+        # honest no-post, not a red Actions failure. Never use this escape hatch for a real
+        # non-sourced build or for unrelated renderer bugs. Shark-Tank chops share the contract:
+        # one part failing to download must not red a scheduled run either.
         if (os.environ.get("NO_SOURCE_OK") == "1"
-                and topic.get("genre") == "streamer"
+                and topic.get("genre") in {"streamer", "sharktank"}
                 and (_is_streamer_source_starvation(build_err)
                      or (selected_format == "standalone" and _is_streamer_clip_download_failure(build_err)))):
             candidate_data = load_json(CANDS)
-            payload = _streamer_no_source_payload(
+            payload = _no_source_payload(
                 source, requested_genre, build_err,
                 len(candidate_data.get("candidates", [])) if isinstance(candidate_data, dict) else None,
+                policy=("sharktank-only" if topic.get("genre") == "sharktank" else "streamer-only"),
             )
             payload["format"] = selected_format
             emit(payload)
@@ -588,7 +674,11 @@ def main():
                   f"falling back to source title", file=sys.stderr)
             title = safe_fallback
         description = standalone_entry.get("title") or title
-        tag_seed = ["streamer", "streamerclips", "liveclip", "shorts"]
+        if standalone_entry.get("content_type") == "sharktank_part":
+            # Seed tags describe the show and the business angle, not the streamer pool.
+            tag_seed = ["sharktank", "sharktankus", "startup", "investment", "shorts"]
+        else:
+            tag_seed = ["streamer", "streamerclips", "liveclip", "shorts"]
     else:
         description = topic.get("hook", title)
         tag_seed = ["ranking", "top5", "countdown", "shorts"]
@@ -633,7 +723,8 @@ def main():
               "source_entry": source_entry,
               "source_mode": source,
               "requested_genre": requested_genre, "used_genre": topic.get("genre"),
-              "content_policy": "streamer-only" if topic.get("genre") == "streamer" else None,
+              "content_policy": ("sharktank-only" if topic.get("genre") == "sharktank"
+                                 else ("streamer-only" if topic.get("genre") == "streamer" else None)),
               "fallback_reason": fallback_reason, "delivery": {},
               "audio": {
                   "profile": build.get("audio_profile") or "original_audio_only",
@@ -709,16 +800,18 @@ def main():
             if ok and m:
                 post_id = m.get("post_id") or m.get("media_id")
                 if post_id:
+                    shark_post = topic.get("genre") == "sharktank"
                     log_ig_post(
                         post_id,
-                        style=f"streamer-{selected_format}",
+                        style=("sharktank-" if shark_post else "streamer-") + selected_format,
                         experiment=(args.format == "auto" and selected_format == "ranking"),
                         context={"format": selected_format, "source": "rank_autopost",
-                                 "content_policy": "streamer-only",
+                                 "content_policy": result.get("content_policy") or "streamer-only",
                                  "title_signal_score": (source_entry or {}).get("signal_score"),
                                  "duration_sec": (media.get("contract") or {}).get("duration_sec"),
                                  "audio": result.get("audio"),
-                                 "hook_variant": "streamer_payoff_first"},
+                                 "hook_variant": ("sharktank_part" if shark_post
+                                                  else "streamer_payoff_first")},
                     )
 
     if publishing and "tiktok" in platforms:

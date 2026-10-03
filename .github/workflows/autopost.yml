@@ -1,24 +1,28 @@
 name: ranking-shorts
 
-# Builds & posts a #5->#1 streamer-clips RANKING Short on a GitHub-hosted Ubuntu runner -- no
+# Builds & posts a Shark-Tank-parts Short on a GitHub-hosted Ubuntu runner -- no
 # laptop / self-hosted runner needed.
 #
 # Sourcing on cloud IPs (probed 2026-07-03):
 #   - YouTube: bot-checks datacenter IPs, but works through Cloudflare WARP's free local
 #     SOCKS proxy (YTDLP_PROXY below).
 #   - Reddit (v.redd.it): 403-blocks EVERY cloud path (plain IP, WARP, direct DASH files).
-#     This workflow therefore uses the dedicated YouTube streamer pool and never falls back to
-#     the generic funny/fails or football pickers.
+#     This workflow therefore uses the dedicated pitch-show feed pool (Shark Tank /
+#     Dragons' Den rotation) and never falls back to the generic funny/fails pickers.
 #
 # Exact-time posting: GitHub cron can drift 5-30+ min, so each cron fires ~40 min EARLY
 # and the "Hold until slot" step sleeps until the exact slot minute.
 #
 # 2026-07-06: file touched to re-register the cron -- ALL scheduled runs on this account
 # silently stopped after 2026-07-05 ~20:37 UTC (no GitHub incident; workflows still "active").
+#
+# 2026-10-02: account switched from streamer clips to Shark-Tank parts (user decision --
+# old streamer videos stay published, only new posts are pitch-show parts).
 
 on:
-  # The ranking account is dedicated to streamer moments. World Cup/single-clip workflows are
-  # retired for this destination; MrBeast sourcing remains in clipping-auto.
+  # The ranking account is dedicated to pitch-show parts. Streamer-moment sourcing is
+  # retired for this destination (old videos left untouched); MrBeast sourcing
+  # remains in clipping-auto.
   schedule:
     # Fires at :50 the hour before each slot; the hold step releases at the exact target minute.
     - cron: "50 1,10,13,16,19,22 * * *"
@@ -29,7 +33,7 @@ on:
         type: boolean
         default: false
       format:
-        description: "Streamer format (auto = standalone default with a ranked control cohort)"
+        description: "Post format (auto = standalone default with a ranked control cohort)"
         type: choice
         options: [auto, standalone, ranking]
         default: auto
@@ -224,12 +228,15 @@ jobs:
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
-          # Dedicated streamer sourcing -- see the header comment.
+          # Dedicated pitch-show sourcing -- see the header comment.
           YTDLP_PROXY: socks5://127.0.0.1:40000
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           NO_REDDIT_SOURCES: "1"
-          RANKING_SOURCE: streamer
-          # A scheduled slot with no five-clip streamer pool is a clean no-post, not a red run.
+          RANKING_SOURCE: sharktank
+          # Pitch-show feeds for the rotation (first feed with unposted parts wins the run;
+          # override with SHARKTANK_CHANNEL / SHARKTANK_CHANNELS via repository variables).
+          SHARKTANK_CHANNELS: ${{ vars.SHARKTANK_CHANNELS || 'https://www.youtube.com/@SharkTankGlobal/videos,https://www.youtube.com/@dragonsden/videos,https://www.youtube.com/@SharkTankIndia/videos' }}
+          # A scheduled slot with no unposted pitch-show parts is a clean no-post, not a red run.
           # No-upload verification has the same diagnostic contract; real publishing runs
           # still fail loudly on source/configuration errors.
           NO_SOURCE_OK: ${{ (github.event_name == 'schedule' || inputs.no_upload == true) && '1' || '0' }}
@@ -249,7 +256,7 @@ jobs:
           fi
           ARGS=(--privacy public --keep-tmp --platforms "$PLATFORMS" --required-platforms youtube,instagram
                 --format "${IN_FORMAT:-auto}"
-                --force-genre streamer --niche "funny streamer clips, live reactions, and creator moments")
+                --force-genre sharktank --niche "shark tank pitches, business deals, and startup moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
           # Keep the structured no-source result in the artifact as well as the log.  The
           # pipeline must keep Python's real exit status so renderer/configuration failures
@@ -343,7 +350,7 @@ jobs:
             git add -f state/ig_post_log.json
           fi
           if ! git diff --staged --quiet; then
-            git commit -m "chore: record streamer format cohort [skip ci]"
+            git commit -m "chore: record format cohort [skip ci]"
             git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}"
             git push origin "HEAD:${GITHUB_REF_NAME:-main}"
           else

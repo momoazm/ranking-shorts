@@ -13,7 +13,11 @@ Usage:
     python tools/build_clip.py --url <youtube_url> --title "RONALDO GOAL" \
         [--handle @itsmomoclips] [--max-secs 58] [--music path.mp3] [--out .tmp/final.mp4]
 
-Prints JSON: {"path","duration_sec","byte_size","title","source_url","width","height"}
+    Sequential chop of a long source into one part:
+    python tools/build_clip.py --url <youtube_url> --title "SHARK TANK PITCH" \
+        --start 116.0 --max-secs 58.7 --part-label "(Part 3/10)" --download-deadline 600
+
+Prints JSON: {"path","duration_sec","byte_size","title","source_url","source_start_sec",...}
 """
 import argparse
 import json
@@ -139,6 +143,20 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True, help="Source YouTube (or direct media) URL")
     ap.add_argument("--title", required=True, help="Overlay/card title (already punchy)")
+    ap.add_argument("--start", type=float, default=0.0,
+                    help="Seconds into the source where this part begins (sequential chops).")
+    ap.add_argument("--source-file", default="",
+                    help="Reuse an already-downloaded source file instead of fetching it again.")
+    ap.add_argument("--part-label", default="",
+                    help='Appended to the cleaned card title, e.g. "(Part 3/10)".')
+    ap.add_argument("--download-deadline", type=float, default=0.0,
+                    help="Total seconds the downloader may spend. Long sources (a full episode "
+                         "instead of a 15s Short) pass a larger budget here; 0 keeps the default.")
+    ap.add_argument("--download-attempt-timeout", type=float, default=0.0,
+                    help="Per-route ceiling for one yt-dlp attempt (0 = Short default).")
+    ap.add_argument("--max-height", type=int, default=0,
+                    help="Cap the download ladder. A 16:9 source fit into 9:16 never uses more "
+                         "than the output width, so >1080p is wasted bandwidth (0 = uncapped).")
     ap.add_argument("--handle", default="@itsmomoclips", help="Watermark handle")
     ap.add_argument("--max-secs", type=float, default=58.0, help="Hard cap (<60s Shorts length)")
     ap.add_argument("--music", default=None, help="Optional music bed path (default: keep original audio only)")
@@ -159,18 +177,36 @@ def main():
 
     load_env()
     # Always tidy the card title (strip trademark junk / FIFA boilerplate, cap length) so any
-    # caller can hand us a raw source title and still get a clean, legible card.
+    # caller can hand us a raw source title and still get a clean, legible card. The part label
+    # is appended AFTER cleaning: clean_title keeps only the first "|" segment, which would
+    # otherwise drop "(Part 3/10)" off the end of a multi-part chop.
     args.title = clean_title(args.title)
+    if args.part_label:
+        args.title = f"{args.title} {args.part_label}".strip()
     tmpdir = REPO_ROOT / CLIP_TMP
     tmpdir.mkdir(parents=True, exist_ok=True)
     src_base = str(tmpdir / "src")
 
     # 1) download the whole (short) source clip -- yt-dlp routes via WARP on cloud runners.
-    try:
-        src = brv.download(args.url, src_base)
-    except Exception as e:
-        fail(f"download failed: {e}", url=args.url)
-        return
+    #    Sequential chops of a full episode override the Short-sized download budget and cap
+    #    the ladder; both are read by build_ranking_video at call time, never at import time.
+    if args.download_deadline > 0:
+        os.environ["YTDLP_DEADLINE_SEC"] = f"{args.download_deadline:.0f}"
+    if args.download_attempt_timeout > 0:
+        os.environ["YTDLP_ATTEMPT_TIMEOUT_SEC"] = f"{args.download_attempt_timeout:.0f}"
+    if args.max_height > 0:
+        os.environ["YTDLP_MAX_HEIGHT"] = str(int(args.max_height))
+    src = None
+    if args.source_file:
+        cached = args.source_file if os.path.isabs(args.source_file) else str(REPO_ROOT / args.source_file)
+        if os.path.isfile(cached):
+            src = cached
+    if src is None:
+        try:
+            src = brv.download(args.url, src_base)
+        except Exception as e:
+            fail(f"download failed: {e}", url=args.url)
+            return
     if not src or not os.path.isfile(src):
         fail("download produced no file", url=args.url)
         return
@@ -179,7 +215,12 @@ def main():
     if not dur or dur <= 0:
         fail("could not read source duration", src=src)
         return
-    seg = min(dur, args.max_secs)   # single-moment uploads are already short; cap at <60s from the start
+    # Sequential chop: take [start, start+seg) of a longer source, never past its end.
+    start = max(0.0, min(float(args.start), dur))
+    seg = min(dur - start, args.max_secs)   # every part stays under the <60s Shorts ceiling
+    if seg <= 0:
+        fail("start offset is past the end of the source", start=args.start, duration_sec=dur)
+        return
 
     # 1b) TOD-by-beIN clips carry a bottom branding bar; crop it off BEFORE the 9:16 fit so it's
     #     gone from both the sharp foreground and the blurred fill. TOD-only (is_tod gate) --
@@ -199,7 +240,7 @@ def main():
     # 2) fit to 9:16 over a blurred fill, keep original audio (or silence if the clip is quiet).
     body = str(tmpdir / "body.mp4")
     try:
-        brv.normalize(src, 0.0, seg, body)
+        brv.normalize(src, start, seg, body)
     except Exception as e:
         fail(f"normalize failed: {e}", src=src)
         return
@@ -238,7 +279,9 @@ def main():
         cmd += ["-filter_complex", f"[0:v]{vf}[v];{achain}", "-map", "[v]", *amap]
     else:
         cmd += ["-vf", vf, "-map", "0:v", *amap]
-    cmd += ["-t", f"{args.max_secs:.3f}", "-r", "30",
+    # `-t` must be THIS slice's length, not the requested max: on the tail part of a chop
+    # (start>0, remainder < max_secs) the requested max would otherwise be wrong by seconds.
+    cmd += ["-t", f"{seg:.3f}", "-r", "30",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", os.path.abspath(out_path)]
     try:
@@ -254,6 +297,8 @@ def main():
         "byte_size": os.path.getsize(out_path),
         "title": args.title,
         "source_url": args.url,
+        "source_start_sec": round(start, 2),
+        "source_file": src if args.source_file else None,
         "width": OUT_W, "height": OUT_H,
         "music": os.path.basename(music) if (music and os.path.isfile(music)) else None,
         "badge": args.badge,
