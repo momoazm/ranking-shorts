@@ -2221,6 +2221,28 @@
         },
         "hook_variant": "streamer_payoff_first"
       }
+    },
+    {
+      "post_id": "6ac1823ab2c4738d85a69943",
+      "posted_at": "2026-10-03T22:32:08.721783+00:00",
+      "style": "sharktank-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 59.257,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "sharktank_part"
+      }
     }
   ]
 }
