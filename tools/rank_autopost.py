@@ -143,16 +143,16 @@ def _title_flag(text):
     return m.group(0).lower() if m else None
 
 
-# Short show tag prefixed onto the posted title. clean_title() keeps only the FIRST "|"
-# segment and hard-cuts at 62 chars, so a full channel name crowds the hook out of the
-# budget: run 37115177398 lost the hook's last word ("...Battle It Out With", dropping
-# "Kevin") with an 19-char "Shark Tank Global: " prefix. Keep tags <=14 chars so the
-# hook survives with room to spare; the full channel name still lands in the description.
+# Short show tag for the posted title. The tag rides in the PART LABEL (appended after
+# clean_title), so it no longer eats the hook's 62-char budget -- but it still shares the
+# 100-char YouTube title with the hook and the "(Part i/N)" label, so keep it <=14 chars:
+# 62 hook + 16 label + 14 tag stays under the cap, and the unknown-channel fallback below
+# truncates to the same 14. The full channel name still lands in the description.
 SHOW_TAG_BY_HANDLE = {
     "sharktankglobal": "Shark Tank",
     "dragonsdenglobal": "Dragons' Den",
     "sharktankaustralia": "Shark Tank AU",
-    "dragonsdencanada": "Dragons' Den CA",
+    "dragonsdencanada": "Dragons Den CA",
 }
 
 

@@ -361,6 +361,10 @@ class SharktankPartsGuardsTest(unittest.TestCase):
         # Unknown/long channel names must still fit, and the tag is never empty.
         self.assertLessEqual(
             len(rank_autopost.show_tag({"channel": "Shark Tank Australia (Official)"})), 14)
+        # Every configured tag shares the 100-char title with the hook (<=62) and the label,
+        # and the unknown-channel fallback truncates to 14 -- so none may exceed it.
+        for handle, tag in rank_autopost.SHOW_TAG_BY_HANDLE.items():
+            self.assertLessEqual(len(tag), 14, f"{handle} tag too long: {tag!r}")
         self.assertEqual(rank_autopost.show_tag({"channel": "Dragons' Den"}), "Dragons' Den")
         self.assertTrue(rank_autopost.show_tag({}))
 
