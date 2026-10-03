@@ -290,16 +290,25 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
 
 
 class SharktankPartsGuardsTest(unittest.TestCase):
-    def test_ten_minute_video_is_ten_sixty_second_parts(self):
-        parts = find_sharktank_parts.split_parts(600.0)
+    # prepare_upload_media.py rejects any media with `not (0 < duration < 60)`, so a part may
+    # NEVER be exactly 60.0s: a full 600s source needs 11 parts, and a real 9:47 upload gives
+    # the 10 near-one-minute parts the channel format asks for.
+    def test_ten_minute_video_splits_into_ten_near_one_minute_parts(self):
+        parts = find_sharktank_parts.split_parts(587.0)   # the real newest upload (9:47)
         self.assertEqual(len(parts), 10)
-        self.assertTrue(all(round(end - start, 2) <= 60.0 for start, end in parts))
+        self.assertTrue(all(0 < round(end - start, 2) < 60.0 for start, end in parts))
         self.assertAlmostEqual(parts[0][0], 0.0)
+        self.assertAlmostEqual(parts[-1][1], 587.0)
+
+    def test_exact_six_hundred_seconds_never_emits_a_sixty_second_part(self):
+        parts = find_sharktank_parts.split_parts(600.0)
+        self.assertEqual(len(parts), 11)
+        self.assertTrue(all(0 < round(end - start, 2) < 60.0 for start, end in parts))
         self.assertAlmostEqual(parts[-1][1], 600.0)
 
     def test_even_multiples_never_gain_a_sliver_tail(self):
-        self.assertEqual(len(find_sharktank_parts.split_parts(599.0)), 10)
-        self.assertEqual(len(find_sharktank_parts.split_parts(120.0)), 2)
+        self.assertEqual(len(find_sharktank_parts.split_parts(599.0)), 11)
+        self.assertEqual(len(find_sharktank_parts.split_parts(120.0)), 3)
         sizes = [round(e - s, 2) for s, e in find_sharktank_parts.split_parts(61.0)]
         self.assertEqual(sizes, [30.5, 30.5])
 
@@ -309,55 +318,86 @@ class SharktankPartsGuardsTest(unittest.TestCase):
         self.assertIsNone(find_sharktank_parts.split_parts(None))
         self.assertIsNone(find_sharktank_parts.split_parts(3600.0))  # hour-long: cap guard
 
+    def test_caller_cannot_ask_for_an_over_limit_part(self):
+        parts = find_sharktank_parts.split_parts(600.0, max_part_secs=300.0, max_parts=20)
+        self.assertTrue(all(round(end - start, 2) <= find_sharktank_parts.MAX_SOURCE_SECS
+                            for start, end in parts))
+
     def test_candidate_carries_the_part_contract(self):
         entry = {"id": "VID123", "title": "Startup Pitches",
                  "webpage_url": "https://www.youtube.com/watch?v=VID123",
                  "channel": "Shark Tank Global"}
+        parts = find_sharktank_parts.split_parts(587.0)
+        start, end = parts[2]
         cand = find_sharktank_parts.build_candidate(
-            entry, find_sharktank_parts.split_parts(600.0), 3, 120.0, 180.0,
-            "https://www.youtube.com/@SharkTankGlobal/videos")
+            entry, parts, 3, start, end, "https://www.youtube.com/@SharkTankGlobal/videos")
         self.assertEqual(cand["id"], "VID123#3")
         self.assertEqual(cand["part_label"], "(Part 3/10)")
         self.assertIn("(Part 3/10)", cand["title"])
-        self.assertEqual((cand["start"], cand["end"], cand["duration"]), (120.0, 180.0, 60.0))
+        self.assertEqual((cand["start"], cand["end"]), (start, end))
+        self.assertLess(cand["duration"], 60.0)
         self.assertEqual(cand["content_type"], "sharktank_part")
         self.assertEqual(cand["content_policy"], "sharktank-only")
 
-    def test_default_rotation_covers_three_pitch_shows(self):
+    def test_default_rotation_covers_four_verified_pitch_shows(self):
         feeds = find_sharktank_parts.DEFAULT_CHANNELS
-        self.assertGreaterEqual(len(feeds), 3)
+        self.assertGreaterEqual(len(feeds), 4)
         blob = ",".join(feeds)
-        self.assertIn("SharkTank", blob)
+        self.assertIn("SharkTankGlobal", blob)
         self.assertTrue(any("dragon" in feed.lower() for feed in feeds))
+        # The dead handle probed on 2026-10-03 (404) must never come back.
+        self.assertNotIn("@dragonsden/videos", blob)
+
+    def _run_finder(self, tmp, entries, used, rotation_offset=None, history_used=None):
+        history = str(Path(tmp) / "used.json")
+        Path(history).write_text(json.dumps({"used": history_used or used}), encoding="utf-8")
+        rotation = str(Path(tmp) / "rotation.json")
+        if rotation_offset is not None:
+            Path(rotation).write_text(json.dumps({"offset": rotation_offset}), encoding="utf-8")
+        out = str(Path(tmp) / "cands.json")
+        with mock.patch.object(find_sharktank_parts, "search",
+                               side_effect=lambda feed, n: entries[feed]), \
+             mock.patch.object(find_sharktank_parts, "probe_duration",
+                               side_effect=lambda entry: entry.get("duration")), \
+             mock.patch("sys.argv", ["find_sharktank_parts.py",
+                                     "--channel", ",".join(entries.keys()),
+                                     "--history", history, "--rotation", rotation,
+                                     "--out", out]):
+            find_sharktank_parts.main()
+        return json.loads(Path(out).read_text(encoding="utf-8")), rotation
 
     def test_main_rotates_to_second_feed_when_first_is_exhausted(self):
         import tempfile
+        entries = {
+            "https://www.youtube.com/@SharkTankGlobal/videos": [
+                {"id": "AAA", "title": "Done", "duration": 120.0,
+                 "webpage_url": "https://www.youtube.com/watch?v=AAA"}],
+            "https://www.youtube.com/@DragonsDenGlobal/videos": [
+                {"id": "BBB", "title": "Fresh", "duration": 120.0,
+                 "webpage_url": "https://www.youtube.com/watch?v=BBB"}],
+        }
         with tempfile.TemporaryDirectory() as tmp:
-            history = str(Path(tmp) / "used.json")
-            used = {"used": ["AAA#1", "AAA#2"]}
-            Path(history).write_text(json.dumps(used), encoding="utf-8")
-            entries = {
-                "https://www.youtube.com/@SharkTankGlobal/videos": [
-                    {"id": "AAA", "title": "Done", "duration": 120.0,
-                     "webpage_url": "https://www.youtube.com/watch?v=AAA"}],
-                "https://www.youtube.com/@dragonsden/videos": [
-                    {"id": "BBB", "title": "Fresh", "duration": 120.0,
-                     "webpage_url": "https://www.youtube.com/watch?v=BBB"}],
-            }
-            out = str(Path(tmp) / "cands.json")
-            with mock.patch.object(find_sharktank_parts, "search",
-                                   side_effect=lambda feed, n: entries[feed]), \
-                 mock.patch.object(find_sharktank_parts, "probe_duration",
-                                   side_effect=lambda entry: entry.get("duration")), \
-                 mock.patch("sys.argv", ["find_sharktank_parts.py",
-                                         "--channel", ",".join(entries.keys()),
-                                         "--history", history, "--out", out]):
-                find_sharktank_parts.main()
-            payload = json.loads(Path(out).read_text(encoding="utf-8"))
+            payload, _ = self._run_finder(tmp, entries, ["AAA#1", "AAA#2", "AAA#3"])
             self.assertTrue(payload["candidates"], "rotation must hop to the second feed")
             self.assertEqual(payload["candidates"][0]["id"], "BBB#1")
             self.assertEqual(payload["channel"],
-                             "https://www.youtube.com/@dragonsden/videos")
+                             "https://www.youtube.com/@DragonsDenGlobal/videos")
+
+    def test_main_starts_at_the_rotation_cursor(self):
+        import tempfile
+        entries = {
+            "https://www.youtube.com/@SharkTankGlobal/videos": [
+                {"id": "AAA", "title": "Shark", "duration": 120.0,
+                 "webpage_url": "https://www.youtube.com/watch?v=AAA"}],
+            "https://www.youtube.com/@DragonsDenGlobal/videos": [
+                {"id": "BBB", "title": "Den", "duration": 120.0,
+                 "webpage_url": "https://www.youtube.com/watch?v=BBB"}],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            payload, rotation = self._run_finder(tmp, entries, [], rotation_offset=1)
+            self.assertEqual(payload["candidates"][0]["id"], "BBB#1",
+                             "cursor=1 must start at the second feed")
+            self.assertEqual(json.loads(Path(rotation).read_text(encoding="utf-8"))["offset"], 2)
 
 
 if __name__ == "__main__":

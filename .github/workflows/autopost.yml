@@ -233,9 +233,10 @@ jobs:
           no_proxy: "127.0.0.1,localhost"   # PO-token provider is local; must bypass the SOCKS proxy
           NO_REDDIT_SOURCES: "1"
           RANKING_SOURCE: sharktank
-          # Pitch-show feeds for the rotation (first feed with unposted parts wins the run;
+          # Pitch-show feeds for the rotation (round-robin cursor, one feed per run;
           # override with SHARKTANK_CHANNEL / SHARKTANK_CHANNELS via repository variables).
-          SHARKTANK_CHANNELS: ${{ vars.SHARKTANK_CHANNELS || 'https://www.youtube.com/@SharkTankGlobal/videos,https://www.youtube.com/@dragonsden/videos,https://www.youtube.com/@SharkTankIndia/videos' }}
+          # All four probed live 2026-10-03: English-language, /videos tab resolves.
+          SHARKTANK_CHANNELS: ${{ vars.SHARKTANK_CHANNELS || 'https://www.youtube.com/@SharkTankGlobal/videos,https://www.youtube.com/@DragonsDenGlobal/videos,https://www.youtube.com/@SharkTankAustralia/videos,https://www.youtube.com/@DragonsDenCanada/videos' }}
           # A scheduled slot with no unposted pitch-show parts is a clean no-post, not a red run.
           # No-upload verification has the same diagnostic contract; real publishing runs
           # still fail loudly on source/configuration errors.

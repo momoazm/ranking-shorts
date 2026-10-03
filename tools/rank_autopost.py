@@ -539,11 +539,14 @@ def main():
                 return False
             if entry.get("content_type") == "sharktank_part":
                 # An ordered slice of ONE official long-form upload: the slice boundaries are
-                # the whole contract, so they must be present before any render spend.
+                # the whole contract, so they must be present before any render spend, and the
+                # slice itself must clear prepare_upload_media's strict `duration < 60` gate
+                # (an exact-60.0s part would fail the upload step after the render).
                 return (entry.get("content_policy") == "sharktank-only"
                         and entry.get("video_id")
                         and entry.get("start") is not None
-                        and entry.get("duration"))
+                        and isinstance(entry.get("duration"), (int, float))
+                        and 0 < float(entry["duration"]) < 60)
             return (entry.get("content_type") == "streamer_clip"
                     and entry.get("content_policy") == "streamer-only"
                     and entry.get("streamer_identity"))
@@ -564,8 +567,12 @@ def main():
                 # Sequential chop of a full episode: seek to this part's window, keep the label
                 # that clean_title would otherwise strip, and give the downloader a budget that
                 # fits ~10 minutes of video instead of a 15s Short (1080p is the ceiling -- a
-                # 16:9 source fitted into 9:16 never uses more than the output width).
-                build_args = ["--url", entry["url"], "--title", entry.get("source_title") or entry["title"],
+                # 16:9 source fitted into 9:16 never uses more than the output width). The show
+                # name is prefixed because clean_title keeps only the FIRST "|" segment, which
+                # would otherwise drop "| Shark Tank US | Shark Tank Global" off every title.
+                build_args = ["--url", entry["url"],
+                              "--title", f"{entry.get('channel') or 'Shark Tank'}: "
+                                         f"{entry.get('source_title') or entry['title']}",
                               "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / SHARK TANK",
                               "--source-handle", entry.get("channel") or "",
                               "--start", str(entry.get("start") or 0.0),
