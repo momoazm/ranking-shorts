@@ -2265,6 +2265,28 @@
         },
         "hook_variant": "sharktank_part"
       }
+    },
+    {
+      "post_id": "6ac27227646f0d9f173a8898",
+      "posted_at": "2026-10-04T15:35:59.179899+00:00",
+      "style": "sharktank-standalone",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "format": "standalone",
+        "source": "rank_autopost",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.29,
+        "audio": {
+          "profile": "original_audio_only",
+          "music": null,
+          "music_volume": 0.0,
+          "rights_policy": "original_audio_only",
+          "warning": null
+        },
+        "hook_variant": "sharktank_part"
+      }
     }
   ]
 }
