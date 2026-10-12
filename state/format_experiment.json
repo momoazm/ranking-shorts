@@ -1,6 +1,6 @@
 {
   "run_index": 106,
-  "winner": "ranking",
+  "winner": null,
   "runs": [
     {
       "index": 66,
@@ -282,17 +282,5 @@
       "status": "uploaded",
       "counted": true
     }
-  ],
-  "winner_reason": "standalone vs ranking: views -59%; engagement -13%; watch completion -30%",
-  "last_comparison": {
-    "at": "2026-10-12T18:54:14.749403+00:00",
-    "samples": {
-      "standalone": 86,
-      "ranking": 20
-    },
-    "winner": "ranking",
-    "reason": "standalone vs ranking: views -59%; engagement -13%; watch completion -30%",
-    "pending": 0,
-    "errors": 0
-  }
+  ]
 }
