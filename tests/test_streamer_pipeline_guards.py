@@ -102,6 +102,7 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
             with mock.patch.object(sys, "argv", argv), \
                     mock.patch.dict("os.environ", {"RANKING_SOURCE": "streamer", "NO_SOURCE_OK": "1"}, clear=False), \
                     mock.patch.object(rank_autopost, "load_env", lambda: None), \
+                    mock.patch.object(rank_autopost, "DROUGHT_STATE", ".tmp/test_drought.json"), \
                     mock.patch.object(rank_autopost, "run_tool", side_effect=fake_run_tool), \
                     mock.patch.object(rank_autopost, "run_tool_safe", side_effect=fake_run_tool_safe), \
                     contextlib.redirect_stdout(captured):
@@ -111,6 +112,7 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
                 (ROOT / rank_autopost.CANDS).unlink()
             except FileNotFoundError:
                 pass
+            (ROOT / ".tmp" / "test_drought.json").unlink(missing_ok=True)
 
         result = json.loads(captured.getvalue().strip())
         self.assertEqual(result["status"], "no_source")
@@ -252,12 +254,14 @@ class StreamerPipelineGuardsTest(unittest.TestCase):
                     mock.patch.dict("os.environ", {"RANKING_SOURCE": "streamer",
                                                    "NO_SOURCE_OK": no_source_ok}, clear=False), \
                     mock.patch.object(rank_autopost, "load_env", lambda: None), \
+                    mock.patch.object(rank_autopost, "DROUGHT_STATE", ".tmp/test_drought.json"), \
                     mock.patch.object(rank_autopost, "run_tool", side_effect=fake_run_tool), \
                     mock.patch.object(rank_autopost, "run_tool_safe", side_effect=fake_run_tool_safe), \
                     contextlib.redirect_stdout(captured):
                 rank_autopost.main()
         finally:
             (ROOT / rank_autopost.CANDS).unlink(missing_ok=True)
+            (ROOT / ".tmp" / "test_drought.json").unlink(missing_ok=True)
             if ranked_backup is not None:
                 ranked_path.write_bytes(ranked_backup)
             else:
@@ -480,6 +484,109 @@ class SharktankPartsGuardsTest(unittest.TestCase):
             self.assertEqual(payload["candidates"][0]["id"], "BBB#1",
                              "cursor=1 must start at the second feed")
             self.assertEqual(json.loads(Path(rotation).read_text(encoding="utf-8"))["offset"], 2)
+
+
+class SharktankSlotFallbackTest(unittest.TestCase):
+    # R2 (2026-10 audit): rank_autopost used to write ONLY pool[0] into RANKED, so a single
+    # bot-walled upload burned the whole slot (zero posts since 2026-10-04). The walk must
+    # blacklist the failed video_id and fall through to the next distinct video in the pool.
+    def _run_sharktank_walk(self):
+        def part(vid, index, total):
+            return {"id": f"{vid}#{index}", "video_id": vid, "part_index": index,
+                    "part_total": total,
+                    "title": f"Entrepreneur Pitches a Crazy Idea (Part {index}/{total})",
+                    "source_title": ("Entrepreneur Pitches a Crazy Idea | Shark Tank US | "
+                                     "Shark Tank Global"),
+                    "part_label": f"(Part {index}/{total})",
+                    "start": round((index - 1) * 58.7, 2), "end": round(index * 58.7, 2),
+                    "duration": 58.7,
+                    "url": f"https://www.youtube.com/watch?v={vid}",
+                    "channel": "Shark Tank Global", "uploader": "Shark Tank Global",
+                    "handle": "", "source": "youtube",
+                    "source_feed": "https://www.youtube.com/@SharkTankGlobal/videos",
+                    "content_type": "sharktank_part", "content_policy": "sharktank-only",
+                    "rank": None}
+
+        # One pool: two parts of the bot-walled video AAA, then the fallback video BBB.
+        candidates = [part("VIDAAA", 1, 2), part("VIDAAA", 2, 2), part("VIDBBB", 1, 5)]
+        build_calls = []
+
+        def fake_run_tool_safe(name, args):
+            if name == "find_sharktank_parts.py":
+                (ROOT / rank_autopost.CANDS).parent.mkdir(parents=True, exist_ok=True)
+                (ROOT / rank_autopost.CANDS).write_text(
+                    json.dumps({"source": "youtube", "genre": "sharktank",
+                                "content_policy": "sharktank-only",
+                                "channel": candidates[0]["source_feed"],
+                                "video": {"id": "VIDAAA"}, "candidates": candidates}),
+                    encoding="utf-8")
+                return {"count": len(candidates), "candidates": candidates,
+                        "video": {"id": "VIDAAA"}}, None
+            if name == "build_clip.py":
+                build_calls.append(list(args))
+                url = args[args.index("--url") + 1]
+                if "VIDAAA" in url:
+                    return None, ("build_clip.py failed: download failed: Sign in to confirm "
+                                  "you're not a bot (HTTP 403)")
+                return {"title": args[args.index("--title") + 1], "duration_sec": 45.0,
+                        "byte_size": 1000}, None
+            if name == "prepare_upload_media.py":
+                return {"contract": {"valid": True, "duration_sec": 45.0}}, None
+            if name == "build_captions.py":
+                return {"path": rank_autopost.CAPMETA}, None
+            raise AssertionError(f"unexpected safe tool: {name}")
+
+        argv = ["rank_autopost.py", "--no-upload", "--force-genre", "sharktank",
+                "--platforms", "youtube,instagram"]
+        backups = {}
+        for rel in (rank_autopost.CANDS, rank_autopost.RANKED, rank_autopost.RANK_STORY,
+                    rank_autopost.REVIEW_MANIFEST):
+            path = ROOT / rel
+            backups[rel] = path.read_bytes() if path.is_file() else None
+        captured = io.StringIO()
+        try:
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.dict("os.environ", {"RANKING_SOURCE": "sharktank",
+                                                   "NO_SOURCE_OK": "1"}, clear=False), \
+                    mock.patch.object(rank_autopost, "load_env", lambda: None), \
+                    mock.patch.object(rank_autopost, "run_tool_safe",
+                                      side_effect=fake_run_tool_safe), \
+                    contextlib.redirect_stdout(captured):
+                rank_autopost.main()
+        finally:
+            for rel, blob in backups.items():
+                path = ROOT / rel
+                if blob is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    path.write_bytes(blob)
+        return json.loads(captured.getvalue().strip()), build_calls
+
+    def test_bot_walled_video_falls_through_to_next_distinct_video(self):
+        result, build_calls = self._run_sharktank_walk()
+        self.assertEqual(result["status"], "built")
+        self.assertEqual(result["used_genre"], "sharktank")
+        # The posted part belongs to the FALLBACK video, not the walled one.
+        self.assertEqual(result["source_entry"]["video_id"], "VIDBBB")
+        self.assertEqual(result["source_entry"]["id"], "VIDBBB#1")
+        # Exactly two download attempts: video AAA's part 1 (failed) then BBB's part 1 --
+        # AAA's remaining part must be skipped by the video_id blacklist, never retried.
+        labels = [c[c.index("--part-label") + 1].split(" | ")[0] for c in build_calls]
+        self.assertEqual(labels, ["(Part 1/2)", "(Part 1/5)"])
+        self.assertEqual([c[c.index("--url") + 1] for c in build_calls],
+                         ["https://www.youtube.com/watch?v=VIDAAA",
+                          "https://www.youtube.com/watch?v=VIDBBB"])
+
+    def test_record_used_credits_the_entry_that_actually_posted(self):
+        import tempfile
+        ranked = {"entries": [{"id": "VIDAAA#1", "rank": 1}, {"id": "VIDBBB#1", "rank": 3}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "ranked.json")
+            Path(path).write_text(json.dumps(ranked), encoding="utf-8")
+            with mock.patch.object(rank_autopost, "HISTORY", str(Path(tmp) / "used.json")):
+                rank_autopost.record_used(path, "standalone", posted=ranked["entries"][1])
+                used = json.loads((Path(tmp) / "used.json").read_text(encoding="utf-8"))["used"]
+        self.assertEqual(used, ["VIDBBB#1"])
 
 
 if __name__ == "__main__":

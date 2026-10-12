@@ -38,6 +38,11 @@ RANK_STORY = ".tmp/rank_story.json"
 CAPMETA = ".tmp/captions_meta.json"
 DAILY_COUNT = ".tmp/daily_count.json"
 FORMAT_STATE = "state/format_experiment.json"
+# Genre-aware caption CORE (R3): the generic ranking CORE (#ranking #top5 #countdown
+# #funnyfails #fails) fills Instagram's 5-hashtag cap BEFORE any sharktank story tag on a
+# pitch-show post. build_captions.py takes this via --core; when it is not passed the
+# generic CORE keeps its historic behaviour for the streamer/ranking genres.
+SHARKTANK_CORE = "sharktank startup investment business pitch"
 
 # Every network- or media-heavy child must have a bounded wall-clock budget.  Without this,
 # yt-dlp or a public host can leave the Actions job "in progress" until the workflow's much
@@ -217,13 +222,21 @@ _streamer_no_source_payload = _no_source_payload
 HISTORY = "state/used_clips.json"
 
 
-def record_used(ranked_path, selected_format="ranking"):
-    """Remember only sources that actually went into this format's video."""
-    ranked = load_json(ranked_path)
-    entries = (ranked or {}).get("entries", [])
-    if selected_format == "standalone":
-        entries = [e for e in entries if e.get("rank") == 1][:1]
-    ids = [e.get("id") for e in entries if e.get("id")]
+def record_used(ranked_path, selected_format="ranking", posted=None):
+    """Remember only sources that actually went into this format's video.
+
+    Standalone records the entry that was ACTUALLY posted (rank fallback / Shark-Tank
+    video retry), never a blind rank-#1 lookup -- otherwise the posted part would be
+    re-offered by the finder on the next run while an unposted rank-#1 is burned.
+    """
+    if selected_format == "standalone" and posted and posted.get("id"):
+        entries = [posted]
+    else:
+        ranked = load_json(ranked_path)
+        entries = (ranked or {}).get("entries", [])
+        if selected_format == "standalone":
+            entries = [e for e in entries if e.get("rank") == 1][:1]
+    ids = [e.get("id") for e in entries if e and e.get("id")]
     if not ids:
         return
     prev = (load_json(HISTORY) or {}).get("used", [])
@@ -241,6 +254,91 @@ def daily_used():
 def daily_increment():
     with open(ROOT / DAILY_COUNT, "w", encoding="utf-8") as f:
         json.dump({"date": date.today().isoformat(), "count": daily_used() + 1}, f)
+
+
+# --- Drought tracking (R1, 2026-10: ~20 consecutive green "no_source" runs, zero posts) ------
+# A scheduled no-post must stay green (NO_SOURCE_OK contract), so a dead pipeline is invisible
+# in Actions. This counter lives in its own state file (restored/persisted with state/ by the
+# workflow) and the VISIBILITY comes from a WhatsApp alert, never from turning CI red.
+DROUGHT_STATE = "state/drought.json"
+DROUGHT_ALERT_STREAK = 3            # consecutive no_source runs before alerting
+DROUGHT_ALERT_COOLDOWN_SEC = 24 * 3600   # at most one alert per day
+
+
+def _drought_save(state):
+    (ROOT / "state").mkdir(parents=True, exist_ok=True)
+    with open(ROOT / DROUGHT_STATE, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2, ensure_ascii=True)
+
+
+def _drought_reset():
+    """A confirmed upload breaks the consecutive no_source streak."""
+    try:
+        _drought_save({"streak": 0, "last_upload_at": time.time()})
+    except OSError as exc:
+        print(f"::warning::drought reset failed: {exc}", file=sys.stderr)
+
+
+def _send_drought_alert(text):
+    """WhatsApp alert via tools/send_whatsapp.py. True only on a confirmed send.
+
+    Never raises, and never prints the CallMeBot request URL: httpx embeds the full URL
+    (phone + apikey query params) in its exception text, so only a redacted, truncated
+    tail of the child's output may reach the log.
+    """
+    try:
+        proc = subprocess.run([PY, "tools/send_whatsapp.py", "--text", text], cwd=str(ROOT),
+                              capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=60)
+    except Exception as exc:
+        print(f"::warning::drought alert could not run: {exc}", file=sys.stderr)
+        return False
+    out = ((proc.stdout or "") + " " + (proc.stderr or "")).strip()
+    if proc.returncode == 0 and '"sent"' in (proc.stdout or ""):
+        return True
+    reason = re.sub(r"(phone|apikey)=[^&\s]+", r"\1=<redacted>", out)
+    reason = re.sub(r'"phone"\s*:\s*"[^"]*"', '"phone":"<redacted>"', reason)
+    print(f"::warning::drought alert failed (exit {proc.returncode}): {reason[:200]}",
+          file=sys.stderr)
+    return False
+
+
+def _drought_tick(detail, alert=True):
+    """Count one more consecutive no_source run; WhatsApp when the streak is a real drought.
+
+    Best-effort by design: every failure is a ::warning:: and the green no_source payload is
+    still emitted. `alert` is False for --no-upload QA runs so they never message Moemen.
+    """
+    try:
+        state = load_json(DROUGHT_STATE)
+        if not isinstance(state, dict):
+            state = {}
+        try:
+            last_alert = float(state.get("last_alert_at") or 0)
+        except (TypeError, ValueError):
+            last_alert = 0.0
+        now = time.time()
+        streak = int(state.get("streak") or 0) + 1
+        state.update({"streak": streak, "last_no_source_at": now})
+        _drought_save(state)
+        if not alert or streak < DROUGHT_ALERT_STREAK:
+            return
+        if now - last_alert < DROUGHT_ALERT_COOLDOWN_SEC:
+            return
+        tail = re.sub(r"\s+", " ", str(detail or "")).strip()[-400:]
+        text = (f"ranking-shorts drought: {streak} consecutive no_source runs with no post. "
+                f"Latest detail: {tail}")
+        if _send_drought_alert(text):
+            state["last_alert_at"] = now
+            _drought_save(state)
+    except Exception as exc:
+        print(f"::warning::drought tracking failed: {exc}", file=sys.stderr)
+
+
+def _emit_no_source(payload, alert=True):
+    """Green no-post result: record the drought first, then emit unchanged."""
+    _drought_tick(str((payload or {}).get("detail") or ""), alert=alert)
+    emit(payload)
 
 
 def choose_format(requested, no_upload=False):
@@ -416,7 +514,7 @@ def main():
                 payload = _no_source_payload(source, requested_genre, ferr, policy="sharktank-only")
                 if _f and isinstance(_f, dict) and _f.get("count") is not None:
                     payload["candidate_count"] = _f["count"]
-                emit(payload)
+                _emit_no_source(payload, alert=publishing)
                 return
             raise RuntimeError(f"shark tank source failed: {ferr}")
         first_part = ((_f or {}).get("candidates") or [{}])[0]
@@ -435,7 +533,7 @@ def main():
                            "detail": ferr}
                 if _f and isinstance(_f, dict) and _f.get("count") is not None:
                     payload["candidate_count"] = _f["count"]
-                emit(payload)
+                _emit_no_source(payload, alert=publishing)
                 return
             raise RuntimeError(f"streamer source failed: {ferr}")
     elif topic.get("genre") == "worldcup":
@@ -527,18 +625,23 @@ def main():
     if topic.get("genre") == "sharktank":
         # Parts arrive already ordered and already titled. An LLM rank/refine pass would either
         # reorder them (breaking part 1 -> N) or rewrite the "Part i/N" label off the title, so
-        # the next unposted part is written straight to RANKED as rank #1 and the shared
-        # standalone path below posts it unchanged.
+        # the whole pool is written straight to RANKED in order and the shared standalone path
+        # below posts the first entry that downloads. Writing EVERY candidate (not just
+        # pool[0]) is what lets that walk fall through to the next distinct video_id when the
+        # chosen video is bot-walled -- one failed download must not burn the whole slot.
         cand_data = load_json(CANDS) or {}
         pool = cand_data.get("candidates") or []
         if not pool:
             raise RuntimeError("shark tank candidates disappeared before the build step")
-        part_entry = dict(pool[0])
-        part_entry["rank"] = 1
+        entries = []
+        for index, cand in enumerate(pool, start=1):
+            entry = dict(cand)
+            entry["rank"] = index
+            entries.append(entry)
         TMP.mkdir(exist_ok=True)
         with open(ROOT / RANKED, "w", encoding="utf-8") as handle:
             json.dump({"source": "youtube", "genre": "sharktank",
-                       "content_policy": "sharktank-only", "entries": [part_entry]},
+                       "content_policy": "sharktank-only", "entries": entries},
                       handle, indent=2, ensure_ascii=False)
     else:
         _r, rerr = run_tool_safe("rank_clips.py", ["--candidates", CANDS, "--topic", TOPIC, "--out", RANKED])
@@ -582,6 +685,7 @@ def main():
     elif selected_format == "standalone" and args.with_music and not music_path:
         music_error = "standalone mode keeps original clip audio; --with-music applies only to ranking controls"
 
+    posted = None
     if selected_format == "standalone":
         ranked_data = load_json(RANKED) or {}
         ranked_entries = ranked_data.get("entries") or []
@@ -612,8 +716,17 @@ def main():
         verified = [entry for entry in ordered if _verified_source(entry)]
         if not verified:
             raise RuntimeError("Standalone mode could not identify a verified ranked source")
-        build, build_err, failures, posted = None, None, [], None
+        build, build_err, failures = None, None, []
+        blacklisted_videos = set()
         for entry in verified:
+            if (entry.get("content_type") == "sharktank_part"
+                    and entry.get("video_id") in blacklisted_videos):
+                # Every part of a chop shares ONE source download: once that video_id failed,
+                # its remaining parts are guaranteed to fail identically (and each retry would
+                # burn the full download budget). Skip them without spending another attempt.
+                failures.append(f"rank #{entry.get('rank')}: video "
+                                f"{entry.get('video_id')} already failed to download")
+                continue
             flag = _title_flag(entry.get("title"))
             if flag:
                 # Proven takedown trigger (2026-09-20): skip BEFORE render/upload spend.
@@ -668,6 +781,14 @@ def main():
                 raise RuntimeError(build_err)
             failures.append(f"rank #{entry.get('rank')}: {build_err}")
             build = None
+            if entry.get("content_type") == "sharktank_part":
+                # R2 slot burn: blacklist the WHOLE video and let the walk fall through to
+                # the next distinct video_id in the pool instead of losing the slot to one
+                # bot-walled upload.
+                blacklisted_videos.add(entry.get("video_id"))
+                print(f"::warning::shark tank video {entry.get('video_id')} failed to "
+                      f"download; trying the next distinct video in the pool",
+                      file=sys.stderr)
         else:
             # Message keeps the "build_clip.py failed: download failed" shape so the
             # NO_SOURCE_OK escape hatch below still recognizes an all-walled pool
@@ -710,7 +831,7 @@ def main():
                 policy=("sharktank-only" if topic.get("genre") == "sharktank" else "streamer-only"),
             )
             payload["format"] = selected_format
-            emit(payload)
+            _emit_no_source(payload, alert=publishing)
             return
         raise RuntimeError(build_err)
     if not isinstance(build, dict):
@@ -756,7 +877,10 @@ def main():
         # research); title words + seeds + build_captions' curated core are the tag pool.
         json.dump({"title": title, "description": description,
                    "tags": (tags + tag_seed)[:15]}, f)
-    run_tool_safe("build_captions.py", ["--story", RANK_STORY, "--out", CAPMETA])
+    caption_args = ["--story", RANK_STORY, "--out", CAPMETA]
+    if topic.get("genre") == "sharktank":
+        caption_args += ["--core", SHARKTANK_CORE]
+    run_tool_safe("build_captions.py", caption_args)
     meta = load_json(CAPMETA) or {}
 
     source_entry = None
@@ -926,7 +1050,8 @@ def main():
     if published:
         result["status"] = "partial_upload" if required_failures else "uploaded"
         daily_increment()
-        record_used(RANKED, selected_format)
+        record_used(RANKED, selected_format, posted=posted)
+        _drought_reset()
     elif required_failures:
         result["status"] = "delivery_failed"
 

@@ -35,6 +35,11 @@ CORE = [
 ]
 
 
+def parse_core(raw):
+    """'sharktank startup investment' / 'a,b,c' -> normalized tag list (empty = default CORE)."""
+    return [norm_tag(t) for t in re.split(r"[,\s]+", str(raw or "").strip()) if t.strip()]
+
+
 def load_json(path):
     try:
         with open(path, "r", encoding="utf-8") as f:
@@ -92,6 +97,12 @@ def main():
     parser.add_argument("--story", default=".tmp/story.json")
     parser.add_argument("--playbook", default=".tmp/playbook.json")
     parser.add_argument("--out", default=".tmp/captions_meta.json")
+    parser.add_argument("--core", default="",
+                        help="Genre-aware CORE hashtag list (e.g. 'sharktank startup "
+                             "investment business pitch'). Niche tags then lead the merge so "
+                             "the tight platform caps (Instagram keeps 5) keep the story's "
+                             "tags instead of the generic ranking CORE. Unset = historic "
+                             "behaviour (generic CORE first).")
     args = parser.parse_args()
 
     story = load_json(args.story)
@@ -107,7 +118,15 @@ def main():
 
     story_tags = [norm_tag(t) for t in (story.get("tags") or [])]
     trend_tags = [norm_tag(t) for t in (playbook.get("trending_hashtags") or [])]
-    all_tags = dedupe(cast_tags(story) + CORE + story_tags + trend_tags)
+    genre_core = parse_core(args.core)
+    if genre_core:
+        # Genre-aware merge (R3): the genre core + the story's niche tags lead, the generic
+        # ranking CORE rides last -- so inside the 5-tag Instagram cap a Shark Tank post ships
+        # its pitch tags and never #funnyfails. Without --core the merge order is untouched,
+        # which keeps the streamer/ranking captions byte-identical to before.
+        all_tags = dedupe(cast_tags(story) + genre_core + story_tags + trend_tags + CORE)
+    else:
+        all_tags = dedupe(cast_tags(story) + CORE + story_tags + trend_tags)
 
     # YouTube: ensure shorts present; description leads with the 3 hashtags YouTube surfaces.
     yt_tags = dedupe(["shorts"] + all_tags)[:15]

@@ -6,7 +6,9 @@ ceiling, so a ~10 minute pitch becomes ~10 one-minute parts instead of one hand-
 moment. Parts are emitted in play order and the orchestrator posts the first one that is
 not already recorded in the shared clip history (state/used_clips.json -- the same ledger
 the streamer pool uses, keyed "<video_id>#<part_index>"), so consecutive scheduled runs
-walk through a video part 1 -> part N and then move on to the next newest upload.
+walk through a video part 1 -> part N and then move on to the next newest upload. The
+pool also carries the first part(s) of the next --max-videos distinct uploads, so a
+bot-walled upload fails over to a different video_id instead of burning the slot.
 
 Sourcing is a rotation of official pitch-show feeds (Shark Tank US + Dragons' Den UK +
 Shark Tank Australia + Dragons' Den Canada by default; override with --channel /
@@ -178,6 +180,9 @@ def main():
     ap.add_argument("--max-part-secs", type=float, default=MAX_SOURCE_SECS,
                     help="Each part must stay strictly under the 60s Shorts ceiling")
     ap.add_argument("--max", type=int, default=12, help="Max parts emitted (orchestrator parity)")
+    ap.add_argument("--max-videos", type=int, default=3,
+                    help="Distinct uploads to emit (newest first). Part 1 of every extra "
+                         "video is a download-failure fallback for the orchestrator.")
     ap.add_argument("--history", default="state/used_clips.json")
     ap.add_argument("--rotation", default="state/sharktank_rotation.json",
                     help="Round-robin cursor across --channel feeds")
@@ -199,15 +204,24 @@ def main():
     else:
         start = 0
     notes = []
-    picked = None
+    picks = []
 
+    # Collect up to --max-videos DISTINCT uploads (newest first) instead of stopping at the
+    # first eligible one: when the chosen upload is bot-walled, every one of its parts fails
+    # on the same download, so the orchestrator needs a next distinct video_id to fall
+    # through to before the slot is declared no_source (R2 slot burn).
+    max_videos = max(1, min(args.max_videos, args.max))
     for feed in feeds:
+        if len(picks) >= max_videos:
+            break
         try:
             entries = [e for e in search(feed, args.scan) if e]
         except Exception as exc:
             notes.append(f"{feed}: feed unavailable ({str(exc)[:80]})")
             continue
         for entry in entries:
+            if len(picks) >= max_videos:
+                break
             vid = entry.get("id")
             if not vid or not (entry.get("title") or "").strip():
                 continue
@@ -223,12 +237,9 @@ def main():
             if not remaining:
                 notes.append(f"{vid}: all {len(parts)} parts already posted")
                 continue
-            picked = (feed, entry, parts, remaining, duration)
-            break
-        if picked:
-            break
+            picks.append((feed, entry, parts, remaining, duration))
 
-    if not picked:
+    if not picks:
         fail(f"no eligible pitch-show upload with unposted parts in feeds: {feeds}",
              reasons=notes[:6], channel=feeds, content_policy="sharktank-only")
         return
@@ -236,10 +247,15 @@ def main():
     # Advance the round-robin cursor only when a feed actually produced work, so an
     # unavailable feed does not silently skip a whole show.
     save_rotation(args.rotation, start + 1)
-    feed, entry, parts, remaining, duration = picked
-    candidates = [build_candidate(entry, parts, i, parts[i - 1][0], parts[i - 1][1], feed)
-                  for i in remaining]
-    candidates = candidates[: args.max]
+    candidates = []
+    for index, (feed, entry, parts, remaining, duration) in enumerate(picks):
+        # Reserve one slot for every not-yet-emitted video so the fallback video's first
+        # part always fits inside --max (earlier videos may take the rest).
+        budget = args.max - len(candidates) - (len(picks) - index - 1)
+        for i in remaining[: max(1, budget)]:
+            candidates.append(
+                build_candidate(entry, parts, i, parts[i - 1][0], parts[i - 1][1], feed))
+    feed, entry, parts, remaining, duration = picks[0]
     payload = {
         "source": "youtube",
         "genre": "sharktank",
