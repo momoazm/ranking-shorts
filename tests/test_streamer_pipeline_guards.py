@@ -1,7 +1,10 @@
 import contextlib
 import io
 import json
+import os
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -18,6 +21,23 @@ import rank_clips  # noqa: E402
 import rank_autopost  # noqa: E402
 import compare_streamer_formats  # noqa: E402
 import find_sharktank_parts  # noqa: E402
+
+# The Shark Tank finder PERSISTS its in-progress queue every run, and rank_autopost's
+# download-failure hook appends strikes to the same file. Point both at a scratch dir so
+# the suite can never write fixture data into the repo's real state/sharktank_inprogress.json.
+_STATE_SCRATCH = None
+
+
+def setUpModule():
+    global _STATE_SCRATCH
+    _STATE_SCRATCH = tempfile.mkdtemp(prefix="fr_state_")
+    os.environ["SHARKTANK_INPROGRESS"] = os.path.join(_STATE_SCRATCH, "inprogress.json")
+
+
+def tearDownModule():
+    os.environ.pop("SHARKTANK_INPROGRESS", None)
+    if _STATE_SCRATCH:
+        shutil.rmtree(_STATE_SCRATCH, ignore_errors=True)
 
 
 class StreamerPipelineGuardsTest(unittest.TestCase):
@@ -440,6 +460,10 @@ class SharktankPartsGuardsTest(unittest.TestCase):
         rotation = str(Path(tmp) / "rotation.json")
         if rotation_offset is not None:
             Path(rotation).write_text(json.dumps({"offset": rotation_offset}), encoding="utf-8")
+        # The finder now PERSISTS its in-progress queue every run, so the queue must be
+        # pointed at tmp too -- otherwise these tests would write fixture data into the
+        # repo's real state/sharktank_inprogress.json.
+        inprogress = str(Path(tmp) / "inprogress.json")
         out = str(Path(tmp) / "cands.json")
         with mock.patch.object(find_sharktank_parts, "search",
                                side_effect=lambda feed, n: entries[feed]), \
@@ -448,6 +472,7 @@ class SharktankPartsGuardsTest(unittest.TestCase):
              mock.patch("sys.argv", ["find_sharktank_parts.py",
                                      "--channel", ",".join(entries.keys()),
                                      "--history", history, "--rotation", rotation,
+                                     "--inprogress", inprogress,
                                      "--out", out]):
             find_sharktank_parts.main()
         return json.loads(Path(out).read_text(encoding="utf-8")), rotation

@@ -6,8 +6,11 @@ ceiling, so a ~10 minute pitch becomes ~10 one-minute parts instead of one hand-
 moment. Parts are emitted in play order and the orchestrator posts the first one that is
 not already recorded in the shared clip history (state/used_clips.json -- the same ledger
 the streamer pool uses, keyed "<video_id>#<part_index>"), so consecutive scheduled runs
-walk through a video part 1 -> part N and then move on to the next newest upload. The
-pool also carries the first part(s) of the next --max-videos distinct uploads, so a
+walk through a video part 1 -> part N and then move on to the next newest upload. An
+unfinished chop is finished first: an upload with some parts already posted outranks a
+brand-new one (closest to done first), because the orchestrator posts exactly one part per
+run and the newest-first feed walk alone used to abandon every chop after its first part.
+The pool also carries the first part(s) of the next --max-videos distinct uploads, so a
 bot-walled upload fails over to a different video_id instead of burning the slot.
 
 Sourcing is a rotation of official pitch-show feeds (Shark Tank US + Dragons' Den UK +
@@ -20,8 +23,18 @@ compilation would otherwise own the channel for months); the video must also hav
 least one unposted part left.
 
 Usage:
-    python tools/find_sharktank_parts.py [--channel URL] [--scan 8] [--max-parts 12]
-        [--max-part-secs 59] [--history state/used_clips.json] [--out .tmp/rank_candidates.json]
+    python tools/find_sharktank_parts.py [--channel URL] [--scan 8] [--max-parts 20]
+        [--max-part-secs 59.5] [--history state/used_clips.json] [--out .tmp/rank_candidates.json]
+        [--inprogress state/sharktank_inprogress.json] [--rotation state/sharktank_rotation.json]
+
+--inprogress is the durable queue, ROOT-anchored by default so it cannot be sharded from
+the download-failure strikes by running the tool from another directory. It holds two
+maps: the uploads whose parts are not all posted (any chop with a part already posted,
+plus this run's whole candidate pool, so a fallback post is remembered too), and the
+download-failure strikes that demote an upload which keeps failing to download. An
+unfinished chop is therefore still offered after it scrolls out of the feeds' --scan
+window, and the file is written atomically (temp file + rename) so a killed run cannot
+wipe it.
 
 Prints JSON: {"source":"youtube","genre":"sharktank","count","video",...,"candidates":[...]}
 """
@@ -29,6 +42,8 @@ import argparse
 import json
 import math
 import os
+import sys
+import time
 
 from _common import REPO_ROOT, load_env, emit, fail
 
@@ -165,6 +180,131 @@ def build_candidate(entry, parts, index, start, end, feed):
     }
 
 
+# Durable in-progress queue ----------------------------------------------------------
+# A chop is a SEQUENTIAL playlist: parts 1..N of one upload, and the orchestrator posts
+# exactly one part per run. The finder used to always offer the NEWEST upload of whichever
+# feed the round-robin landed on, so every new episode displaced an unfinished video and
+# its remaining parts were never offered again -- measured over 2026-10-03..05, only 7 of
+# 59 parts ever reached the channel. In-progress videos are therefore remembered here,
+# outside the feeds' --scan window, so finishing one no longer depends on it still being
+# among the 8 newest uploads of its own feed.
+INPROGRESS_STATE = "state/sharktank_inprogress.json"
+FAILURE_WINDOW_SEC = 7 * 24 * 3600   # a recorded download failure demotes the video for a week
+DEAD_STRIKES = 2                      # ... but only once it has failed that many times
+_SLIM_FIELDS = ("id", "title", "channel", "uploader", "webpage_url")
+
+
+def slim_entry(entry):
+    """Exactly the fields build_candidate() reads, so a part can be rebuilt from state after
+    its upload scrolls out of the feed's scan window."""
+    return {field: (entry or {}).get(field) for field in _SLIM_FIELDS}
+
+
+def load_progress(path):
+    """Return (videos, failures). A missing or corrupt file is an empty queue, never a crash."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    if not isinstance(data, dict):
+        data = {}
+    videos = data.get("videos")
+    failures = data.get("failures")
+    return (videos if isinstance(videos, dict) else {},
+            failures if isinstance(failures, dict) else {})
+
+
+def save_progress(path, videos, failures):
+    """Best-effort ATOMIC write: losing the queue must never fail the posting run that hit
+    it, and a partial write must never destroy it either -- load_progress treats a corrupt
+    file as empty, so a truncate-write that got killed mid-dump (the finder runs under a
+    hard child timeout) would silently delete every in-progress video and every strike."""
+    try:
+        if os.path.dirname(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+        temp = f"{path}.tmp"
+        with open(temp, "w", encoding="utf-8") as handle:
+            json.dump({"videos": videos, "failures": failures}, handle,
+                      indent=2, ensure_ascii=False)
+        os.replace(temp, path)          # atomic on POSIX and on Windows
+    except (OSError, TypeError, ValueError):
+        try:
+            os.remove(f"{path}.tmp")
+        except OSError:
+            pass
+
+
+def _failure_count(failures, video_id, now=None):
+    """Strikes for `video_id` still inside the demotion window (0 when healthy or expired)."""
+    entry = (failures or {}).get(video_id)
+    if not isinstance(entry, dict):
+        return 0
+    try:
+        count = int(entry.get("count") or 0)
+        last = float(entry.get("last_at") or 0)
+    except (TypeError, ValueError):
+        return 0
+    if (now if now is not None else time.time()) - last > FAILURE_WINDOW_SEC:
+        return 0
+    return count
+
+
+def record_download_failure(video_id, path=None):
+    """Called by rank_autopost when a chop's source download fails.
+
+    The per-run blacklist already skips the rest of that video's parts for THIS run;
+    persisting the failure lets the NEXT run demote an upload that keeps failing instead of
+    forcing it back to the front of the queue. Never raises.
+
+    `path` defaults to the repo's own queue file, ROOT-anchored rather than cwd-relative,
+    so launching the orchestrator from another directory cannot silently lose the strike.
+    """
+    if not video_id:
+        return
+    target = path or str(REPO_ROOT / INPROGRESS_STATE)
+    try:
+        videos, failures = load_progress(target)
+        now = time.time()
+        current = failures.get(video_id)
+        current = current if isinstance(current, dict) else {}
+        try:
+            previous = int(current.get("count") or 0)
+            last = float(current.get("last_at") or 0)
+        except (TypeError, ValueError):
+            previous, last = 0, 0.0
+        if now - last > FAILURE_WINDOW_SEC:
+            previous = 0            # a fresh window starts a fresh count
+        failures[video_id] = {"count": previous + 1, "last_at": now}
+        save_progress(target, videos, failures)
+    except Exception as exc:        # pragma: no cover - defensive
+        print(f"::warning::could not record shark tank download failure: {exc}", file=sys.stderr)
+
+
+def pick_priority(pick, failures=None):
+    """Sort key: finish what has already started, and demote a chop that keeps failing.
+
+    0 = in-progress and healthy -> finish it (closest to done first)
+    1 = brand-new upload -> the caller's rotated, newest-first order decides among these
+    2 = in-progress but currently failing -> come back to it once the others are clear
+
+    The strike only demotes an IN-PROGRESS chop. An upload that has never posted a part is
+    already handled one level up, by the orchestrator's per-run video_id blacklist, so
+    demoting it here would just hide it from the download-failure fallback pool.
+    """
+    _feed, entry, parts, remaining, _duration = pick
+    if len(parts) - len(remaining) <= 0:
+        return (1, 0)
+    if _failure_count(failures, (entry or {}).get("id") or "") >= DEAD_STRIKES:
+        return (2, 0)
+    return (0, len(remaining))
+
+
+def order_picks(picks, failures=None):
+    """Stable sort, so ties keep the feed-rotation / newest-first order the caller built."""
+    return sorted(picks, key=lambda pick: pick_priority(pick, failures))
+
+
 def main():
     load_env()
     ap = argparse.ArgumentParser()
@@ -186,6 +326,10 @@ def main():
     ap.add_argument("--history", default="state/used_clips.json")
     ap.add_argument("--rotation", default="state/sharktank_rotation.json",
                     help="Round-robin cursor across --channel feeds")
+    ap.add_argument("--inprogress", default=str(REPO_ROOT / INPROGRESS_STATE),
+                    help="Durable queue of uploads whose parts are not all posted yet, so an "
+                         "unfinished chop keeps being offered even after it scrolls out of "
+                         "the feeds' --scan window")
     ap.add_argument("--out", default=".tmp/rank_candidates.json")
     # Accepted for parity with the other finders so the orchestrator can pass them harmlessly.
     ap.add_argument("--genre", default=None)
@@ -205,25 +349,25 @@ def main():
         start = 0
     notes = []
     picks = []
+    stored_videos, failures = load_progress(args.inprogress)
 
-    # Collect up to --max-videos DISTINCT uploads (newest first) instead of stopping at the
-    # first eligible one: when the chosen upload is bot-walled, every one of its parts fails
-    # on the same download, so the orchestrator needs a next distinct video_id to fall
-    # through to before the slot is declared no_source (R2 slot burn).
+    # Every feed is walked -- NOT just until --max-videos picks. A video that is already
+    # part-posted must be found wherever it lives, otherwise finishing one depends on the
+    # round-robin landing on its feed while it is still inside the scan window. Flat feed
+    # entries carry their duration, so the extra walks cost no per-entry network probe in
+    # the normal case.
     max_videos = max(1, min(args.max_videos, args.max))
+    seen_ids = set()      # this upload already produced a pick
+    finished = set()      # every part posted -- the only way an upload is pruned
     for feed in feeds:
-        if len(picks) >= max_videos:
-            break
         try:
             entries = [e for e in search(feed, args.scan) if e]
         except Exception as exc:
             notes.append(f"{feed}: feed unavailable ({str(exc)[:80]})")
             continue
         for entry in entries:
-            if len(picks) >= max_videos:
-                break
             vid = entry.get("id")
-            if not vid or not (entry.get("title") or "").strip():
+            if not vid or vid in seen_ids or not (entry.get("title") or "").strip():
                 continue
             duration = probe_duration(entry)
             if not duration:
@@ -234,18 +378,95 @@ def main():
                 notes.append(f"{vid}: {duration:.0f}s needs more than {args.max_parts} parts")
                 continue
             remaining = [i for i in range(1, len(parts) + 1) if f"{vid}#{i}" not in used]
+            seen_ids.add(vid)
             if not remaining:
+                finished.add(vid)
                 notes.append(f"{vid}: all {len(parts)} parts already posted")
                 continue
             picks.append((feed, entry, parts, remaining, duration))
+
+    # Re-attach in-progress uploads the feeds no longer show (scrolled past --scan, or the
+    # feed was unavailable this run). They need no network: the queue keeps the duration and
+    # exactly the fields build_candidate() reads.
+    for vid, info in stored_videos.items():
+        if vid in seen_ids or not isinstance(info, dict):
+            continue
+        if info.get("id") != vid:
+            # A record whose id does not match its key would emit candidates carrying a
+            # None or foreign video_id, which would collide in the shared
+            # "<video_id>#<part>" ledger. This writer always stores the id, so only a
+            # hand-edited or corrupt queue can produce one: skip offering it, but leave it
+            # in the queue below rather than destroy something we cannot interpret.
+            notes.append(f"{vid}: queue record id does not match its key; not offered")
+            continue
+        duration = info.get("duration")
+        parts = split_parts(duration, args.max_part_secs, args.max_parts) if duration else None
+        if not parts:
+            notes.append(f"{vid}: kept in the queue, not re-evaluable this run")
+            continue
+        remaining = [i for i in range(1, len(parts) + 1) if f"{vid}#{i}" not in used]
+        if not remaining:
+            finished.add(vid)
+            continue
+        picks.append((info.get("feed") or "", dict(info), parts, remaining, duration))
 
     if not picks:
         fail(f"no eligible pitch-show upload with unposted parts in feeds: {feeds}",
              reasons=notes[:6], channel=feeds, content_policy="sharktank-only")
         return
 
-    # Advance the round-robin cursor only when a feed actually produced work, so an
-    # unavailable feed does not silently skip a whole show.
+    # Finish what has already started before opening a new upload (see INPROGRESS_STATE):
+    # the newest-first feed walk alone abandoned every chop after its first part or two.
+    ordered = order_picks(picks, failures)
+    pool = ordered[:max_videos]
+
+    # Persist what is still in progress. EVERY upload whose part could be posted from this
+    # run's pool is remembered, not just the front pick: the orchestrator falls through to a
+    # distinct fallback video when the front pick's download fails, and if that upload then
+    # scrolls out of the scan window its parts 2..N would never be offered again -- the very
+    # loss this queue exists to prevent. The pool is exactly the set of videos the
+    # orchestrator is about to see as candidates.
+    pool_ids = {(p[1] or {}).get("id") for p in pool}
+    live = {}
+    for pick in ordered:
+        _feed, entry, parts, remaining, duration = pick
+        vid = (entry or {}).get("id")
+        if not vid:
+            continue
+        if len(parts) - len(remaining) > 0 or vid in pool_ids:
+            live[vid] = {**slim_entry(entry), "duration": duration,
+                         "part_total": len(parts), "feed": _feed}
+    # A known upload leaves the queue ONLY once every part is posted. Everything else -- a
+    # feed that was down, a duration that no longer resolves, a lowered --max-parts, or a
+    # pool candidate that has not been posted yet -- is carried through untouched.
+    #
+    # Deliberately NOT pruned on the inference "the ledger shows no part posted, so this
+    # upload never started". state/ (the ledger AND this queue) exists only in the GitHub
+    # Actions cache, whose post step is success()-gated, so a run that posts a part and then
+    # goes red -- an Instagram-required failure after the YouTube post, a timeout, or a
+    # cancelled no_upload dispatch -- rolls BOTH files back to the previous snapshot. The
+    # next run would then see a chop that really does have a live posted part as
+    # "unstarted", and pruning on that inference would delete it permanently, in a green
+    # run. Pruning on positive evidence of completion is safe; pruning on a ledger that can
+    # lag reality is not. The accepted cost is that a pool candidate which never gets posted
+    # is retained until it eventually does, so the queue grows slowly on a busy feed (a few
+    # hundred bytes per entry, re-attached in memory with no network call).
+    for vid, info in stored_videos.items():
+        if vid not in live and vid not in finished and isinstance(info, dict):
+            live[vid] = info
+    # Aged-out strikes are dropped so the map cannot grow without bound; a strike that
+    # expires is already worth zero, so this cannot change this run's ordering.
+    failures = {vid: record for vid, record in failures.items()
+                if isinstance(record, dict) and _failure_count(failures, vid) > 0}
+    save_progress(args.inprogress, live, failures)
+
+    picks = pool
+
+    # Advance the round-robin cursor whenever this run produced a non-empty pool, so the next
+    # run starts at the next feed. A run with an empty pool exits above via fail() BEFORE
+    # reaching this line, leaving the cursor untouched. Note that a run whose feeds were all
+    # unavailable but whose durable queue still had a chop to offer does advance it -- that
+    # run's work came from the queue rather than a feed, so no show loses a turn to it.
     save_rotation(args.rotation, start + 1)
     candidates = []
     for index, (feed, entry, parts, remaining, duration) in enumerate(picks):

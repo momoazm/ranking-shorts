@@ -786,6 +786,26 @@ def main():
                 # the next distinct video_id in the pool instead of losing the slot to one
                 # bot-walled upload.
                 blacklisted_videos.add(entry.get("video_id"))
+                # Persist the strike too: a chop that ALREADY STARTED and keeps failing to
+                # download is demoted in the next run instead of holding the front slot,
+                # while the per-run blacklist above already covers the rest of this run.
+                # Strikes are inert for an upload that has never posted a part (its priority
+                # is the "brand-new" group regardless), so this only ever affects chops that
+                # have started. A chop is never deleted for having strikes -- it is demoted,
+                # and each strike lapses on its own after the 7-day window (they are keyed
+                # to that window rather than cleared by a later successful download).
+                # Lazy import so the finder's feed tooling is only pulled in when it matters;
+                # overridable so tests never write fixture strikes into the repo's real queue.
+                try:
+                    from find_sharktank_parts import record_download_failure
+                    # None resolves to the repo's own queue file (ROOT-anchored, so the
+                    # cwd cannot lose the strike); the env override lets tests aim it at
+                    # scratch instead of the repo's real queue.
+                    record_download_failure(entry.get("video_id"),
+                                            path=os.environ.get("SHARKTANK_INPROGRESS"))
+                except Exception as exc:
+                    print(f"::warning::could not record shark tank download failure: {exc}",
+                          file=sys.stderr)
                 print(f"::warning::shark tank video {entry.get('video_id')} failed to "
                       f"download; trying the next distinct video in the pool",
                       file=sys.stderr)
