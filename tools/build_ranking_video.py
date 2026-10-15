@@ -117,6 +117,246 @@ def _resolve(out_base):
     return None
 
 
+# --- Invidious fallback (added 2026-10-15) ---------------------------------------------------
+# Sourcing on GitHub's datacenter IPs is bot-walled at the METADATA step ("Sign in to confirm
+# you're not a bot"): the request is rejected before any format URL is ever minted, so every
+# yt-dlp player_client route in _DL_ATTEMPTS fails regardless of cookies (proven 2026-10-13/15
+# across all 12 candidates, 8 routes each).
+#
+# A public Invidious instance does the hard part from its OWN clean egress: it mints a signed
+# googlevideo URL carrying a PO token (the "pot" param). Verified 2026-10-15 that such a URL is
+# NOT bound to the requesting IP -- the instance's own IP sits in the signed "ip" param, yet a
+# ranged fetch from a DIFFERENT residential IP returned HTTP 206 with the full bytes. So the PO
+# token, not the fetcher's IP, gates the media: a datacenter fetcher (this workflow) can pull the
+# bytes with no YouTube session cookie at all.
+#
+# This is a FALLBACK, not a replacement. It runs as a fast path BEFORE the yt-dlp chain; any
+# failure is recorded and download() continues through the existing routes untouched. Only public
+# data is ever READ -- it never authenticates, posts, or mutates any account. Disable with
+# INVIDIOUS_DISABLED=1; point at specific instances with INVIDIOUS_INSTANCES (comma-separated).
+_INVIDIOUS_FALLBACKS = (
+    # Ordered by observed availability 2026-10-15: f5.si answered HTTP 200 while the others
+    # returned 401/403/502 or timed out. Kept as backups in case the first one goes down.
+    "https://invidious.f5.si",
+    "https://inv.nadeko.net",
+    "https://yewtu.be",
+    "https://iv.ggtyler.dev",
+)
+# Common YouTube video itags -> height, used when the API omits an explicit height field.
+_ITAG_HEIGHT = {
+    160: 144, 597: 144, 605: 144, 278: 144, 394: 144,
+    133: 360, 598: 360, 606: 360, 243: 360, 396: 360,
+    134: 480, 135: 480, 244: 480, 397: 480,
+    136: 720, 599: 720, 607: 720, 247: 720, 398: 720,
+    137: 1080, 602: 1080, 608: 1080, 248: 1080, 399: 1080,
+    266: 2160, 313: 2160, 401: 2160,
+}
+
+
+def _invidious_instances():
+    """Instance base URLs, honouring an INVIDIOUS_INSTANCES override."""
+    override = (os.environ.get("INVIDIOUS_INSTANCES") or "").strip()
+    if override:
+        return [u.strip().rstrip("/") for u in override.split(",") if u.strip()]
+    return list(_INVIDIOUS_FALLBACKS)
+
+
+def youtube_video_id(url):
+    """Extract a YouTube video id, or None for anything that isn't a YouTube media link."""
+    m = re.search(r"(?:[?&]v=|/shorts/|/embed/|/live/|/v/)([0-9A-Za-z_-]{11})", url or "")
+    return m.group(1) if m else None
+
+
+def _stream_to(path, url, timeout, deadline=None):
+    """Fetch a PO-token-signed media URL to disk. Returns bytes written.
+
+    Uses explicit Range requests instead of one long-lived read. Measured 2026-10-15 on this
+    source: a plain full-file stream from a third-party IP is throttled to ~0.04 MB/s (an 8 MB
+    fetch ran 80s), while ranged requests sustain ~2.9 MB/s -- a 70x difference, and the gap is
+    what decides whether a 715s source is downloadable at all. Chunking also bounds how long a
+    single stall can hold the download and makes each chunk retryable on its own.
+
+    `deadline` (a time.monotonic() value) is the TOTAL wall-clock budget. urlopen's `timeout`
+    only bounds silence between receives, so a server that keeps trickling data can otherwise
+    run far past it -- measured: timeout=1 still ran 4.10s of wall time. Every loop here checks
+    the deadline so a slow instance can never eat the job's budget before the yt-dlp chain runs.
+    """
+    import urllib.request
+    ua = {"User-Agent": "Mozilla/5.0"}
+
+    def _budget_left():
+        return deadline is None or time.monotonic() < deadline
+
+    total = 0
+    try:                                   # Content-Range on a 1-byte probe carries the size
+        probe = urllib.request.Request(url, headers={**ua, "Range": "bytes=0-0"})
+        with urllib.request.urlopen(probe, timeout=20) as resp:
+            content_range = resp.headers.get("Content-Range") or ""
+            # Read only a slice: the header already carries the total, and an unbounded
+            # resp.read() here lets a server that ignores Range stream its entire body past
+            # the deadline (measured 16.6s of wall time against a 5.0s budget).
+            resp.read(4096)
+        if "/" in content_range:
+            total = int(content_range.rsplit("/", 1)[-1])
+    except Exception:
+        total = 0
+
+    written = 0
+    chunk_size = 4 * 1024 * 1024
+    if total > 0:
+        with open(path, "wb") as handle:
+            start = 0
+            while start < total:
+                if not _budget_left():
+                    raise RuntimeError(f"download deadline reached at {written} bytes")
+                end = min(start + chunk_size, total) - 1
+                req = urllib.request.Request(url, headers={**ua, "Range": f"bytes={start}-{end}"})
+                last = None
+                for attempt in range(3):    # one stalled chunk must not abort the whole file
+                    try:
+                        with urllib.request.urlopen(req, timeout=timeout) as resp:
+                            data = resp.read()
+                        break
+                    except Exception as exc:
+                        last = exc
+                        data = b""
+                        if attempt == 2:
+                            raise RuntimeError(
+                                f"chunk {start}-{end} failed after 3 tries: {last}") from last
+                if not data:
+                    raise RuntimeError(f"chunk {start}-{end} returned no data")
+                handle.write(data)
+                written += len(data)
+                start = end + 1
+        return written
+
+    # No usable size reported: fall back to a single plain read. This is the throttled path
+    # (~0.04 MB/s measured), so it is bounded by BOTH the total deadline and a minimum
+    # sustained rate -- otherwise one instance could sit for ~an hour (150 MB at 0.04 MB/s)
+    # while the job's budget drains and the yt-dlp chain never gets its turn.
+    req = urllib.request.Request(url, headers=ua)
+    started = time.monotonic()
+    with urllib.request.urlopen(req, timeout=timeout) as resp, open(path, "wb") as handle:
+        while True:
+            if not _budget_left():
+                raise RuntimeError(f"download deadline reached at {written} bytes (plain read)")
+            chunk = resp.read(1 << 20)
+            if not chunk:
+                break
+            handle.write(chunk)
+            written += len(chunk)
+            elapsed = time.monotonic() - started
+            # 0.25 MB/s is well under the 2.9 MB/s healthy rate but well over the 0.04 MB/s
+            # throttle -- past 20s, anything slower is not worth completing.
+            if elapsed > 20 and (written / elapsed) < 0.25 * 1024 * 1024:
+                raise RuntimeError(
+                    f"plain read throttled to {written / 1e6 / elapsed:.2f} MB/s at "
+                    f"{written} bytes; aborting rather than draining the download budget")
+    return written
+
+
+def _pick_formats(entry, max_height):
+    """Choose the best H.264 video + m4a audio pair from an Invidious /videos payload.
+
+    H.264 + m4a is what the rest of this pipeline already prefers (format_sort vcodec:h264,
+    acodec:m4a) and both are MP4, so the merge is a lossless remux with no re-encode. AV1/VP9
+    are skipped on purpose: they would need a transcode to combine with m4a.
+    """
+    def height_of(fmt):
+        for key in ("height", "qualityLabel"):
+            digits = re.sub(r"\D", "", str(fmt.get(key) or ""))
+            if digits:
+                return int(digits)
+        try:
+            return _ITAG_HEIGHT.get(int(fmt.get("itag")), 0)
+        except (TypeError, ValueError):
+            return 0
+
+    video = None
+    audio = None
+    for fmt in entry.get("adaptiveFormats") or []:
+        mime = str(fmt.get("type") or "")
+        media_url = fmt.get("url")
+        if not media_url:
+            continue
+        if mime.startswith("video/"):
+            if "avc1" not in mime:
+                continue
+            height = height_of(fmt)
+            if max_height and height > max_height:
+                continue
+            if video is None or height > video[0]:
+                video = (height, media_url)
+        elif mime.startswith("audio/"):
+            score = 2 if "mp4a" in mime else 1     # m4a keeps the remux all-MP4
+            if audio is None or score > audio[0]:
+                audio = (score, media_url)
+    return (video[1] if video else None, audio[1] if audio else None)
+
+
+def _download_via_invidious(url, out_base, timeout, deadline=None):
+    """Resolve + fetch a YouTube source through a public Invidious instance. Returns a path.
+
+    Raises on any failure so download() can fall through to the yt-dlp chain. `deadline` is a
+    time.monotonic() wall-clock budget shared with the rest of download(); it is checked between
+    instances so one slow instance cannot consume the budget the yt-dlp chain still needs.
+    """
+    import urllib.request
+    vid = youtube_video_id(url)
+    if not vid:
+        raise RuntimeError("not a YouTube URL")
+    max_height = (os.environ.get("YTDLP_MAX_HEIGHT") or "").strip()
+    cap = int(max_height) if max_height.isdigit() else 0
+    last = None
+    for instance in _invidious_instances():
+        if deadline is not None and time.monotonic() >= deadline:
+            raise RuntimeError(f"download deadline reached before {instance} (last: {last})")
+        api = f"{instance}/api/v1/videos/{vid}"
+        try:
+            req = urllib.request.Request(api, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=20) as response:
+                entry = json.loads(response.read().decode("utf-8", "replace"))
+        except Exception as exc:
+            last = f"{instance}: {type(exc).__name__}"
+            continue
+        video_url, audio_url = _pick_formats(entry, cap)
+        if not video_url:
+            last = f"{instance}: no H.264 video format"
+            continue
+        if not audio_url:
+            # Audio is the payoff for this product. Returning a video-only file here would let
+            # the clip publish with substituted silence and no error recorded anywhere, so this
+            # instance is skipped and the yt-dlp chain gets its turn instead.
+            last = f"{instance}: no audio format"
+            continue
+        video_tmp, audio_tmp = out_base + ".iv.video", out_base + ".iv.audio"
+        try:
+            if _stream_to(video_tmp, video_url, timeout, deadline) <= 0:
+                raise RuntimeError("empty video stream")
+            if _stream_to(audio_tmp, audio_url, timeout, deadline) <= 0:
+                raise RuntimeError("empty audio stream")
+            out = out_base + ".mp4"
+            subprocess.run([get_ffmpeg(), "-y", "-i", video_tmp, "-i", audio_tmp,
+                            "-c", "copy", "-movflags", "+faststart", out],
+                           check=True, capture_output=True, timeout=timeout)
+            return out
+        except Exception as exc:
+            last = f"{instance}: {type(exc).__name__}: {str(exc)[:120]}"
+            continue
+        finally:
+            for tmp in (video_tmp, audio_tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+    raise RuntimeError(f"Invidious fallback failed: {last or 'no instances configured'}")
+
+
+def _invidious_enabled():
+    return (os.environ.get("INVIDIOUS_DISABLED", "").strip().lower()
+            not in ("1", "true", "yes"))
+
+
 def _download_attempt(url, out_base, player_client, fmt, use_proxy):
     """Run one yt-dlp attempt in a killable child process.
 
@@ -179,7 +419,30 @@ def download(url, out_base):
         return out
     last = None
     route_errors = []
+    # One wall-clock budget for the WHOLE download() call, claimed BEFORE the fallback so the
+    # Invidious attempt is charged against it too. (It was originally computed below the
+    # fallback, which left the fallback outside the deadline entirely: a slow instance could
+    # burn time the yt-dlp chain then never got, right up to the job's 90-minute kill.)
     deadline = time.monotonic() + download_deadline_sec()
+    # Fast path: resolve through a public Invidious instance BEFORE grinding the yt-dlp chain,
+    # which is bot-walled on datacenter egress. Any failure is recorded below and the chain
+    # still runs untouched, so this can only ever help.
+    if _invidious_enabled() and youtube_video_id(url):
+        for partial in glob.glob(out_base + ".*"):       # clear partials from a prior attempt
+            try:
+                os.remove(partial)
+            except OSError:
+                pass
+        if time.monotonic() >= deadline:
+            route_errors.append("[invidious] no time left in the download deadline")
+        else:
+            try:
+                path = _download_via_invidious(url, out_base,
+                                               download_attempt_timeout_sec(), deadline)
+                if path and os.path.isfile(path):
+                    return path
+            except Exception as e:
+                route_errors.append(f"[invidious] {str(e).splitlines()[0][:180]}")
     for player_client, fmt, use_proxy in _DL_ATTEMPTS:
         if time.monotonic() >= deadline:
             break
