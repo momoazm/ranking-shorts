@@ -26,6 +26,15 @@ def stop(message):
     raise SystemExit(1)
 
 
+class AdvisoryFailure(Exception):
+    """A non-fatal account-check failure for a platform that is DEFERRED from publishing.
+
+    Instagram-first runs (2026-10-15) post to Instagram while YouTube is only checked for
+    visibility. A dead/renamed/disconnected YouTube connection must surface in the log but
+    must never block the Instagram publish, so those checks raise this instead of exiting.
+    """
+
+
 def account_id(account):
     for key in ("_id", "id", "accountId"):
         if account.get(key):
@@ -76,25 +85,34 @@ def zernio_accounts():
     return accounts
 
 
-def verify_zernio(accounts, platform, expected, env_key, require_ready=False):
+def verify_zernio(accounts, platform, expected, env_key, require_ready=False, advisory=False):
+    def fail(message):
+        # Advisory mode = the platform is checked for visibility only. Report and continue
+        # instead of aborting the run; stop() raises, so flow past any fail() call is
+        # unreachable in fail-closed mode and the existing behaviour is unchanged.
+        if advisory:
+            print(f"::warning::{message}", file=sys.stderr)
+            raise AdvisoryFailure(message)
+        stop(message)
+
     configured = os.environ.get(env_key, "").strip()
     if not configured:
-        stop(f"Zernio account check: {env_key} is empty")
+        fail(f"Zernio account check: {env_key} is empty")
     match = next((a for a in accounts
                   if isinstance(a, dict) and account_id(a) == configured), None)
     if not match:
-        stop(f"Zernio account check: {env_key} is not among the connected accounts")
+        fail(f"Zernio account check: {env_key} is not among the connected accounts")
     actual_platform = normalize(match.get("platform"))
     actual_name = account_name(match)
     if actual_platform != platform:
-        stop(f"Zernio account check: {env_key} is connected as {actual_platform or 'unknown'}, "
+        fail(f"Zernio account check: {env_key} is connected as {actual_platform or 'unknown'}, "
              f"not {platform}")
     if expected and actual_name != normalize(expected):
-        stop(f"Zernio account check: {platform} is @{actual_name or 'unknown'}, "
+        fail(f"Zernio account check: {platform} is @{actual_name or 'unknown'}, "
               f"expected @{normalize(expected)}")
     readiness_state, readiness_detail = account_readiness(match)
     if require_ready and readiness_state == "not_ready":
-        stop(f"Zernio account check: {platform} @{actual_name} is not ready ({readiness_detail})")
+        fail(f"Zernio account check: {platform} @{actual_name} is not ready ({readiness_detail})")
     return actual_name, {"state": readiness_state, "detail": readiness_detail}
 
 
@@ -217,6 +235,10 @@ def main():
                         help="Expected TikTok username")
     parser.add_argument("--require-ready", action="store_true",
                         help="Fail when Zernio explicitly reports a disconnected account")
+    parser.add_argument("--advisory-youtube", action="store_true",
+                        help="Warn instead of failing on the YouTube account check. Use when "
+                             "YouTube is deferred from publishing (Instagram-first) so a dead "
+                             "YouTube connection is visible but cannot block the Instagram run.")
     args = parser.parse_args()
 
     try:
@@ -234,10 +256,17 @@ def main():
         verified["instagram"] = "@" + actual
         readiness["instagram"] = info
     if args.youtube:
-        actual, info = verify_zernio(accounts, "youtube", args.youtube,
-                                     "ZERNIO_YOUTUBE_ID", args.require_ready)
-        verified["youtube"] = "@" + actual
-        readiness["youtube"] = info
+        try:
+            actual, info = verify_zernio(accounts, "youtube", args.youtube,
+                                         "ZERNIO_YOUTUBE_ID", args.require_ready,
+                                         advisory=args.advisory_youtube)
+            verified["youtube"] = "@" + actual
+            readiness["youtube"] = info
+        except AdvisoryFailure as exc:
+            # YouTube is DEFERRED from publishing (Instagram-first), so its check is advisory:
+            # the failure is reported in the JSON output but never blocks the Instagram publish.
+            verified["youtube"] = "skipped: advisory check failed"
+            readiness["youtube"] = {"state": "advisory_failed", "detail": str(exc)}
     if args.tiktok:
         actual = verify_tiktok(args.tiktok)
         verified["tiktok"] = ("@" + actual) if actual else "skipped: credentials not configured"

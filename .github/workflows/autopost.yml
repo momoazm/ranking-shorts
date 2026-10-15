@@ -215,7 +215,9 @@ jobs:
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
           TIKTOK_EXPECTED_USERNAME: ${{ secrets.TIKTOK_EXPECTED_USERNAME || 'itsmomoclips' }}
-        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME" --require-ready
+        # --advisory-youtube: YouTube is DEFERRED from publishing (Instagram-first, see the
+        # PLATFORMS block below), so its account check reports but cannot fail the run.
+        run: python tools/verify_accounts.py --instagram itsmomoclips --youtube itsmomoclip --tiktok "$TIKTOK_EXPECTED_USERNAME" --require-ready --advisory-youtube
 
       - name: Generate rights-safe ranking audio bed
         run: python tools/build_music.py
@@ -249,7 +251,16 @@ jobs:
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
           IN_FORMAT: ${{ inputs.format || 'auto' }}
         run: |
-          PLATFORMS="youtube,instagram"
+          # Instagram-first (user call, 2026-10-15): ship the pitch-show parts to Instagram only
+          # for now. YouTube stays DEFERRED, not deleted -- flip this back to
+          # "youtube,instagram" (and --required-platforms back to youtube,instagram) to re-enable.
+          # Rationale: the parts are ~1-min slices of a full episode, so posting every part to
+          # YouTube re-uploads ~100% of the source and risks Content ID claims/strikes, while
+          # Instagram is far more tolerant of this format. Landing the account on IG first keeps
+          # the YouTube channel out of the critical path until that trade-off is decided.
+          # Note: sourcing is unchanged -- the parts still come FROM YouTube, so a valid
+          # YT_COOKIES session is required to download them regardless of where we post.
+          PLATFORMS="instagram"
           if [ -s gmail_token.json ]; then
             PLATFORMS="$PLATFORMS,email"
           else
@@ -258,9 +269,11 @@ jobs:
           if [ -n "$TIKTOK_ACCESS_TOKEN" ] || { [ -n "$TIKTOK_REFRESH_TOKEN" ] && [ -n "$TIKTOK_CLIENT_KEY" ] && [ -n "$TIKTOK_CLIENT_SECRET" ]; }; then
             PLATFORMS="$PLATFORMS,tiktok"
           else
-            echo "::warning::TikTok is not configured; publishing YouTube + Instagram only. Add the four TikTok secrets to enable it."
+            echo "::warning::TikTok is not configured; publishing Instagram only. Add the four TikTok secrets to enable it."
           fi
-          ARGS=(--privacy public --keep-tmp --platforms "$PLATFORMS" --required-platforms youtube,instagram
+          # --required-platforms is now just instagram, so a YouTube outage (or re-enabling
+          # youtube in PLATFORMS later) can't block the Instagram publish from landing.
+          ARGS=(--privacy public --keep-tmp --platforms "$PLATFORMS" --required-platforms instagram
                 --format "${IN_FORMAT:-auto}"
                 --force-genre sharktank --niche "shark tank pitches, business deals, and startup moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
