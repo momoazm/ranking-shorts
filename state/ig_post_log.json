@@ -2657,6 +2657,23 @@
         "caption_words": 110,
         "part": "8/10"
       }
+    },
+    {
+      "post_id": "6ad92267c18a799fe0bb064c",
+      "posted_at": "2026-10-21T20:37:56.236317+00:00",
+      "style": "sharktank-part9",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.637,
+        "style": "kinetic",
+        "caption_words": 95,
+        "part": "9/10"
+      }
     }
   ]
 }
