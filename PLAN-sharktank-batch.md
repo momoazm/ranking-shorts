@@ -110,11 +110,26 @@ Vault summary: `PLAN-sharktank-batch-and-formats.md`
 - [x] `python -m pytest tests -q` in the repo (offline tests only).
 - [x] Render a real 45–60s part locally with `--style kinetic --fit crop --captions words`
       (video QA: hook banner, captions, handle, CTA, no title card).
-- [ ] `--no-upload` run on a dispatch exercises the same render path.
+- [x] `--no-upload` run on a dispatch exercises the same render path.
+      Proved by dispatch run 39554901356 (green): Anton font registered, kinetic render,
+      `media_contract_ok 1080x1920 58.29s`, artifact inspected — multi-colour hook banner,
+      gold word captions, handle, no title card.
 - [x] Dry-run batch planning JSON shows N parts queued, pacing, and the daily budget.
 
 ## Ship
 
-- [ ] Commit (own files only) → push `main` → watch the first scheduled run's artifact.
-- [ ] Confirm the run posts >1 part and that `state/used_clips.json` is committed even if one
-      part fails.
+- [x] Commit (own files only) → push `main` → watch the first scheduled run's artifact.
+      Pushed `0983255`, `9315a53`, `3efb052` (hook-banner shrink). First scheduled batch run
+      39556364278 (2026-10-21 06:35 UTC) went green in 1162s and its artifact
+      `.tmp/sharktank_batch.json` reports the batch it actually posted.
+- [x] Confirm the run posts >1 part and that `state/used_clips.json` is committed even if one
+      part fails. Run 39556364278: `"published": 4, "failed": 0, "skipped": 0` — parts 2-5 of
+      `1241pj_nCrU` with Zernio media ids `6ad85e86…`, `6ad85fb6…`, `6ad860ce…`, `6ad861eb…`,
+      and the ledgers (`used_clips`, `sharktank_inprogress`, `sharktank_attempts`,
+      `sharktank_daily`) landed in bot commit 699fa5a because the persist step runs under
+      `always()`. Per-part strikes mean a failing part cannot block the rest of the batch.
+- [x] Live batch with an explicit `parts` input (dispatched 2026-10-21 07:53 UTC, run
+      39565240577): `parts=3` → `"published": 3, "failed": 0, "skipped": 0`, 894s, parts 6-8
+      of `1241pj_nCrU` (media ids `6ad870db…`, `6ad87213…`, `6ad87331…`), ledgers committed in
+      e73d989. With the 06:35 run that completes the episode: `state/used_clips.json` now holds
+      `1241pj_nCrU#1..#8` against `part_total: 8`.
