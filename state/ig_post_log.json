@@ -2538,6 +2538,57 @@
         "caption_words": 143,
         "part": "8/8"
       }
+    },
+    {
+      "post_id": "6ad89597f9b40e68b9c79c9a",
+      "posted_at": "2026-10-21T10:37:08.384270+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.637,
+        "style": "kinetic",
+        "caption_words": 146,
+        "part": "2/10"
+      }
+    },
+    {
+      "post_id": "6ad8967f3faaf4be48ade982",
+      "posted_at": "2026-10-21T10:40:54.880029+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.637,
+        "style": "kinetic",
+        "caption_words": 165,
+        "part": "3/10"
+      }
+    },
+    {
+      "post_id": "6ad8979e2379f5a3940c78ea",
+      "posted_at": "2026-10-21T10:45:42.514991+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.637,
+        "style": "kinetic",
+        "caption_words": 153,
+        "part": "4/10"
+      }
     }
   ]
 }
