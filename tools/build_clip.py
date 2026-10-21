@@ -187,6 +187,23 @@ def _hook_lines(text, max_chars=19, max_lines=3):
     return lines
 
 
+def _hook_layout(text, max_lines=3):
+    """(font_size, lines) for the banner: shrink the type until the hook fits whole.
+
+    A fixed 100px banner truncated a real source hook mid-thought
+    ("...THIS ENTREPRENEUR'S …" on the 2026-10-21 no-upload run). The banner keeps its
+    3-line ceiling; the font gives way instead of the sentence.
+    """
+    tokens = [w for w in str(text or "").split() if w]
+    for size in (100, 94, 88, 82, 76, 70, 64, 58):
+        budget = max(12, int((OUT_W * 0.86) / (size * 0.52)))
+        lines = _hook_lines(text, budget, max_lines)
+        if [token for line in lines for token in line] == tokens:
+            return size, lines
+    budget = max(12, int((OUT_W * 0.86) / (58 * 0.52)))
+    return 58, _hook_lines(text, budget, max_lines)
+
+
 def _kinetic_color(token, is_last_word, colors):
     bare = token.strip(".,!?;:\"'()[]")
     upper = bare.upper()
@@ -201,9 +218,9 @@ def _kinetic_color(token, is_last_word, colors):
     return colors["white"]
 
 
-def _kinetic_banner(text, colors):
+def _kinetic_banner(text, colors, lines=None):
     """ASS text for the multi-color hook banner (per-word color tags, explicit line breaks)."""
-    lines = _hook_lines(text)
+    lines = lines if lines is not None else _hook_lines(text)
     flat = [(token, index == len(lines) - 1 and pos == len(line) - 1)
             for index, line in enumerate(lines) for pos, token in enumerate(line)]
     rendered_lines = []
@@ -286,6 +303,7 @@ def build_kinetic_ass(title, handle, total, out_path, words=None, cta_dur=0.0,
         "red": hex_to_ass_bgr((theme or {}).get("colors", {}).get("red_flag", "#E2564A")),
         "white": hex_to_ass_bgr("#FFFFFF"),
     }
+    hook_size, hook_lines = _hook_layout(title)
     head = (
         "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n"
         "WrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
@@ -294,8 +312,9 @@ def build_kinetic_ass(title, handle, total, out_path, words=None, cta_dur=0.0,
         "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
         "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
         # Banner: top-centre, persistent. Thick black stroke instead of a panel so the
-        # footage stays visible (the competitor look).
-        f"Style: HookBanner,{KINETIC_FONT},100,{colors['white']},{colors['gold']},"
+        # footage stays visible (the competitor look). The size shrinks for a long hook so
+        # the sentence is never truncated with an ellipsis (_hook_layout).
+        f"Style: HookBanner,{KINETIC_FONT},{hook_size},{colors['white']},{colors['gold']},"
         f"&H00000000,&H50000000,0,0,0,0,100,100,0,0,1,9,3,8,80,80,150,1\n"
         # Captions: centered lower third, 3 words, active word gold.
         f"Style: WordCap,{KINETIC_FONT},92,{colors['white']},{colors['gold']},"
@@ -313,7 +332,7 @@ def build_kinetic_ass(title, handle, total, out_path, words=None, cta_dur=0.0,
     if title:
         events.append(
             f"Dialogue: 0,{_ass_time(0)},{_ass_time(total)},HookBanner,,0,0,0,,"
-            "{\\fad(150,0)}" + _kinetic_banner(title, colors))
+            "{\\fad(150,0)}" + _kinetic_banner(title, colors, hook_lines))
     if words:
         events.extend(_caption_events(words, total, colors))
     events.append(f"Dialogue: 2,{_ass_time(0)},{_ass_time(total)},Handle,,0,0,0,,"

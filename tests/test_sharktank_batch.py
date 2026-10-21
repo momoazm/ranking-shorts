@@ -378,8 +378,41 @@ class TitleLLMTest(unittest.TestCase):
                          "$55,000 FOR 25%")
 
 
+class HookLayoutTest(unittest.TestCase):
+    """A long banner must shrink the type, never truncate the sentence with an ellipsis.
+
+    The 2026-10-21 no-upload run (39554901356) burned
+    "DRAGONS CAN'T / FIGURE OUT WHAT / THIS ENTREPRENEUR'S ..." -- the hook's payoff was
+    cut off by the fixed 3-line/19-char banner."""
+
+    def test_a_long_hook_is_never_truncated(self):
+        hook = "Dragons Can't Figure Out What This Entrepreneur's Selling"
+        size, lines = build_clip._hook_layout(hook)
+        self.assertEqual([token for line in lines for token in line], hook.split())
+        self.assertLessEqual(len(lines), 3)
+        self.assertLess(size, 100)
+
+    def test_a_short_hook_keeps_the_big_type(self):
+        size, lines = build_clip._hook_layout("$55,000 FOR 25%")
+        self.assertEqual(size, 100)
+        self.assertEqual(lines, [["$55,000", "FOR", "25%"]])
+
+    def test_banner_colors_the_money_and_keeps_every_word(self):
+        colors = {"gold": build_clip.hex_to_ass_bgr("#E6B23A"),
+                  "gold_light": build_clip.hex_to_ass_bgr("#F4D277"),
+                  "teal": build_clip.hex_to_ass_bgr("#2E7C8C"),
+                  "red": build_clip.hex_to_ass_bgr("#E2564A"),
+                  "white": build_clip.hex_to_ass_bgr("#FFFFFF")}
+        size, lines = build_clip._hook_layout("HE LOST $100,000")
+        text = build_clip._kinetic_banner("HE LOST $100,000", colors, lines)
+        self.assertIn("\\c" + colors["red"] + "}LOST", text)
+        self.assertIn("\\c" + colors["gold"] + "}$100,000", text)
+        self.assertEqual(text.replace("\\N", " ").count(" "), 2)
+
+
 class HostLadderTest(unittest.TestCase):
     """Never hand Instagram a URL that serves an HTML error page (the tmpfiles failure)."""
+
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp()
