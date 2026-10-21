@@ -2419,6 +2419,74 @@
         },
         "hook_variant": "sharktank_part"
       }
+    },
+    {
+      "post_id": "6ad85e8640cbadb421985a00",
+      "posted_at": "2026-10-21T06:42:09.944618+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.29,
+        "style": "kinetic",
+        "caption_words": 121,
+        "part": "2/8"
+      }
+    },
+    {
+      "post_id": "6ad85fb6a94f50202261da97",
+      "posted_at": "2026-10-21T06:47:14.784367+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.29,
+        "style": "kinetic",
+        "caption_words": 158,
+        "part": "3/8"
+      }
+    },
+    {
+      "post_id": "6ad860ce4b9b0663c8c2eaaa",
+      "posted_at": "2026-10-21T06:51:53.969915+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.29,
+        "style": "kinetic",
+        "caption_words": 142,
+        "part": "4/8"
+      }
+    },
+    {
+      "post_id": "6ad861eb149c8651be3bca5a",
+      "posted_at": "2026-10-21T06:56:40.298595+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.29,
+        "style": "kinetic",
+        "caption_words": 170,
+        "part": "5/8"
+      }
     }
   ]
 }
