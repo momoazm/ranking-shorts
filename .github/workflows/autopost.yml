@@ -253,7 +253,7 @@ jobs:
       - name: Generate rights-safe ranking audio bed
         run: python tools/build_music.py
 
-      - name: Build + publish one Ranking Short
+      - name: Build + publish the Shark Tank parts batch
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}    # injected directly too, so the LLM never depends on the file
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
