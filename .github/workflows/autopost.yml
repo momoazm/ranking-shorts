@@ -37,6 +37,10 @@ on:
         type: choice
         options: [auto, standalone, ranking]
         default: auto
+      parts:
+        description: "Shark Tank: parts to post in this run (0 = all remaining; blank = 4)"
+        type: string
+        default: ""
 
 # NOTE: no `concurrency` group on purpose -- each slot should run independently (see git history).
 
@@ -51,7 +55,10 @@ concurrency:
 jobs:
   post:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # The scheduled run can sit up to 55 min in "Hold until slot", spend ~6 min on setup and
+    # then up to SHARKTANK_BATCH_DEADLINE_SEC (55 min) posting a batch, so 90 min was too tight
+    # once one run posts several parts.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
 
@@ -88,15 +95,39 @@ jobs:
           restore-keys: |
             used-clips-
 
+      # The ledgers below are COMMITTED to git (see the always() step at the end), so the
+      # committed copy is authoritative. The cache post-step only runs on success(), so a run
+      # that published a part and then failed rolled these files back and the next run re-posted
+      # the same part (observed: Part 2/8 on five consecutive runs, 2026-10-20/21).
+      - name: Trust git over the state cache for committed ledgers
+        run: |
+          for f in state/used_clips.json state/sharktank_inprogress.json \
+                   state/sharktank_attempts.json state/sharktank_daily.json; do
+            if git cat-file -e "HEAD:$f" 2>/dev/null; then
+              mkdir -p "$(dirname "$f")"
+              git show "HEAD:$f" > "$f"
+              echo "restored $f from git (authoritative)"
+            else
+              echo "$f is not committed yet; keeping the cache copy"
+            fi
+          done
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
 
-      - name: System deps (ffmpeg w/ libass for the burned leaderboard overlay)
+      - name: System deps (ffmpeg w/ libass + the brand caption font)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg fonts-liberation
+          sudo apt-get install -y -qq ffmpeg fonts-liberation fontconfig
+          # Anton is the competitor-format banner/caption font (OFL, see brand/fonts/README.md).
+          # build_clip.py also points libass at a copy in its scratch dir; installing it
+          # system-wide stops libass from substituting a thinner face.
+          mkdir -p "$HOME/.local/share/fonts"
+          cp brand/fonts/*.ttf "$HOME/.local/share/fonts/" 2>/dev/null || echo "::warning::no brand font committed"
+          fc-cache -f >/dev/null
+          fc-list | grep -qi anton && echo "Anton font registered" || echo "::warning::Anton not registered with fontconfig"
 
       - name: Python deps
         run: |
@@ -250,6 +281,7 @@ jobs:
           NO_SOURCE_OK: ${{ (github.event_name == 'schedule' || inputs.no_upload == true) && '1' || '0' }}
           IN_NO_UPLOAD: ${{ inputs.no_upload }}
           IN_FORMAT: ${{ inputs.format || 'auto' }}
+          IN_PARTS: ${{ inputs.parts }}
         run: |
           # Instagram-first (user call, 2026-10-15): ship the pitch-show parts to Instagram only
           # for now. YouTube stays DEFERRED, not deleted -- flip this back to
@@ -277,6 +309,8 @@ jobs:
                 --format "${IN_FORMAT:-auto}"
                 --force-genre sharktank --niche "shark tank pitches, business deals, and startup moments")
           if [ "$IN_NO_UPLOAD" == "true" ]; then ARGS+=(--no-upload); fi
+          # Shark Tank batch size for THIS dispatch (blank = the repo default of 4).
+          if [ -n "${IN_PARTS:-}" ]; then ARGS+=(--parts-per-run "$IN_PARTS"); fi
           # Keep the structured no-source result in the artifact as well as the log.  The
           # pipeline must keep Python's real exit status so renderer/configuration failures
           # remain red while an honest scheduled/no-upload no-op stays green and inspectable.
@@ -326,6 +360,7 @@ jobs:
             .tmp/final.mp4
             .tmp/review_manifest.json
             .tmp/run_result.json
+            .tmp/sharktank_batch.json
             state/format_experiment.json
             state/ig_post_log.json
             exports/
@@ -345,6 +380,7 @@ jobs:
           path: |
             .tmp/review_manifest.json
             .tmp/run_result.json
+            .tmp/sharktank_batch.json
             state/format_experiment.json
             state/ig_post_log.json
             exports/*.json
@@ -353,15 +389,15 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-      - name: Persist format and Instagram experiment ledger
+      - name: Persist format, Instagram and Shark Tank ledgers
         if: ${{ always() && inputs.no_upload != true }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # -f: state/ is gitignored (bulk history lives in the Actions cache); these two
-          # ledger files are the deliberate exception so the weekly style-experiment job
-          # can read them from a fresh checkout. (A swallowed add failure hid this for
-          # weeks -- no swallow here so a real git problem stays loud.)
+          # -f: state/ is gitignored (bulk history lives in the Actions cache); these ledger
+          # files are the deliberate exception so the weekly style-experiment job can read them
+          # from a fresh checkout. (A swallowed add failure hid this for weeks -- no swallow
+          # here so a real git problem stays loud.)
           if [ -f state/format_experiment.json ]; then
             git add -f state/format_experiment.json
           fi
@@ -373,8 +409,16 @@ jobs:
           if [ -f state/drought.json ]; then
             git add -f state/drought.json
           fi
+          # Shark Tank ledgers: which parts are LIVE (used_clips), the unfinished-chop queue,
+          # the per-part strikes and the rolling 24h post budget. Committing them here -- in
+          # always(), so a partially failed batch still lands its successful parts -- is what
+          # makes git authoritative over the success-gated Actions cache.
+          for f in state/used_clips.json state/sharktank_inprogress.json \
+                   state/sharktank_attempts.json state/sharktank_daily.json; do
+            if [ -f "$f" ]; then git add -f "$f"; fi
+          done
           if ! git diff --staged --quiet; then
-            git commit -m "chore: record format cohort [skip ci]"
+            git commit -m "chore: record format cohort + shark tank ledgers [skip ci]"
             git pull --rebase --autostash origin "${GITHUB_REF_NAME:-main}"
             git push origin "HEAD:${GITHUB_REF_NAME:-main}"
           else

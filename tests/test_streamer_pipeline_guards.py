@@ -596,11 +596,17 @@ class SharktankSlotFallbackTest(unittest.TestCase):
         self.assertEqual(result["source_entry"]["id"], "VIDBBB#1")
         # Exactly two download attempts: video AAA's part 1 (failed) then BBB's part 1 --
         # AAA's remaining part must be skipped by the video_id blacklist, never retried.
-        labels = [c[c.index("--part-label") + 1].split(" | ")[0] for c in build_calls]
-        self.assertEqual(labels, ["(Part 1/2)", "(Part 1/5)"])
         self.assertEqual([c[c.index("--url") + 1] for c in build_calls],
                          ["https://www.youtube.com/watch?v=VIDAAA",
                           "https://www.youtube.com/watch?v=VIDBBB"])
+        # Competitor format: full-bleed crop + kinetic banner + burned word captions. The part
+        # label is NOT burned in any more (it would sit inside the hook banner); it moved to
+        # the description, so a posted part is identified by its source URL/offset instead.
+        for call in build_calls:
+            self.assertEqual(call[call.index("--style") + 1], "kinetic")
+            self.assertEqual(call[call.index("--fit") + 1], "crop")
+            self.assertEqual(call[call.index("--captions") + 1], "words")
+            self.assertNotIn("--part-label", call)
 
     def test_record_used_credits_the_entry_that_actually_posted(self):
         import tempfile

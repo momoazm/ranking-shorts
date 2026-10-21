@@ -26,13 +26,19 @@ import re
 import sys
 
 from _common import REPO_ROOT, load_env, emit, fail, is_tod, TOD_CROP_FRAC, load_theme
-from _media import run_ffmpeg, get_ffmpeg, probe_duration
+from _media import run_ffmpeg, probe_duration
 
 # Reuse the ranking pipeline's downloader + 9:16 normaliser (same module, sibling import).
 import build_ranking_video as brv
 
 OUT_W, OUT_H = brv.OUT_W, brv.OUT_H
 CLIP_TMP = ".tmp/clip"
+# The display font used by the winning clip formats (Anton, OFL). Copied into the render
+# tmpdir and handed to libass through `fontsdir`, so a local render does not require the
+# font to be installed system-wide.
+BRAND_FONTS = REPO_ROOT / "brand" / "fonts"
+KINETIC_FONT = "Anton"
+
 
 
 def esc(text):
@@ -139,6 +145,215 @@ def build_overlay_ass(title, handle, total, out_path, cta_dur=0.0, cta_text="", 
         f.write(head + "\n".join(rows) + "\n")
 
 
+def _ass_time(t):
+    t = max(0.0, float(t))
+    h = int(t // 3600)
+    m = int((t % 3600) // 60)
+    s = t % 60
+    return f"{h}:{m:02d}:{s:05.2f}"
+
+
+# Words the competitor hook banners treat as the emotional beat (red) or the business
+# object (teal). Deliberately small: 1-2 accent colors per banner, not confetti.
+KINETIC_RED = {
+    "REFUSED", "REJECTED", "WALKED", "WALKS", "FIRED", "BACKFIRED", "GREEDY", "MISTAKE",
+    "WRONG", "LOST", "LOSES", "FAILED", "FAILS", "QUIT", "QUITS", "NEVER", "OUT", "BROKE",
+    "SCAM", "DESPERATE", "BEGGED", "CRIED", "ANGRY", "FURIOUS", "STORMED",
+}
+KINETIC_TEAL = {
+    "DEAL", "DEALS", "OFFER", "OFFERED", "INVEST", "INVESTOR", "INVESTMENT", "EQUITY",
+    "ROYALTY", "MILLION", "BILLION", "THOUSAND", "SHARKS", "SHARK", "DRAGONS", "DRAGON",
+    "PROFIT", "PROFITS", "COMPANY", "BUSINESS", "VALUATION", "REVENUE", "SALES",
+}
+_MONEY_TOKEN = re.compile(r"[$%]|\d", re.UNICODE)
+
+
+def _hook_lines(text, max_chars=19, max_lines=3):
+    """Wrap the banner to <=3 short ALL-CAPS lines (competitor pattern), never mid-word."""
+    tokens = [w for w in str(text or "").split() if w]
+    lines, current = [], []
+    for token in tokens:
+        trial = " ".join(current + [token])
+        if len(trial) <= max_chars or not current:
+            current.append(token)
+        else:
+            lines.append(current)
+            current = [token]
+    if current:
+        lines.append(current)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        lines[-1] = lines[-1] + ["..."]
+    return lines
+
+
+def _kinetic_color(token, is_last_word, colors):
+    bare = token.strip(".,!?;:\"'()[]")
+    upper = bare.upper()
+    if _MONEY_TOKEN.search(bare):
+        return colors["gold"]
+    if upper in KINETIC_RED:
+        return colors["red"]
+    if upper in KINETIC_TEAL:
+        return colors["teal"]
+    if is_last_word:
+        return colors["gold"]
+    return colors["white"]
+
+
+def _kinetic_banner(text, colors):
+    """ASS text for the multi-color hook banner (per-word color tags, explicit line breaks)."""
+    lines = _hook_lines(text)
+    flat = [(token, index == len(lines) - 1 and pos == len(line) - 1)
+            for index, line in enumerate(lines) for pos, token in enumerate(line)]
+    rendered_lines = []
+    position = 0
+    for line in lines:
+        parts = []
+        for _ in line:
+            token, is_last = flat[position]
+            position += 1
+            color = _kinetic_color(token, is_last, colors)
+            safe = esc(token.upper())
+            if color == colors["white"]:
+                parts.append(safe)
+            else:
+                parts.append(f"{{\\c{color}}}{safe}{{\\c{colors['white']}}}")
+        rendered_lines.append(" ".join(parts))
+    return "\\N".join(rendered_lines)
+
+
+def _group_caption_words(words, per_screen=3, gap_break=0.9):
+    """Break word timings into readable 2-3 word screens at pauses and sentence ends."""
+    screens, current = [], []
+    for index, word in enumerate(words):
+        current.append(word)
+        nxt = words[index + 1] if index + 1 < len(words) else None
+        ends = str(word.get("w") or "").rstrip("\"')]").endswith((".", "!", "?", "…"))
+        gap = (float(nxt.get("start") or 0) - float(word.get("end") or 0)) if nxt else 0
+        if len(current) >= per_screen or ends or gap >= gap_break or nxt is None:
+            screens.append(current)
+            current = []
+    return screens
+
+
+def _caption_events(words, total, colors, per_screen=3):
+    events = []
+    screens = _group_caption_words(words, per_screen)
+    for screen_index, screen in enumerate(screens):
+        next_screen_start = None
+        if screen_index + 1 < len(screens) and screens[screen_index + 1]:
+            next_screen_start = float(screens[screen_index + 1][0].get("start") or 0.0)
+        for index, word in enumerate(screen):
+            start = max(0.0, float(word.get("start") or 0.0))
+            if index + 1 < len(screen):
+                end = max(start + 0.08, float(screen[index + 1].get("start") or start))
+            else:
+                end = max(start + 0.12, float(word.get("end") or start + 0.12))
+                if next_screen_start is not None:
+                    # The next screen owns the same layer; never let the two overlap.
+                    end = min(end, next_screen_start)
+            end = min(total, end)
+            if end <= start:
+                continue
+            parts = []
+            for pos, token in enumerate(screen):
+                text = esc(str(token.get("w") or "").upper())
+                if pos == index:
+                    parts.append(
+                        "{\\c" + colors["gold"] + "\\fscx110\\fscy110}" + text +
+                        "{\\c" + colors["white"] + "\\fscx100\\fscy100}")
+                else:
+                    parts.append(text)
+            events.append(f"Dialogue: 1,{_ass_time(start)},{_ass_time(end)},WordCap,,0,0,0,,"
+                          + " ".join(parts))
+    return events
+
+
+def build_kinetic_ass(title, handle, total, out_path, words=None, cta_dur=0.0,
+                      cta_text="", theme=None):
+    """Competitor-format overlay: persistent multi-color hook banner + burned word captions.
+
+    Evidence (top Shark Tank / MrBeast clip Shorts): full-bleed crop, a 2-3 line ALL-CAPS
+    hook banner pinned at the top for the WHOLE clip, centered word-level captions with the
+    spoken word highlighted, a tiny handle, and a CTA. No top title card, no badge, no
+    "(Part i/N)" stamp -- those are the old MOMOCLIPS look and stay available as `classic`.
+    """
+    colors = {
+        "gold": hex_to_ass_bgr((theme or {}).get("colors", {}).get("gold", "#E6B23A")),
+        "gold_light": hex_to_ass_bgr((theme or {}).get("colors", {}).get("gold_light", "#F4D277")),
+        "teal": hex_to_ass_bgr((theme or {}).get("colors", {}).get("nile_teal", "#2E7C8C")),
+        "red": hex_to_ass_bgr((theme or {}).get("colors", {}).get("red_flag", "#E2564A")),
+        "white": hex_to_ass_bgr("#FFFFFF"),
+    }
+    head = (
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1080\nPlayResY: 1920\n"
+        "WrapStyle: 0\nScaledBorderAndShadow: yes\n\n"
+        "[V4+ Styles]\n"
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+        "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+        "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
+        # Banner: top-centre, persistent. Thick black stroke instead of a panel so the
+        # footage stays visible (the competitor look).
+        f"Style: HookBanner,{KINETIC_FONT},100,{colors['white']},{colors['gold']},"
+        f"&H00000000,&H50000000,0,0,0,0,100,100,0,0,1,9,3,8,80,80,150,1\n"
+        # Captions: centered lower third, 3 words, active word gold.
+        f"Style: WordCap,{KINETIC_FONT},92,{colors['white']},{colors['gold']},"
+        f"&H00000000,&H50000000,0,0,0,0,100,100,0,0,1,8,2,2,70,70,560,1\n"
+        # Tiny handle, always on, clear of the captions and the phone UI.
+        f"Style: Handle,{KINETIC_FONT},34,&H50FFFFFF,&H50FFFFFF,&H00000000,&H00000000,"
+        f"0,0,0,0,100,100,0,0,1,2,0,2,40,40,110,1\n"
+        # CTA: last ~2s, above the handle.
+        f"Style: CTA,{KINETIC_FONT},58,{colors['gold']},{colors['gold']},&H00000000,"
+        f"&H50000000,0,0,0,0,100,100,0,0,1,9,3,2,60,60,250,1\n\n"
+        "[Events]\n"
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
+    )
+    events = []
+    if title:
+        events.append(
+            f"Dialogue: 0,{_ass_time(0)},{_ass_time(total)},HookBanner,,0,0,0,,"
+            "{\\fad(150,0)}" + _kinetic_banner(title, colors))
+    if words:
+        events.extend(_caption_events(words, total, colors))
+    events.append(f"Dialogue: 2,{_ass_time(0)},{_ass_time(total)},Handle,,0,0,0,,"
+                  + esc(handle))
+    if cta_dur > 0 and cta_text:
+        eff = min(float(cta_dur), total)
+        start = max(0.0, total - eff)
+        events.append(
+            f"Dialogue: 3,{_ass_time(start)},{_ass_time(total)},CTA,,0,0,0,,"
+            "{\\fad(150,0)\\fscx120\\fscy120\\t(0,250,\\fscx100\\fscy100)}"
+            + esc(cta_text.upper())[:26])
+    with open(out_path, "w", encoding="utf-8") as handle_:
+        handle_.write(head + "\n".join(events) + "\n")
+
+
+def normalize_crop(src, offset, dur, out):
+    """Full-bleed 9:16 CENTER CROP (competitor format) while keeping the original audio.
+
+    `normalize()` in build_ranking_video fits the whole frame over a blurred fill. The
+    winning pitch-show Shorts instead fill the phone screen with the center of the 16:9
+    frame. Audio behaviour is copied exactly: keep the source audio when audible, use
+    silence when the slice is quiet (no SFX, per the channel's audio rule).
+    """
+    vf = (f"scale={OUT_W}:{OUT_H}:force_original_aspect_ratio=increase,"
+          f"crop={OUT_W}:{OUT_H},setsar=1,fps={brv.FPS},format=yuv420p[v]")
+    level = brv.mean_volume_db(src, offset, dur)
+    audible = level is not None and level > brv.SILENCE_DB
+    inputs = ["-ss", f"{offset:.2f}", "-i", src]
+    if audible:
+        audio = ["[0:a]aresample=44100,volume=1.0[a]"]
+    else:
+        inputs += ["-f", "lavfi", "-t", f"{dur:.2f}", "-i", "anullsrc=r=44100:cl=stereo"]
+        audio = ["[1:a]volume=1.0[a]"]
+    chain = vf + ";" + ";".join(audio)
+    run_ffmpeg([*inputs, "-filter_complex", chain, "-map", "[v]", "-map", "[a]",
+                "-t", f"{dur:.2f}", "-ar", "44100", "-ac", "2",
+                "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+                "-c:a", "aac", "-b:a", "160k", out])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", required=True, help="Source YouTube (or direct media) URL")
@@ -165,7 +380,18 @@ def main():
                     help="Uploader @handle of the source. TOD-by-beIN clips get their bottom "
                          "branding bar cropped off before the 9:16 fit; every other source is untouched.")
     ap.add_argument("--badge", default="MOMOCLIPS / FOOTBALL",
-                    help="Small top badge burned into the video")
+                    help="Small top badge burned into the video (classic style only)")
+    ap.add_argument("--style", choices=["classic", "kinetic"], default="classic",
+                    help="classic = title card + badge + handle; kinetic = competitor format "
+                         "(persistent multi-color hook banner + burned word captions, no card).")
+    ap.add_argument("--fit", choices=["fit", "crop"], default="fit",
+                    help="fit = whole frame over a blurred fill (landscape sources); "
+                         "crop = full-bleed 9:16 center crop (competitor format).")
+    ap.add_argument("--captions", choices=["off", "words"], default="off",
+                    help="words = burn word-level captions (transcribed from this slice when "
+                         "--words is not supplied). Failures degrade to overlay-only.")
+    ap.add_argument("--words", default="",
+                    help="Pre-computed word timings JSON (transcribe_segment.py) for --captions.")
     ap.add_argument("--cta", dest="cta", action="store_true", default=True,
                     help="Follow CTA pop-in over the last --cta-dur seconds (default ON; no SFX, "
                          "per the audio rule -- purely on-screen text, same pattern as build_ranking_video).")
@@ -237,31 +463,75 @@ def main():
         except Exception as e:
             print(f"::warning::TOD bottom-crop failed ({str(e)[:120]}); using uncropped source", file=sys.stderr)
 
-    # 2) fit to 9:16 over a blurred fill, keep original audio (or silence if the clip is quiet).
+    # 1c) Caption words: use pre-computed timings (the batch transcribes once) or transcribe
+    #     this slice now. A caption outage must never fail the render -- degrade to the banner.
+    caption_words = []
+    if args.words:
+        words_path = args.words if os.path.isabs(args.words) else str(REPO_ROOT / args.words)
+        try:
+            with open(words_path, encoding="utf-8") as handle:
+                payload = json.load(handle)
+            caption_words = payload.get("words") if isinstance(payload, dict) else payload
+            caption_words = caption_words or []
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"::warning::caption words unreadable ({str(exc)[:120]}); "
+                  f"falling back to transcription", file=sys.stderr)
+    if args.captions == "words" and not caption_words:
+        try:
+            from transcribe_segment import transcribe_slice
+            caption_words = transcribe_slice(src, start, seg).get("words") or []
+            print(f"::warning::transcribed {len(caption_words)} caption words for this slice",
+                  file=sys.stderr)
+        except Exception as exc:
+            print(f"::warning::caption transcription failed ({str(exc)[:160]}); "
+                  f"rendering the hook banner without captions", file=sys.stderr)
+            caption_words = []
+
+    # 2) fit/crop to 9:16, keep original audio (or silence if the clip is quiet).
     body = str(tmpdir / "body.mp4")
     try:
-        brv.normalize(src, start, seg, body)
+        if args.fit == "crop":
+            normalize_crop(src, start, seg, body)
+        else:
+            brv.normalize(src, start, seg, body)
     except Exception as e:
         fail(f"normalize failed: {e}", src=src)
         return
 
-    # 3) burn the title card + handle watermark. Bare filename + cwd=.tmp/clip so ffmpeg's
-    #    filtergraph parser never sees the repo path's drive-colon/space (same rule as the
-    #    ranking/clipping ass burns).
+    # 3) burn the overlay. Bare filename + cwd=.tmp/clip so ffmpeg's filtergraph parser never
+    #    sees the repo path's drive-colon/space (same rule as the ranking/clipping ass burns).
     body_dur = probe_duration(body) or seg
     ass_name = "clip_overlay.ass"
     try:
         theme = load_theme()
     except Exception:
         theme = {"colors": {}}
-    build_overlay_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name),
-                       args.cta_dur if args.cta else 0.0, args.cta_text, theme=theme,
-                       badge_text=args.badge)
+    if args.style == "kinetic":
+        build_kinetic_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name),
+                          words=caption_words,
+                          cta_dur=args.cta_dur if args.cta else 0.0,
+                          cta_text=args.cta_text, theme=theme)
+    else:
+        build_overlay_ass(args.title, args.handle, body_dur, str(tmpdir / ass_name),
+                          args.cta_dur if args.cta else 0.0, args.cta_text, theme=theme,
+                          badge_text=args.badge)
 
     out_path = args.out if os.path.isabs(args.out) else str(REPO_ROOT / args.out)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    vf = f"ass={ass_name}"
+    if args.style == "kinetic":
+        # Copy the display font next to the ASS file and point libass at it, so the render is
+        # identical on a machine that never installed Anton system-wide.
+        fonts_dir = tmpdir / "fonts"
+        fonts_dir.mkdir(exist_ok=True)
+        if BRAND_FONTS.is_dir():
+            for font in BRAND_FONTS.glob("*.ttf"):
+                target = fonts_dir / font.name
+                if not target.is_file():
+                    target.write_bytes(font.read_bytes())
+        vf = f"ass=filename={ass_name}:fontsdir=fonts"
+    else:
+        vf = f"ass={ass_name}"
     inputs = ["-i", os.path.abspath(body)]
     amap = ["-map", "0:a?"]
     achain = None
@@ -298,10 +568,17 @@ def main():
         "title": args.title,
         "source_url": args.url,
         "source_start_sec": round(start, 2),
-        "source_file": src if args.source_file else None,
+        # Always report the file the slice was cut from: the batch poster downloads once and
+        # reuses it for every later part via --source-file.
+        "source_file": src,
+        "downloaded_source_file": None if args.source_file else src,
+        "source_reused": bool(args.source_file),
+        "style": args.style,
+        "fit": args.fit,
+        "caption_word_count": len(caption_words),
         "width": OUT_W, "height": OUT_H,
         "music": os.path.basename(music) if (music and os.path.isfile(music)) else None,
-        "badge": args.badge,
+        "badge": args.badge if args.style == "classic" else None,
     })
 
 

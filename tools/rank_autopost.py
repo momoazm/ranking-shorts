@@ -17,6 +17,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -74,8 +75,14 @@ TOOL_TIMEOUTS = {
 }
 
 
-def run_tool_safe(name, args):
-    timeout = TOOL_TIMEOUTS.get(name, 300)
+def run_tool_safe(name, args, timeout=None):
+    """Run one tool and return (json_or_None, error_or_None).
+
+    `timeout` overrides TOOL_TIMEOUTS for callers on a shared budget (the Shark Tank batch
+    must be able to stop one slow part from eating the whole run's wall clock).
+    """
+    if not timeout:
+        timeout = TOOL_TIMEOUTS.get(name, 300)
     try:
         proc = subprocess.run([PY, f"tools/{name}", *args], cwd=str(ROOT), capture_output=True,
                               text=True, encoding="utf-8", errors="replace", timeout=timeout)
@@ -237,13 +244,622 @@ def record_used(ranked_path, selected_format="ranking", posted=None):
         if selected_format == "standalone":
             entries = [e for e in entries if e.get("rank") == 1][:1]
     ids = [e.get("id") for e in entries if e and e.get("id")]
+    record_used_ids(ids)
+
+
+def record_used_ids(ids):
+    """Append one or more source ids to the shared ledger (used by the Shark Tank batch).
+
+    Called IMMEDIATELY after each successful part publish, not once at the end of the run:
+    a later part's failure must never roll back an earlier part's success.
+    """
+    ids = [str(i) for i in (ids or []) if i]
     if not ids:
         return
     prev = (load_json(HISTORY) or {}).get("used", [])
-    merged = list(dict.fromkeys(prev + ids))[-1000:]   # keep the most recent 1000, de-duped
+    merged = list(dict.fromkeys(list(prev) + ids))[-1000:]   # most recent 1000, de-duped
     (ROOT / "state").mkdir(exist_ok=True)
     with open(ROOT / HISTORY, "w", encoding="utf-8") as f:
         json.dump({"used": merged}, f)
+
+
+# --- Shark Tank batch state ---------------------------------------------------------------
+# The ledger above and the in-progress queue used to live ONLY in the Actions cache, whose
+# post-step is success-gated: a run that posted a part and then failed Instagram rolled both
+# files back, so the same part retried forever (Part 2/8 failed 5+ times on 2026-10-20/21).
+# These files are committed by the workflow's always() step and are the authoritative copy.
+SHARKTANK_ATTEMPTS = "state/sharktank_attempts.json"
+SHARKTANK_DAILY = "state/sharktank_daily.json"
+SHARKTANK_ATTEMPT_WINDOW_SEC = 7 * 24 * 3600   # a strike lapses after a week
+SHARKTANK_DEAD_STRIKES = 3                     # 3 failed attempts -> skip this part for now
+SHARKTANK_ATTEMPT_RETENTION_SEC = 30 * 24 * 3600
+
+
+def _env_float(name, default):
+    try:
+        raw = os.environ.get(name)
+        return float(raw) if raw not in (None, "") else float(default)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _env_int(name, default):
+    try:
+        raw = os.environ.get(name)
+        return int(float(raw)) if raw not in (None, "") else int(default)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _atomic_json(path, data):
+    target = ROOT / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_suffix(target.suffix + ".tmp")
+    with open(temp, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2, ensure_ascii=True)
+    os.replace(temp, target)
+
+
+def load_part_attempts(path=None):
+    data = load_json(path or SHARKTANK_ATTEMPTS) or {}
+    parts = data.get("parts") if isinstance(data, dict) else {}
+    return parts if isinstance(parts, dict) else {}
+
+
+def part_strikes(part_id, attempts=None, now=None):
+    """Strikes still inside the demotion window (0 when healthy or expired)."""
+    record = (attempts if attempts is not None else load_part_attempts()).get(part_id)
+    if not isinstance(record, dict):
+        return 0
+    try:
+        count = int(record.get("count") or 0)
+        last = float(record.get("last_at") or 0)
+    except (TypeError, ValueError):
+        return 0
+    if (now if now is not None else time.time()) - last > SHARKTANK_ATTEMPT_WINDOW_SEC:
+        return 0
+    return count
+
+
+def record_part_attempt(part_id, ok=False, reason=None, path=None):
+    """Record a per-PART strike (never a whole-episode strike); success clears it.
+
+    A part that keeps failing (bad slice, renderer hiccup) is skipped for the run instead of
+    blocking the rest of the episode. It is never deleted, and the strike lapses in 7 days.
+    """
+    if not part_id:
+        return
+    target = path or SHARKTANK_ATTEMPTS
+    try:
+        parts = dict(load_part_attempts(target))
+        now = time.time()
+        if ok:
+            parts.pop(part_id, None)
+        else:
+            current = parts.get(part_id) if isinstance(parts.get(part_id), dict) else {}
+            try:
+                previous = int(current.get("count") or 0)
+                last = float(current.get("last_at") or 0)
+            except (TypeError, ValueError):
+                previous, last = 0, 0.0
+            if now - last > SHARKTANK_ATTEMPT_WINDOW_SEC:
+                previous = 0
+            parts[part_id] = {"count": previous + 1, "last_at": now,
+                              "reason": str(reason or "")[:200]}
+        cutoff = now - SHARKTANK_ATTEMPT_RETENTION_SEC
+        parts = {pid: rec for pid, rec in parts.items()
+                 if isinstance(rec, dict) and float(rec.get("last_at") or 0) >= cutoff}
+        _atomic_json(target, {"parts": parts})
+    except Exception as exc:        # pragma: no cover - defensive
+        print(f"::warning::could not record shark tank part attempt: {exc}", file=sys.stderr)
+
+
+def recent_post_times(hours=24):
+    data = load_json(SHARKTANK_DAILY) or {}
+    cutoff = time.time() - hours * 3600
+    out = []
+    for value in (data.get("posts") if isinstance(data, dict) else []) or []:
+        try:
+            stamp = float(value)
+        except (TypeError, ValueError):
+            continue
+        if stamp >= cutoff:
+            out.append(stamp)
+    return out
+
+
+def record_post_time():
+    times = recent_post_times(24) + [time.time()]
+    _atomic_json(SHARKTANK_DAILY, {"posts": sorted(times)[-400:]})
+
+
+def sharktank_daily_max():
+    """IG's published-posts cap is 25/24h; stay below it with headroom for manual posts."""
+    return max(1, _env_int("SHARKTANK_DAILY_MAX", 15))
+
+
+def group_parts_by_video(entries, attempts=None, now=None, dead=SHARKTANK_DEAD_STRIKES):
+    """Order the candidate pool into [(video_id, [part entries])] for the batch poster.
+
+    Parts of one upload stay together and in play order; uploads keep the finder's ordering
+    (in-progress first, then newest). Parts with `dead` strikes are set aside (not deleted)
+    so one bad slice cannot stall the rest of the episode.
+    """
+    attempts = attempts if attempts is not None else load_part_attempts()
+    groups, order = {}, []
+    for entry in entries or []:
+        if entry.get("content_type") != "sharktank_part":
+            continue
+        video_id = entry.get("video_id")
+        if not video_id or not entry.get("id"):
+            continue
+        if video_id not in groups:
+            groups[video_id] = []
+            order.append(video_id)
+        groups[video_id].append(entry)
+    planned = []
+    for video_id in order:
+        parts = sorted(groups[video_id],
+                       key=lambda e: (e.get("part_index") or 0, e.get("rank") or 0))
+        alive = [p for p in parts if part_strikes(p["id"], attempts, now) < dead]
+        if alive:
+            planned.append((video_id, alive))
+    return planned
+
+
+# --- One finished mp4 -> every platform ---------------------------------------------------
+def _is_transcode_failure(text):
+    """True when Instagram rejected the URL instead of the pixels.
+
+    Zernio/IG surface this as `progressive_video_not_ready`, `MediaInfoExtractionException`
+    ("media info extraction failed") or a bare "could not be processed". Those are download
+    problems on the host, so re-hosting the SAME mp4 is the fix; a codec problem cannot reach
+    here because prepare_upload_media.py already re-encoded to H.264/AAC.
+    """
+    low = str(text or "").lower()
+    return any(marker in low for marker in (
+        "progressive_video_not_ready", "mediainfoextraction", "media info extraction",
+        "could not be processed", "not ready for posting", "transcod"))
+
+
+def _host_video(video_path, exclude=None):
+    """Host one file and prove it serves bytes; returns (url, provider, error)."""
+    args = ["--video", video_path]
+    if exclude:
+        args += ["--exclude", exclude]
+    data, err = run_tool_safe("host_public.py", args)
+    url = (data or {}).get("url")
+    if err or not url:
+        return None, None, (err or "host_public returned no url")
+    return url, (data or {}).get("provider"), None
+
+
+def deliver_media(video_path, meta, title, platforms, required_platforms, *,
+                  privacy="public", tiktok_privacy=None, ib_line="",
+                  log_style=None, log_experiment=False, log_context=None,
+                  ig_poll_timeout=None, captions_meta=CAPMETA):
+    """Publish one finished mp4 and return (delivery, published).
+
+    The file is hosted once for every URL-based platform (the old flow hosted separately for
+    YouTube and Instagram, doubling the failure points). Instagram gets ONE retry on a
+    DIFFERENT host when its transcoder rejects the URL: every failing part of the 2026-10-20
+    episode came from `tmpfiles.org`, while the parts hosted on catbox published fine, so the
+    host -- not the render -- is the thing to change.
+    """
+    delivery = {}
+    published = False
+    host_url = host_provider = host_error = None
+    if set(platforms) & {"youtube", "instagram"}:
+        host_url, host_provider, host_error = _host_video(video_path)
+        if host_url:
+            delivery["host"] = {"url": host_url, "provider": host_provider}
+
+    if "youtube" in platforms:
+        yt = meta.get("youtube") or {}
+        if host_error:
+            delivery["youtube"] = {"skipped": host_error.splitlines()[0][:140]}
+        else:
+            m, err = run_tool_safe("upload_youtube.py", [
+                "--video-url", host_url,
+                "--title", yt.get("title", title),
+                "--description", yt.get("description", ""),
+                "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
+                "--privacy", privacy, "--confirm"])
+            ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
+            delivery["youtube"] = (
+                {"skipped": err.splitlines()[0][:140],
+                 "diagnostics": {k: m.get(k) for k in
+                                 ("post_id", "retry_attempted", "ambiguous", "platform_status", "poll_error")
+                                 if (m or {}).get(k) not in (None, "", {})}}
+                if err else {"url": m.get("url")})
+            published = published or ok
+
+    if "instagram" in platforms:
+        ig = meta.get("instagram") or {}
+        if host_error:
+            delivery["instagram"] = {"skipped": host_error.splitlines()[0][:140]}
+        else:
+            url, provider = host_url, host_provider
+            attempts = []
+            for attempt in (1, 2):
+                ig_args = ["--video-url", url, "--caption", ig.get("caption", title), "--confirm"]
+                if ig_poll_timeout:
+                    ig_args += ["--poll-timeout", str(int(ig_poll_timeout))]
+                m, err = run_tool_safe("upload_instagram.py", ig_args)
+                ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
+                attempts.append({
+                    "attempt": attempt, "provider": provider, "ok": bool(ok),
+                    "error": (err or "").splitlines()[0][:180] if err else None,
+                    "post_id": (m or {}).get("post_id") or (m or {}).get("media_id"),
+                })
+                if ok:
+                    entry = {"media_id": (m or {}).get("post_id") or (m or {}).get("media_id"),
+                             "provider": provider}
+                    if len(attempts) > 1:
+                        entry["attempts"] = attempts
+                    delivery["instagram"] = entry
+                    published = True
+                    if log_style:
+                        post_id = entry["media_id"]
+                        if post_id:
+                            context = {"source": "rank_autopost"}
+                            context.update(log_context or {})
+                            log_ig_post(post_id, style=log_style, experiment=log_experiment,
+                                        context=context)
+                    break
+                if attempt == 2 or not _is_transcode_failure(err):
+                    entry = {"skipped": (err or "upload_instagram failed").splitlines()[0][:140],
+                             "provider": provider,
+                             "diagnostics": {k: m.get(k) for k in
+                                             ("post_id", "retry_attempted", "ambiguous", "platform_status", "poll_error")
+                                             if (m or {}).get(k) not in (None, "", {})}}
+                    if len(attempts) > 1:
+                        entry["attempts"] = attempts
+                    delivery["instagram"] = entry
+                    break
+                print(f"::warning::Instagram rejected host {provider} "
+                      f"({str(err).splitlines()[0][:120]}); re-hosting the same mp4 and "
+                      f"retrying once", file=sys.stderr)
+                url, new_provider, rehost_err = _host_video(video_path, exclude=provider)
+                if not url:
+                    delivery["instagram"] = {
+                        "skipped": f"re-host failed: {str(rehost_err)[:120]}",
+                        "provider": provider, "attempts": attempts}
+                    break
+                provider = new_provider
+
+    if "tiktok" in platforms:
+        tt = meta.get("tiktok") or {}
+        tt_privacy = tiktok_privacy or ("PUBLIC_TO_EVERYONE" if privacy == "public" else "SELF_ONLY")
+        m, err = run_tool_safe("upload_tiktok.py", [
+            "--video", video_path,
+            "--title", " ".join(x for x in (tt.get("caption", title), ib_line) if x),
+            "--privacy", tt_privacy, "--confirm"])
+        ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
+        delivery["tiktok"] = ({"skipped": err.splitlines()[0][:140]}
+                              if err else {"publish_id": m.get("publish_id")})
+        published = published or ok
+
+    if "email" in platforms:
+        m, err = run_tool_safe("email_video.py", ["--video", video_path,
+                                                  "--captions-meta", captions_meta,
+                                                  "--subject", f"Ranking Short: {title}"])
+        delivery["email"] = {"skipped": err.splitlines()[0][:140]} if err else {"sent_to": m.get("to")}
+    if "export" in platforms:
+        m, err = run_tool_safe("export_local.py", ["--video", video_path,
+                                                  "--captions-meta", captions_meta,
+                                                  "--title", title])
+        delivery["export"] = {"error": err.splitlines()[0][:140]} if err else {"folder": m.get("folder")}
+    return delivery, published
+
+
+def _required_failures(delivery, platforms, required_platforms):
+    """Required destinations that did not publish (drives partial_upload + exit code)."""
+    failures = []
+    for platform in sorted(set(required_platforms) & set(platforms)):
+        entry = (delivery or {}).get(platform) or {}
+        if entry.get("skipped") or entry.get("error"):
+            failures.append({"platform": platform,
+                             "detail": entry.get("skipped") or entry.get("error")})
+    return failures
+
+
+# --- Shark Tank batch poster --------------------------------------------------------------
+# One scheduled run posts a BATCH of the remaining parts instead of exactly one: the channel
+# has ~8 parts per episode and 6 slots/day, so single-part runs left whole episodes unfinished
+# for days while the account looked healthy.
+SHARKTANK_BATCH_RESULT = ".tmp/sharktank_batch.json"
+SHARKTANK_SCRATCH = ".tmp/sharktank"
+SHARKTANK_TAGS = ["sharktank", "sharktankus", "startup", "investment", "shorts"]
+
+
+def _rel(path):
+    """Repo-relative POSIX path for tools (they resolve it against ROOT themselves)."""
+    try:
+        return Path(path).resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _part_scratch(part):
+    video_id = re.sub(r"[^A-Za-z0-9_-]+", "_", str(part.get("video_id") or "video"))
+    index = int(part.get("part_index") or 0)
+    return ROOT / SHARKTANK_SCRATCH / f"{video_id}_p{index:02d}"
+
+
+def build_meta_for(title, description, tag_seed, story_path=RANK_STORY, out_path=CAPMETA,
+                   core=None):
+    """Write one story JSON and let build_captions.py render the per-platform captions."""
+    tags = [w for w in "".join(c if c.isalnum() else " " for c in str(title).lower()).split()
+            if len(w) > 3]
+    target = ROOT / story_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with open(target, "w", encoding="utf-8") as handle:
+        # No generic filler appended (viral/fyp-style tags hurt classification per 2026
+        # research); title words + seeds + build_captions' curated core are the tag pool.
+        json.dump({"title": title, "description": description,
+                   "tags": (tags + list(tag_seed))[:15]}, handle)
+    caption_args = ["--story", story_path, "--out", out_path]
+    if core:
+        caption_args += ["--core", core]
+    _data, err = run_tool_safe("build_captions.py", caption_args)
+    return load_json(out_path) or {}, err
+
+
+def _record_video_download_failure(video_id):
+    """Demote a bot-walled upload in the finder's durable queue (never delete its parts)."""
+    if not video_id:
+        return
+    try:
+        from find_sharktank_parts import record_download_failure
+        record_download_failure(video_id, path=os.environ.get("SHARKTANK_INPROGRESS"))
+    except Exception as exc:
+        print(f"::warning::could not record shark tank download failure: {exc}", file=sys.stderr)
+
+
+def _publish_one_part(part, src, args, platforms, required_platforms, build_timeout=600):
+    """Transcribe -> title -> build -> prepare -> captions -> publish ONE part.
+
+    Never raises: every failure returns a record so the batch can move on to the next part.
+    """
+    part_id = part.get("id")
+    scratch = _part_scratch(part)
+    scratch.mkdir(parents=True, exist_ok=True)
+    video_path = scratch / "part.mp4"
+    start = float(part.get("start") or 0.0)
+    duration = min(float(part.get("duration") or 58.0), 59.0)
+    source_title = (part.get("source_title") or part.get("title") or "Shark Tank").strip()
+    record = {"id": part_id, "video_id": part.get("video_id"),
+              "part_index": part.get("part_index"), "part_total": part.get("part_total"),
+              "title": source_title}
+
+    # 1) Word timings for the burned captions. A Groq outage degrades to the hook banner; it
+    #    never fails the part (a missing caption beats a missing post).
+    words_path = scratch / "words.json"
+    _w, words_err = run_tool_safe("transcribe_segment.py", [
+        "--source", str(src), "--start", f"{start:.3f}", "--duration", f"{duration:.3f}",
+        "--out", _rel(words_path)], timeout=300)
+    words = None if words_err else _rel(words_path)
+    if words_err:
+        print(f"::warning::{part_id}: no word timings "
+              f"({str(words_err).splitlines()[0][:120]}); banner-only render", file=sys.stderr)
+
+    # 2) Curiosity-gap post title + short banner hook. No "(Part i/N)" in either: the format
+    #    that wins on this show is a hook, and the part number belongs in the description.
+    title_data = {}
+    if words:
+        title_out = scratch / "title.json"
+        tdata, terr = run_tool_safe("title_part.py", [
+            "--transcript", words, "--source-title", source_title,
+            "--part", str(part.get("part_index") or 1),
+            "--total", str(part.get("part_total") or 1),
+            "--out", _rel(title_out)], timeout=180)
+        if terr:
+            print(f"::warning::{part_id}: title generation failed "
+                  f"({str(terr).splitlines()[0][:120]}); using the source hook", file=sys.stderr)
+        else:
+            title_data = tdata or {}
+    post_title = str(title_data.get("title") or "").strip()
+    hook = str(title_data.get("hook") or "").strip()
+    if not post_title:
+        post_title = source_hook(part) or source_title
+    hook = hook or post_title
+
+    # 3) Render: full-bleed 9:16 crop, kinetic multi-color banner, word captions. One source
+    #    download is reused for every part via --source-file (fetch_source.py ran once).
+    build_args = [
+        "--url", part.get("url") or "", "--source-file", str(src),
+        "--title", hook, "--start", f"{start:.3f}", "--max-secs", f"{duration:.3f}",
+        "--handle", "@itsmomoclips", "--style", "kinetic", "--fit", "crop",
+        "--cta-text", "FOLLOW FOR MORE DEALS", "--out", _rel(video_path)]
+    if words:
+        build_args += ["--captions", "words", "--words", words]
+    else:
+        build_args += ["--captions", "off"]
+    build, build_err = run_tool_safe("build_clip.py", build_args, timeout=build_timeout)
+    if build_err:
+        return {**record, "title": post_title, "status": "build_failed",
+                "error": str(build_err)[:300]}
+
+    # 4) One delivery encode, so every platform gets the same verified H.264/AAC artifact.
+    media, media_err = run_tool_safe("prepare_upload_media.py",
+                                     ["--input", _rel(video_path), "--output", _rel(video_path)],
+                                     timeout=300)
+    if media_err or not (media or {}).get("contract", {}).get("valid"):
+        return {**record, "title": post_title, "status": "media_invalid",
+                "error": str(media_err or "prepare_upload_media returned no valid contract")[:300]}
+
+    # 5) Captions: the part number and the full-episode link live in the DESCRIPTION.
+    part_label = part.get("part_label") or f"(Part {part.get('part_index')}/{part.get('part_total')})"
+    description = f"{source_title}\n\n{part_label} of the pitch. Full episode: {part.get('url') or ''}"
+    story_path = _rel(scratch / "story.json")
+    out_path = _rel(scratch / "captions.json")
+    meta, cap_err = build_meta_for(post_title, description, SHARKTANK_TAGS,
+                                   story_path=story_path, out_path=out_path,
+                                   core=SHARKTANK_CORE)
+    if cap_err:
+        print(f"::warning::{part_id}: caption build failed ({str(cap_err)[:120]})", file=sys.stderr)
+
+    # 6) Publish.
+    delivery, published = deliver_media(
+        _rel(video_path), meta, post_title, platforms, required_platforms,
+        privacy=args.privacy, tiktok_privacy=args.tiktok_privacy,
+        log_style=f"sharktank-part{part.get('part_index')}",
+        log_context={"format": "standalone", "content_policy": "sharktank-only",
+                     "title_signal_score": part.get("signal_score"),
+                     "duration_sec": (media.get("contract") or {}).get("duration_sec"),
+                     "style": "kinetic",
+                     "caption_words": build.get("caption_word_count"),
+                     "part": f"{part.get('part_index')}/{part.get('part_total')}"},
+        ig_poll_timeout=_env_int("SHARKTANK_IG_POLL_TIMEOUT", 300),
+        captions_meta=out_path)
+    failures = _required_failures(delivery, platforms, required_platforms)
+    status = ("published" if published and not failures
+              else "partial_upload" if published else "delivery_failed")
+    return {**record, "status": status, "title": post_title, "hook": hook,
+            "title_provider": title_data.get("provider") or "source",
+            "style": build.get("style"), "fit": build.get("fit"),
+            "caption_word_count": build.get("caption_word_count"),
+            "duration_sec": build.get("duration_sec"), "byte_size": build.get("byte_size"),
+            "video": _rel(video_path), "delivery": delivery,
+            "required_delivery_failures": failures}
+
+
+def run_sharktank_batch(pool, args, platforms, required_platforms, topic):
+    """Post a batch of the remaining parts (one source download, then part after part).
+
+    Ordering is the finder's (in-progress episode first); a part with 3 strikes is skipped
+    without being deleted, so one bad slice cannot hold the episode. The ledger write happens
+    immediately after each successful publish: a later part's failure must never roll an
+    earlier part back (the success-gated Actions cache did exactly that and reposted Part 2/8
+    for days).
+    """
+    started = time.time()
+    deadline_sec = max(60.0, _env_float("SHARKTANK_BATCH_DEADLINE_SEC", 3300.0)
+                       if args.batch_deadline_sec is None else float(args.batch_deadline_sec))
+    deadline = started + deadline_sec
+    daily_max = sharktank_daily_max()
+    budget = max(0, daily_max - len(recent_post_times(24)))
+    wanted = int(args.parts_per_run or 0)
+    if wanted > 0:
+        budget = min(budget, wanted)
+    groups = group_parts_by_video(pool)
+    plan = [(video_id, part) for video_id, parts in groups for part in parts][:budget]
+
+    # Parts the planner set aside for strikes are reported, not silently dropped: the run's
+    # artifact must show exactly which part is on probation and why it did not post.
+    alive_ids = {p.get("id") for _video, parts in groups for p in parts}
+    skipped_strikes = [
+        {"id": entry.get("id"), "video_id": entry.get("video_id"),
+         "status": "skipped_strikes", "strikes": part_strikes(entry.get("id"))}
+        for entry in pool
+        if entry.get("content_type") == "sharktank_part" and entry.get("id")
+        and entry["id"] not in alive_ids]
+
+    batch = {
+        "status": "batch", "format": "standalone", "source_mode": "sharktank",
+        "content_policy": "sharktank-only", "video": topic.get("video"),
+        "parts_per_run": wanted, "planned": len(plan), "results": [],
+        "skipped_strikes": skipped_strikes,
+        "daily_max": daily_max, "daily_budget_left": budget,
+        "post_gap_sec": float(args.part_gap_sec or 0.0), "batch_deadline_sec": deadline_sec,
+        "delivery": {}, "elapsed_sec": 0.0,
+    }
+    if not plan:
+        batch["status"] = "daily_budget_exhausted" if budget <= 0 else "no_parts"
+        batch["elapsed_sec"] = round(time.time() - started, 1)
+        _atomic_json(SHARKTANK_BATCH_RESULT, batch)
+        return batch
+
+    sources, failed_videos = {}, set()
+    published_count, last_video, last_record = 0, None, None
+    for video_id, part in plan:
+        part_id = part.get("id")
+        if video_id in failed_videos:
+            batch["results"].append({"id": part_id, "video_id": video_id,
+                                     "status": "source_failed"})
+            continue
+        if time.time() + 120 > deadline:
+            batch["results"].append({"id": part_id, "video_id": video_id,
+                                     "status": "skipped_deadline"})
+            continue
+        gap = float(args.part_gap_sec or 0.0)
+        if published_count and gap > 0 and time.time() + gap + 120 <= deadline:
+            time.sleep(gap)
+
+        src = sources.get(video_id)
+        if src is None:
+            (ROOT / SHARKTANK_SCRATCH).mkdir(parents=True, exist_ok=True)
+            src_path = ROOT / SHARKTANK_SCRATCH / f"source_{video_id}.mp4"
+            data, err = run_tool_safe("fetch_source.py", [
+                "--url", part.get("url") or "", "--out", _rel(src_path),
+                "--max-height", "1080", "--download-deadline", "600",
+                "--download-attempt-timeout", "540"],
+                timeout=min(900, max(180, int(deadline - time.time()))))
+            src = (data or {}).get("path") if not err else None
+            if not src:
+                failed_videos.add(video_id)
+                _record_video_download_failure(video_id)
+                batch["results"].append({"id": part_id, "video_id": video_id,
+                                         "status": "source_failed",
+                                         "error": str(err or "source download failed")[:300]})
+                continue
+            sources[video_id] = src
+
+        remaining = max(180, int(deadline - time.time()))
+        try:
+            record = _publish_one_part(part, src, args, platforms, required_platforms,
+                                       build_timeout=min(900, remaining))
+        except Exception as exc:      # one broken part must never abort the batch
+            record = {"id": part_id, "video_id": video_id, "status": "error",
+                      "error": f"{type(exc).__name__}: {exc}"[:300]}
+        batch["results"].append(record)
+        if record.get("status") in {"published", "partial_upload"}:
+            published_count += 1
+            # Durability: commit the part the moment it is live, before the next render.
+            record_used_ids([part_id])
+            record_part_attempt(part_id, ok=True)
+            record_post_time()
+            last_video = record.get("video")
+            last_record = record
+            batch["delivery"].setdefault("instagram", []).append(
+                {"part": record.get("part_index"),
+                 "media_id": ((record.get("delivery") or {}).get("instagram") or {}).get("media_id")})
+        else:
+            record_part_attempt(part_id, ok=False,
+                                reason=record.get("error") or record.get("status"))
+
+    failures = [r for r in batch["results"]
+                if r.get("status") in {"build_failed", "media_invalid", "delivery_failed",
+                                       "error", "source_failed"}]
+    required = [f for r in batch["results"] for f in (r.get("required_delivery_failures") or [])]
+    batch.update({
+        "published": published_count,
+        "failed": len(failures),
+        "skipped": sum(1 for r in batch["results"] if str(r.get("status", "")).startswith("skipped")),
+        "required_delivery_failures": required,
+        "status": ("partial_upload" if published_count and required
+                   else "uploaded" if published_count
+                   else "delivery_failed" if failures
+                   else "no_parts_posted"),
+        "elapsed_sec": round(time.time() - started, 1),
+    })
+
+    # The workflow validates/uploads .tmp/final.mp4: keep the LAST posted part there.
+    if last_video:
+        final_source = ROOT / last_video
+        if final_source.is_file():
+            (ROOT / ".tmp").mkdir(exist_ok=True)
+            shutil.copyfile(final_source, ROOT / FINAL)
+            batch["final"] = FINAL
+            batch["last_part"] = {"id": (last_record or {}).get("id"),
+                                  "title": (last_record or {}).get("title")}
+    if published_count:
+        _drought_reset()
+        if not args.keep_tmp:
+            shutil.rmtree(ROOT / SHARKTANK_SCRATCH, ignore_errors=True)
+    _atomic_json(SHARKTANK_BATCH_RESULT, batch)
+    return batch
 
 
 def daily_used():
@@ -441,6 +1057,17 @@ def main():
     ap.add_argument("--per-clip", type=float, default=24.0,
                     help="Max seconds shown per clip; longer clips show their END (the payoff)")
     ap.add_argument("--max-videos", type=int, default=int(os.environ.get("MAX_DAILY_VIDEOS", "6")))
+    # Shark Tank batch: the channel has ~8 parts per episode and used to post exactly one per
+    # slot, so episodes took days to finish. `0` = every remaining part the 24h budget allows.
+    ap.add_argument("--parts-per-run", type=int,
+                    default=_env_int("SHARKTANK_PARTS_PER_RUN", 4),
+                    help="Shark Tank: parts to post in ONE run (0 = all remaining).")
+    ap.add_argument("--part-gap-sec", type=float,
+                    default=_env_float("SHARKTANK_PART_GAP_SEC", 45.0),
+                    help="Shark Tank: seconds between two published parts.")
+    ap.add_argument("--batch-deadline-sec", type=float, default=None,
+                    help="Shark Tank: wall-clock budget for the whole batch "
+                         "(default SHARKTANK_BATCH_DEADLINE_SEC or 3300s).")
     ap.add_argument("--keep-tmp", action="store_true")
     args = ap.parse_args()
 
@@ -457,14 +1084,17 @@ def main():
         source = "youtube" if os.environ.get("NO_REDDIT_SOURCES") == "1" else "reddit"
     # A sequential chop is always a standalone part: the 1-in-5 ranked control cohort is a
     # streamer-format experiment and must never consume a part of a multi-part video.
-    format_request = ("standalone" if (source == "sharktank" or args.force_genre == "sharktank")
-                      else args.format)
+    sharktank_run = source == "sharktank" or args.force_genre == "sharktank"
+    format_request = "standalone" if sharktank_run else args.format
     selected_format, format_state = choose_format(format_request, no_upload=args.no_upload)
     if "instagram" not in platforms and os.environ.get("ZERNIO_API_KEY") and os.environ.get("ZERNIO_INSTAGRAM_ID"):
         platforms.append("instagram")
     t0 = time.time()
     publishing = not args.no_upload
-    if publishing:
+    # The old per-run MAX_DAILY_VIDEOS gate is a streamer/ranking control. The chop account is
+    # paced by its own rolling 24h budget (state/sharktank_daily.json, 15/24h by default):
+    # a fixed per-run cap of 6 would stop the batch after its first slot of the day.
+    if publishing and not sharktank_run:
         if daily_used() >= args.max_videos:
             print(json.dumps({"status": "skipped_daily_cap", "used_today": daily_used(),
                               "max_videos": args.max_videos}, indent=2))
@@ -504,7 +1134,10 @@ def main():
         # skips every part recorded in the shared clip history, so consecutive runs walk a video
         # from part 1 to part N and then move to the next upload.
         _f, ferr = run_tool_safe("find_sharktank_parts.py",
-                                 ["--history", HISTORY, "--out", CANDS])
+                                 # A batch needs the rest of the episode in one pool, plus a
+                                 # second upload as a fallback if the front one is bot-walled.
+                                 ["--history", HISTORY, "--max", "30", "--max-videos", "2",
+                                  "--out", CANDS])
         if not ferr and not ((_f or {}).get("candidates") or []):
             ferr = "find_sharktank_parts.py returned no unposted parts"
         if ferr:
@@ -669,6 +1302,40 @@ def main():
             # Fall back to original topic title if refinement fails
             print(f"::warning::Title refinement failed: {title_err or 'no data'}; using original title", file=sys.stderr)
 
+    # 3.9) Shark Tank batch: post the REMAINING PARTS of the front episode, not just one. The
+    #      old flow broke out of the loop after the first successful build, so an 8-part
+    #      episode took 8 scheduled slots (and a single failing part could stall all of them).
+    #      --no-upload deliberately keeps the single-part QA path below; it renders the same
+    #      kinetic/crop/captions format, so the QA still proves the real output.
+    if topic.get("genre") == "sharktank" and publishing and selected_format == "standalone":
+        pool = (load_json(RANKED) or {}).get("entries") or []
+        batch = run_sharktank_batch(pool, args, platforms, required_platforms, topic)
+        save_format_state(format_state, selected_format, status=batch.get("status", "built"))
+        if batch.get("published"):
+            bv, bverr = run_tool_safe("update_best_videos.py", [])
+            batch["delivery"]["best_videos"] = (
+                {"error": bverr.splitlines()[0][:140]} if bverr else
+                {p: (bv.get("platforms", {}).get(p, {}).get("most_successful_video") or {}).get("url")
+                 for p in ("youtube", "instagram")})
+        with open(ROOT / REVIEW_MANIFEST, "w", encoding="utf-8") as handle:
+            json.dump({
+                "status": batch.get("status"), "account": "@itsmomoclips",
+                "format": "standalone", "content_policy": "sharktank-only",
+                "batch_result": SHARKTANK_BATCH_RESULT, "planned": batch.get("planned"),
+                "published": batch.get("published"), "results": batch.get("results"),
+                "quality_contract": {"vertical": "1080x1920", "max_duration_sec": 59,
+                                     "audio_required": True, "video_codec": "h264",
+                                     "audio_codec": "aac", "pixel_format": "yuv420p",
+                                     "faststart": True, "sharktank_only": True},
+                "delivery_contract": {"required": sorted(required_platforms),
+                                      "retry_is_provider_side": True,
+                                      "no_delete_without_analytics": True},
+            }, handle, indent=2, ensure_ascii=True)
+        emit(batch)
+        if batch.get("required_delivery_failures"):
+            raise SystemExit(1)
+        return
+
     # 4) audio policy -> 5) build the video. Standalone streamer clips keep original audio and
     # use one source moment; ranked controls keep the #5->#1 countdown and a generated bed.
     # Both paths use the same strict streamer candidate/ranking gate above.
@@ -744,14 +1411,15 @@ def main():
                 # chars, so ANY prefix eats the hook's tail -- run 37117223221 lost "Dragons" from
                 # "…Impresses the Dragons". The label is appended AFTER cleaning, so the full hook,
                 # the part number and the show all survive together.
-                part_label = entry.get("part_label") or ""
+                # Same competitor format the batch publishes: a --no-upload run must QA the
+                # REAL output. In kinetic mode the title IS the persistent hook banner, so the
+                # part label is deliberately not burned in -- it belongs in the description.
                 build_args = ["--url", entry["url"],
                               "--title", source_hook(entry),
-                              "--handle", "@itsmomoclips", "--badge", "MOMOCLIPS / SHARK TANK",
-                              "--source-handle", entry.get("channel") or "",
+                              "--handle", "@itsmomoclips",
+                              "--style", "kinetic", "--fit", "crop", "--captions", "words",
                               "--start", str(entry.get("start") or 0.0),
-                              "--max-secs", str(entry.get("duration") or 58.0),
-                              "--part-label", f"{part_label} | {show_tag(entry)}".strip(" |"),
+                              "--max-secs", str(min(float(entry.get("duration") or 58.0), 59.0)),
                               "--download-deadline", "600",
                               "--download-attempt-timeout", "540",
                               "--max-height", "1080",
@@ -891,17 +1559,11 @@ def main():
     else:
         description = topic.get("hook", title)
         tag_seed = ["ranking", "top5", "countdown", "shorts"]
-    tags = [w for w in "".join(c if c.isalnum() else " " for c in title.lower()).split() if len(w) > 3]
-    with open(ROOT / RANK_STORY, "w", encoding="utf-8") as f:
-        # No generic filler appended (viral/fyp-style tags hurt classification per 2026
-        # research); title words + seeds + build_captions' curated core are the tag pool.
-        json.dump({"title": title, "description": description,
-                   "tags": (tags + tag_seed)[:15]}, f)
-    caption_args = ["--story", RANK_STORY, "--out", CAPMETA]
-    if topic.get("genre") == "sharktank":
-        caption_args += ["--core", SHARKTANK_CORE]
-    run_tool_safe("build_captions.py", caption_args)
-    meta = load_json(CAPMETA) or {}
+    meta, cap_err = build_meta_for(
+        title, description, tag_seed,
+        core=SHARKTANK_CORE if topic.get("genre") == "sharktank" else None)
+    if cap_err:
+        print(f"::warning::captions failed ({cap_err}); using the plain title", file=sys.stderr)
 
     source_entry = None
     if selected_format == "standalone":
@@ -965,104 +1627,36 @@ def main():
                                    "no_delete_without_analytics": True},
         }, handle, indent=2, ensure_ascii=True)
 
-    # 6) deliver. Host the finished MP4 once for the public-url platforms, then use the local
-    # file for TikTok's FILE_UPLOAD API. The old flow hosted separately for YouTube and Instagram,
-    # which doubled the number of failure points and could leave one platform silently skipped.
+    # 6) deliver. One host, one artifact, every platform. Instagram gets a re-host retry when
+    # its transcoder rejects the URL (deliver_media) -- the failure mode that lost Part 2/8.
     published = False
-    host_url = None
-    host_error = None
-    needs_public_url = publishing and any(p in platforms for p in ("youtube", "instagram"))
-    if needs_public_url:
-        host, herr = run_tool_safe("host_public.py", ["--video", FINAL])
-        host_url = (host or {}).get("url")
-        host_error = herr or (None if host_url else "host_public returned no url")
-
-    if publishing and "youtube" in platforms:
-        yt = (meta.get("youtube") or {})
-        if host_error:
-            result["delivery"]["youtube"] = {"skipped": host_error.splitlines()[0][:140]}
-        else:
-            m, err = run_tool_safe("upload_youtube.py", ["--video-url", host_url,
-                                       "--title", yt.get("title", title),
-                                       "--description", yt.get("description", ""),
-                                       "--tags", ",".join(yt.get("tags", []) or ["shorts"]),
-                                       "--privacy", args.privacy, "--confirm"])
-            ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
-            result["delivery"]["youtube"] = ({"skipped": err.splitlines()[0][:140],
-                                                 "diagnostics": {k: m.get(k) for k in
-                                                                 ("post_id", "retry_attempted", "ambiguous", "platform_status", "poll_error")
-                                                                 if (m or {}).get(k) not in (None, "", {})}}
-                                                if err else {"url": m.get("url")})
-            published = published or ok
-
-    if publishing and "instagram" in platforms:
-        ig = (meta.get("instagram") or {})
-        if host_error:
-            result["delivery"]["instagram"] = {"skipped": host_error.splitlines()[0][:140]}
-        else:
-            m, err = run_tool_safe("upload_instagram.py", ["--video-url", host_url,
-                                       "--caption", ig.get("caption", title), "--confirm"])
-            ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
-            result["delivery"]["instagram"] = ({"skipped": err.splitlines()[0][:140],
-                                                   "diagnostics": {k: m.get(k) for k in
-                                                                   ("post_id", "retry_attempted", "ambiguous", "platform_status", "poll_error")
-                                                                   if (m or {}).get(k) not in (None, "", {})}}
-                                                  if err else {"media_id": m.get("post_id") or m.get("media_id")})
-            published = published or ok
-            if ok and m:
-                post_id = m.get("post_id") or m.get("media_id")
-                if post_id:
-                    shark_post = topic.get("genre") == "sharktank"
-                    log_ig_post(
-                        post_id,
-                        style=("sharktank-" if shark_post else "streamer-") + selected_format,
-                        experiment=(args.format == "auto" and selected_format == "ranking"),
-                        context={"format": selected_format, "source": "rank_autopost",
-                                 "content_policy": result.get("content_policy") or "streamer-only",
-                                 "title_signal_score": (source_entry or {}).get("signal_score"),
-                                 "duration_sec": (media.get("contract") or {}).get("duration_sec"),
-                                 "audio": result.get("audio"),
-                                 "hook_variant": ("sharktank_part" if shark_post
-                                                  else "streamer_payoff_first")},
-                    )
-
-    if publishing and "tiktok" in platforms:
-        tt = (meta.get("tiktok") or {})
-        tiktok_privacy = args.tiktok_privacy or (
-            "PUBLIC_TO_EVERYONE" if args.privacy == "public" else "SELF_ONLY")
-        m, err = run_tool_safe("upload_tiktok.py", ["--video", FINAL,
-                                    "--title", " ".join(x for x in (tt.get("caption", title),
-                                                                    ib_line) if x),
-                                    "--privacy", tiktok_privacy, "--confirm"])
-        ok = not err and (m or {}).get("status") in {"uploaded", "already_published"}
-        result["delivery"]["tiktok"] = ({"skipped": err.splitlines()[0][:140]}
-                                          if err else {"publish_id": m.get("publish_id")})
-        published = published or ok
-
-    if publishing and "email" in platforms:
-        m, err = run_tool_safe("email_video.py", ["--video", FINAL, "--captions-meta", CAPMETA,
-                                                  "--subject", f"Ranking Short: {title}"])
-        result["delivery"]["email"] = {"skipped": err.splitlines()[0][:140]} if err else {"sent_to": m.get("to")}
-    if "export" in platforms:
-        m, err = run_tool_safe("export_local.py", ["--video", FINAL, "--captions-meta", CAPMETA, "--title", title])
-        result["delivery"]["export"] = {"error": err.splitlines()[0][:140]} if err else {"folder": m.get("folder")}
+    if publishing:
+        result["delivery"], published = deliver_media(
+            FINAL, meta, title, platforms, required_platforms,
+            privacy=args.privacy, tiktok_privacy=args.tiktok_privacy, ib_line=ib_line,
+            log_style=(("sharktank-" if topic.get("genre") == "sharktank" else "streamer-")
+                       + selected_format),
+            log_experiment=(args.format == "auto" and selected_format == "ranking"),
+            log_context={"format": selected_format,
+                         "content_policy": result.get("content_policy") or "streamer-only",
+                         "title_signal_score": (source_entry or {}).get("signal_score"),
+                         "duration_sec": (media.get("contract") or {}).get("duration_sec"),
+                         "audio": result.get("audio"),
+                         "hook_variant": ("sharktank_part" if topic.get("genre") == "sharktank"
+                                          else "streamer_payoff_first")})
+    elif "export" in platforms:
+        result["delivery"], _ = deliver_media(FINAL, meta, title, ["export"],
+                                              required_platforms, privacy=args.privacy)
 
     # A workflow must never look green when one of its promised destinations failed.  Keep the
     # required set separate from the full platform list so optional integrations (currently
     # TikTok/email when their secrets are absent) can be reported without blocking YouTube and
     # Instagram.  If one platform did publish, consume the source once to avoid a duplicate on
     # the next poll; the non-zero exit still makes the partial delivery visible to Actions.
-    required_failures = []
-    if publishing:
-        for platform in sorted(required_platforms & set(platforms)):
-            delivery = result["delivery"].get(platform) or {}
-            if delivery.get("skipped") or delivery.get("error"):
-                required_failures.append({
-                    "platform": platform,
-                    "detail": delivery.get("skipped") or delivery.get("error"),
-                })
-        if required_failures:
-            result["required_delivery_failures"] = required_failures
+    required_failures = _required_failures(result["delivery"], platforms, required_platforms) \
+        if publishing else []
+    if required_failures:
+        result["required_delivery_failures"] = required_failures
 
     # A failed build/upload must be retryable. The old code incremented the daily cap before
     # building and marked source clips used before delivery, so one transient LLM, host, or API
@@ -1090,7 +1684,6 @@ def main():
     # No-upload runs are the workflow's media-QA mode: keep the finished MP4 until the
     # upload-artifact step can collect it. Real publishing runs may still clean scratch files.
     if not args.keep_tmp and publishing:
-        import shutil
         # Wipe the downloaded source clips + intermediates so disk doesn't fill up run to run.
         shutil.rmtree(ROOT / ".tmp" / "rank", ignore_errors=True)
         for p in (CANDS, RANKED, RANK_STORY, FINAL, CAPMETA, ".tmp/music.mp3", ".tmp/email_small.mp4"):
