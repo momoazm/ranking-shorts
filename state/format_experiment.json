@@ -1,14 +1,7 @@
 {
-  "run_index": 128,
-  "winner": "ranking",
+  "run_index": 129,
+  "winner": null,
   "runs": [
-    {
-      "index": 95,
-      "requested": "auto",
-      "selected": "standalone",
-      "status": "uploaded",
-      "counted": true
-    },
     {
       "index": 96,
       "requested": "auto",
@@ -274,19 +267,13 @@
       "requested": "standalone",
       "selected": "standalone",
       "status": "delivery_failed"
-    }
-  ],
-  "pending_format": "standalone",
-  "winner_reason": "standalone vs ranking: views -57%; engagement -26%; watch completion -36%",
-  "last_comparison": {
-    "at": "2026-10-26T16:04:40.683182+00:00",
-    "samples": {
-      "standalone": 105,
-      "ranking": 20
     },
-    "winner": "ranking",
-    "reason": "standalone vs ranking: views -57%; engagement -26%; watch completion -36%",
-    "pending": 49,
-    "errors": 0
-  }
+    {
+      "index": 128,
+      "requested": "standalone",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    }
+  ]
 }
