@@ -3762,6 +3762,74 @@
         "caption_words": 139,
         "part": "4/9"
       }
+    },
+    {
+      "post_id": "6ae111917b9623f2713d2402",
+      "posted_at": "2026-10-27T21:04:25.398059+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.7,
+        "style": "kinetic",
+        "caption_words": 132,
+        "part": "5/9"
+      }
+    },
+    {
+      "post_id": "6ae1128d140a0de724a88767",
+      "posted_at": "2026-10-27T21:08:10.925935+00:00",
+      "style": "sharktank-part6",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.723,
+        "style": "kinetic",
+        "caption_words": 117,
+        "part": "6/9"
+      }
+    },
+    {
+      "post_id": "6ae1136513ec022b1bb21891",
+      "posted_at": "2026-10-27T21:11:53.879229+00:00",
+      "style": "sharktank-part7",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.7,
+        "style": "kinetic",
+        "caption_words": 205,
+        "part": "7/9"
+      }
+    },
+    {
+      "post_id": "6ae11446ca70518aca1ab9c3",
+      "posted_at": "2026-10-27T21:15:48.245687+00:00",
+      "style": "sharktank-part8",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 58.7,
+        "style": "kinetic",
+        "caption_words": 135,
+        "part": "8/9"
+      }
     }
   ]
 }
