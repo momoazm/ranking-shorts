@@ -1,15 +1,5 @@
 {
   "videos": {
-    "YZ89MSv40zI": {
-      "id": "YZ89MSv40zI",
-      "title": "Shark Tank Australia | The Sharks Question This $667K Camping Brand",
-      "channel": null,
-      "uploader": null,
-      "webpage_url": null,
-      "duration": 528.0,
-      "part_total": 9,
-      "feed": "https://www.youtube.com/@SharkTankAustralia/videos"
-    },
     "p6oEwvK7DkA": {
       "id": "p6oEwvK7DkA",
       "title": "Can This Russian Drink Become Britain’s Next Health Craze? | Dragons' Den",
@@ -19,6 +9,16 @@
       "duration": 799.0,
       "part_total": 14,
       "feed": "https://www.youtube.com/@DragonsDenGlobal/videos"
+    },
+    "41YrX3F53_U": {
+      "id": "41YrX3F53_U",
+      "title": "Shark Tank Australia | 4 Sharks Fight Over Strapsicle",
+      "channel": null,
+      "uploader": null,
+      "webpage_url": null,
+      "duration": 588.0,
+      "part_total": 10,
+      "feed": "https://www.youtube.com/@SharkTankAustralia/videos"
     },
     "HQIR5lHgV3Q": {
       "id": "HQIR5lHgV3Q",
