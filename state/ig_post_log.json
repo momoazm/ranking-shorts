@@ -4034,6 +4034,74 @@
         "caption_words": 129,
         "part": "4/12"
       }
+    },
+    {
+      "post_id": "6ae383c18c4905f042717ef3",
+      "posted_at": "2026-10-29T17:36:01.035847+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.192,
+        "style": "kinetic",
+        "caption_words": 142,
+        "part": "5/12"
+      }
+    },
+    {
+      "post_id": "6ae384e2aaaa388c6bddadcf",
+      "posted_at": "2026-10-29T17:40:34.593434+00:00",
+      "style": "sharktank-part6",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.216,
+        "style": "kinetic",
+        "caption_words": 165,
+        "part": "6/12"
+      }
+    },
+    {
+      "post_id": "6ae38602fc253cd5c5e393fd",
+      "posted_at": "2026-10-29T17:46:26.657402+00:00",
+      "style": "sharktank-part7",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.216,
+        "style": "kinetic",
+        "caption_words": 115,
+        "part": "7/12"
+      }
+    },
+    {
+      "post_id": "6ae3875f2ad882d4be965655",
+      "posted_at": "2026-10-29T17:51:26.026631+00:00",
+      "style": "sharktank-part8",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.192,
+        "style": "kinetic",
+        "caption_words": 144,
+        "part": "8/12"
+      }
     }
   ]
 }
