@@ -3,13 +3,6 @@
   "winner": null,
   "runs": [
     {
-      "index": 110,
-      "requested": "standalone",
-      "selected": "standalone",
-      "status": "uploaded",
-      "counted": true
-    },
-    {
       "index": 111,
       "requested": "standalone",
       "selected": "standalone",
@@ -258,6 +251,12 @@
       "selected": "standalone",
       "status": "uploaded",
       "counted": true
+    },
+    {
+      "index": 139,
+      "requested": "standalone",
+      "selected": "standalone",
+      "status": "delivery_failed"
     },
     {
       "index": 139,
