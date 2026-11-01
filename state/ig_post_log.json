@@ -4374,6 +4374,74 @@
         "caption_words": 150,
         "part": "2/11"
       }
+    },
+    {
+      "post_id": "6ae6f4fb0c81d5cca97cafde",
+      "posted_at": "2026-11-01T08:16:39.570720+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.49,
+        "style": "kinetic",
+        "caption_words": 166,
+        "part": "3/11"
+      }
+    },
+    {
+      "post_id": "6ae6f62d8eaa499bc704baa0",
+      "posted_at": "2026-11-01T08:20:53.048785+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.497,
+        "style": "kinetic",
+        "caption_words": 161,
+        "part": "4/11"
+      }
+    },
+    {
+      "post_id": "6ae6f724974b367f1b81213e",
+      "posted_at": "2026-11-01T08:25:09.802816+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.49,
+        "style": "kinetic",
+        "caption_words": 161,
+        "part": "5/11"
+      }
+    },
+    {
+      "post_id": "6ae6f8169e5284ab2c29dae7",
+      "posted_at": "2026-11-01T08:29:02.648091+00:00",
+      "style": "sharktank-part6",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.497,
+        "style": "kinetic",
+        "caption_words": 126,
+        "part": "6/11"
+      }
     }
   ]
 }
