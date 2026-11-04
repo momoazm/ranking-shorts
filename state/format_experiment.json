@@ -6,12 +6,6 @@
       "index": 120,
       "requested": "standalone",
       "selected": "standalone",
-      "status": "daily_budget_exhausted"
-    },
-    {
-      "index": 120,
-      "requested": "standalone",
-      "selected": "standalone",
       "status": "uploaded",
       "counted": true
     },
@@ -270,6 +264,13 @@
       "selected": "standalone",
       "status": "uploaded",
       "counted": true
+    },
+    {
+      "index": 149,
+      "requested": "standalone",
+      "selected": "standalone",
+      "status": "delivery_failed"
     }
-  ]
+  ],
+  "pending_format": "standalone"
 }
