@@ -4833,6 +4833,74 @@
         "caption_words": 83,
         "part": "1/17"
       }
+    },
+    {
+      "post_id": "6aeae7d09c5b9ed211647e91",
+      "posted_at": "2026-11-04T08:09:36.388581+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.262,
+        "style": "kinetic",
+        "caption_words": 135,
+        "part": "2/17"
+      }
+    },
+    {
+      "post_id": "6aeae91c7ae46e744abc9809",
+      "posted_at": "2026-11-04T08:14:21.899848+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.285,
+        "style": "kinetic",
+        "caption_words": 117,
+        "part": "3/17"
+      }
+    },
+    {
+      "post_id": "6aeaea2d805dd0c147667ba5",
+      "posted_at": "2026-11-04T08:19:00.221208+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.262,
+        "style": "kinetic",
+        "caption_words": 128,
+        "part": "4/17"
+      }
+    },
+    {
+      "post_id": "6aeaeb4ec116bf952cd8c9f2",
+      "posted_at": "2026-11-04T08:23:33.472801+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.29,
+        "style": "kinetic",
+        "caption_words": 116,
+        "part": "5/17"
+      }
     }
   ]
 }
