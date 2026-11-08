@@ -5683,6 +5683,74 @@
         "caption_words": 183,
         "part": "6/8"
       }
+    },
+    {
+      "post_id": "6af0e0c15bcadc028c8a1502",
+      "posted_at": "2026-11-08T20:52:18.407014+00:00",
+      "style": "sharktank-part7",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 55.29,
+        "style": "kinetic",
+        "caption_words": 117,
+        "part": "7/8"
+      }
+    },
+    {
+      "post_id": "6af0e1c4eac9ceb0e3d9299a",
+      "posted_at": "2026-11-08T20:56:11.300350+00:00",
+      "style": "sharktank-part8",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.451,
+        "style": "kinetic",
+        "caption_words": 86,
+        "part": "8/8"
+      }
+    },
+    {
+      "post_id": "6af0e2c0153915e01d438560",
+      "posted_at": "2026-11-08T21:00:47.372601+00:00",
+      "style": "sharktank-part1",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.456,
+        "style": "kinetic",
+        "caption_words": 134,
+        "part": "1/12"
+      }
+    },
+    {
+      "post_id": "6af0e3bab75538aac860c6af",
+      "posted_at": "2026-11-08T21:04:52.205991+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.456,
+        "style": "kinetic",
+        "caption_words": 130,
+        "part": "2/12"
+      }
     }
   ]
 }
