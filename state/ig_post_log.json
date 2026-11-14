@@ -6535,9 +6535,9 @@
       }
     },
     {
-      "post_id": "6af7ac4f9a711dd971f67167",
-      "posted_at": "2026-11-14T00:34:41.925150+00:00",
-      "style": "sharktank-part7",
+      "post_id": "6af816ad1639265816a03582",
+      "posted_at": "2026-11-14T08:08:04.561733+00:00",
+      "style": "sharktank-part9",
       "experiment": false,
       "resolved": false,
       "context": {
@@ -6547,14 +6547,14 @@
         "title_signal_score": null,
         "duration_sec": 57.585,
         "style": "kinetic",
-        "caption_words": 127,
-        "part": "7/13"
+        "caption_words": 146,
+        "part": "9/13"
       }
     },
     {
-      "post_id": "6af7ad583046c5a00557feed",
-      "posted_at": "2026-11-14T00:38:39.953581+00:00",
-      "style": "sharktank-part8",
+      "post_id": "6af8179dc6a6efb730fcbbb5",
+      "posted_at": "2026-11-14T08:12:09.481212+00:00",
+      "style": "sharktank-part11",
       "experiment": false,
       "resolved": false,
       "context": {
@@ -6564,14 +6564,14 @@
         "title_signal_score": null,
         "duration_sec": 57.59,
         "style": "kinetic",
-        "caption_words": 177,
-        "part": "8/13"
+        "caption_words": 124,
+        "part": "11/13"
       }
     },
     {
-      "post_id": "6af7afd3d7bb601244c6d085",
-      "posted_at": "2026-11-14T00:49:20.078188+00:00",
-      "style": "sharktank-part10",
+      "post_id": "6af81893c6a6efb730fcc5ef",
+      "posted_at": "2026-11-14T08:16:15.308923+00:00",
+      "style": "sharktank-part12",
       "experiment": false,
       "resolved": false,
       "context": {
@@ -6579,10 +6579,27 @@
         "format": "standalone",
         "content_policy": "sharktank-only",
         "title_signal_score": null,
-        "duration_sec": 57.562,
+        "duration_sec": 57.585,
         "style": "kinetic",
-        "caption_words": 108,
-        "part": "10/13"
+        "caption_words": 71,
+        "part": "12/13"
+      }
+    },
+    {
+      "post_id": "6af819644a945195b6b038a9",
+      "posted_at": "2026-11-14T08:20:21.901477+00:00",
+      "style": "sharktank-part13",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.935,
+        "style": "kinetic",
+        "caption_words": 98,
+        "part": "13/13"
       }
     }
   ]
