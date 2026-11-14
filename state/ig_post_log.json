@@ -6601,6 +6601,74 @@
         "caption_words": 98,
         "part": "13/13"
       }
+    },
+    {
+      "post_id": "6af89b93a19623efcc3bc6fe",
+      "posted_at": "2026-11-14T17:35:12.158557+00:00",
+      "style": "sharktank-part1",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.404,
+        "style": "kinetic",
+        "caption_words": 150,
+        "part": "1/8"
+      }
+    },
+    {
+      "post_id": "6af89c7291f85ce09c1ad0ea",
+      "posted_at": "2026-11-14T17:38:48.999756+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.404,
+        "style": "kinetic",
+        "caption_words": 169,
+        "part": "2/8"
+      }
+    },
+    {
+      "post_id": "6af89d43cfcd2b7c1cff1900",
+      "posted_at": "2026-11-14T17:43:00.334907+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.423,
+        "style": "kinetic",
+        "caption_words": 180,
+        "part": "3/8"
+      }
+    },
+    {
+      "post_id": "6af89e47cfcd2b7c1cff1cde",
+      "posted_at": "2026-11-14T17:46:43.155675+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 54.404,
+        "style": "kinetic",
+        "caption_words": 191,
+        "part": "4/8"
+      }
     }
   ]
 }
