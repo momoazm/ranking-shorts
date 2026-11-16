@@ -1,14 +1,7 @@
 {
-  "run_index": 179,
+  "run_index": 180,
   "winner": null,
   "runs": [
-    {
-      "index": 144,
-      "requested": "standalone",
-      "selected": "standalone",
-      "status": "uploaded",
-      "counted": true
-    },
     {
       "index": 145,
       "requested": "standalone",
@@ -276,17 +269,13 @@
       "selected": "standalone",
       "status": "uploaded",
       "counted": true
-    }
-  ],
-  "last_comparison": {
-    "at": "2026-11-16T19:34:25.765333+00:00",
-    "samples": {
-      "standalone": 321,
-      "ranking": 20
     },
-    "winner": null,
-    "reason": "no clear winner: standalone views -0%, engagement -32%, watch completion -9%",
-    "pending": 31,
-    "errors": 0
-  }
+    {
+      "index": 179,
+      "requested": "standalone",
+      "selected": "standalone",
+      "status": "uploaded",
+      "counted": true
+    }
+  ]
 }
