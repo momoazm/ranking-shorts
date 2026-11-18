@@ -7145,6 +7145,74 @@
         "caption_words": 177,
         "part": "5/11"
       }
+    },
+    {
+      "post_id": "6afdf80a652236bae9939882",
+      "posted_at": "2026-11-18T19:11:02.977449+00:00",
+      "style": "sharktank-part6",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.4,
+        "style": "kinetic",
+        "caption_words": 214,
+        "part": "6/11"
+      }
+    },
+    {
+      "post_id": "6afdf907e111a9546a7bb953",
+      "posted_at": "2026-11-18T19:15:17.331178+00:00",
+      "style": "sharktank-part7",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.423,
+        "style": "kinetic",
+        "caption_words": 188,
+        "part": "7/11"
+      }
+    },
+    {
+      "post_id": "6afdfa0605eff8fb99ed323d",
+      "posted_at": "2026-11-18T19:19:36.151195+00:00",
+      "style": "sharktank-part8",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.4,
+        "style": "kinetic",
+        "caption_words": 205,
+        "part": "8/11"
+      }
+    },
+    {
+      "post_id": "6afdfb04bc7917a1bf82d401",
+      "posted_at": "2026-11-18T19:23:44.243218+00:00",
+      "style": "sharktank-part9",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.4,
+        "style": "kinetic",
+        "caption_words": 166,
+        "part": "9/11"
+      }
     }
   ]
 }
