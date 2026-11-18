@@ -7077,6 +7077,74 @@
         "caption_words": 98,
         "part": "1/11"
       }
+    },
+    {
+      "post_id": "6afd0ec7d64dfe4eedef830d",
+      "posted_at": "2026-11-18T02:35:58.340123+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.423,
+        "style": "kinetic",
+        "caption_words": 132,
+        "part": "2/11"
+      }
+    },
+    {
+      "post_id": "6afd0fd56d9625c4a0fc762e",
+      "posted_at": "2026-11-18T02:40:12.184715+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.4,
+        "style": "kinetic",
+        "caption_words": 175,
+        "part": "3/11"
+      }
+    },
+    {
+      "post_id": "6afd10d616297f747dad995f",
+      "posted_at": "2026-11-18T02:45:06.205048+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.4,
+        "style": "kinetic",
+        "caption_words": 170,
+        "part": "4/11"
+      }
+    },
+    {
+      "post_id": "6afd11f7c247e334eb979331",
+      "posted_at": "2026-11-18T02:49:29.040525+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.4,
+        "style": "kinetic",
+        "caption_words": 177,
+        "part": "5/11"
+      }
     }
   ]
 }
