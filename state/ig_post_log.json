@@ -7672,6 +7672,74 @@
         "caption_words": 205,
         "part": "5/11"
       }
+    },
+    {
+      "post_id": "6b032f9801fe6787967a1a24",
+      "posted_at": "2026-11-22T18:09:20.938615+00:00",
+      "style": "sharktank-part6",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.678,
+        "style": "kinetic",
+        "caption_words": 201,
+        "part": "6/11"
+      }
+    },
+    {
+      "post_id": "6b0330b5e1446bac0cf7eea3",
+      "posted_at": "2026-11-22T18:14:48.887462+00:00",
+      "style": "sharktank-part7",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.656,
+        "style": "kinetic",
+        "caption_words": 172,
+        "part": "7/11"
+      }
+    },
+    {
+      "post_id": "6b0331ff6c7b96c71faa9677",
+      "posted_at": "2026-11-22T18:19:45.229959+00:00",
+      "style": "sharktank-part8",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.69,
+        "style": "kinetic",
+        "caption_words": 193,
+        "part": "8/11"
+      }
+    },
+    {
+      "post_id": "6b033325b65377309d2d0b75",
+      "posted_at": "2026-11-22T18:24:30.326986+00:00",
+      "style": "sharktank-part9",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.678,
+        "style": "kinetic",
+        "caption_words": 145,
+        "part": "9/11"
+      }
     }
   ]
 }
