@@ -7604,6 +7604,74 @@
         "caption_words": 114,
         "part": "1/11"
       }
+    },
+    {
+      "post_id": "6b02ae2d74725bbb2eab35a4",
+      "posted_at": "2026-11-22T08:57:34.819315+00:00",
+      "style": "sharktank-part2",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.656,
+        "style": "kinetic",
+        "caption_words": 171,
+        "part": "2/11"
+      }
+    },
+    {
+      "post_id": "6b02af4374725bbb2eab3727",
+      "posted_at": "2026-11-22T09:01:52.607248+00:00",
+      "style": "sharktank-part3",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.678,
+        "style": "kinetic",
+        "caption_words": 238,
+        "part": "3/11"
+      }
+    },
+    {
+      "post_id": "6b02b03eadb899d4e95b1e70",
+      "posted_at": "2026-11-22T09:05:56.760083+00:00",
+      "style": "sharktank-part4",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.69,
+        "style": "kinetic",
+        "caption_words": 213,
+        "part": "4/11"
+      }
+    },
+    {
+      "post_id": "6b02b131ecdd9ed0beac5508",
+      "posted_at": "2026-11-22T09:10:11.302643+00:00",
+      "style": "sharktank-part5",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.656,
+        "style": "kinetic",
+        "caption_words": 205,
+        "part": "5/11"
+      }
     }
   ]
 }
