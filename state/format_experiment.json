@@ -275,5 +275,16 @@
       "status": "uploaded",
       "counted": true
     }
-  ]
+  ],
+  "last_comparison": {
+    "at": "2026-11-23T21:13:04.515358+00:00",
+    "samples": {
+      "standalone": 376,
+      "ranking": 20
+    },
+    "winner": null,
+    "reason": "no clear winner: standalone views -1%, engagement -31%, watch completion -9%",
+    "pending": 35,
+    "errors": 0
+  }
 }
