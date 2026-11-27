@@ -8284,6 +8284,74 @@
         "caption_words": 155,
         "part": "10/13"
       }
+    },
+    {
+      "post_id": "6b09e945439782e4843ba91d",
+      "posted_at": "2026-11-27T20:36:23.449895+00:00",
+      "style": "sharktank-part11",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.191,
+        "style": "kinetic",
+        "caption_words": 114,
+        "part": "11/13"
+      }
+    },
+    {
+      "post_id": "6b09ea7a439782e4843bacb1",
+      "posted_at": "2026-11-27T20:41:28.227767+00:00",
+      "style": "sharktank-part12",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.191,
+        "style": "kinetic",
+        "caption_words": 103,
+        "part": "12/13"
+      }
+    },
+    {
+      "post_id": "6b09eba63bc2fd5a3ca9dd2a",
+      "posted_at": "2026-11-27T20:45:29.439409+00:00",
+      "style": "sharktank-part13",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 56.378,
+        "style": "kinetic",
+        "caption_words": 81,
+        "part": "13/13"
+      }
+    },
+    {
+      "post_id": "6b09ecc652a86098a7dd9cba",
+      "posted_at": "2026-11-27T20:50:10.731810+00:00",
+      "style": "sharktank-part9",
+      "experiment": false,
+      "resolved": false,
+      "context": {
+        "source": "rank_autopost",
+        "format": "standalone",
+        "content_policy": "sharktank-only",
+        "title_signal_score": null,
+        "duration_sec": 57.123,
+        "style": "kinetic",
+        "caption_words": 150,
+        "part": "9/13"
+      }
     }
   ]
 }
